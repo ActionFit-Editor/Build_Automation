@@ -28,19 +28,27 @@ namespace ActionFit.BuildAutomation.Editor
         GooglePlayInternalAndTestFlight = 3
     }
 
+    public enum BuildRequestDistributionProfile
+    {
+        Actionfit = 0,
+        Stormborn = 1
+    }
+
     [Serializable]
     public class BuildRequest
     {
         public const string BuildCommitTriggerSource = "BuildCommit";
 
-        public int schemaVersion = 1;
+        public int schemaVersion = 2;
         public string triggerSource = BuildCommitTriggerSource;
         public BuildRequestPlatform platform = BuildRequestPlatform.Current;
         public BuildRequestKind buildKind = BuildRequestKind.Default;
         public BuildRequestUploadTarget uploadTarget = BuildRequestUploadTarget.None;
+        public BuildRequestDistributionProfile distributionProfile = BuildRequestDistributionProfile.Actionfit;
         public string buildVersion;
         public string bundleNo;
         public string buildFileName;
+        public string androidKeyaliasName;
         public string sourceBranch;
         public string sourceCommit;
         public string createdAtUtc;

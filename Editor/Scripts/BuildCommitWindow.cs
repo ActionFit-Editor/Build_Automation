@@ -16,6 +16,7 @@ namespace ActionFit.BuildAutomation.Editor
         #region Fields
 
         private const string SOPrefsKey = "LastUsedBuildSettings"; // BuildSettingsWindow와 동일한 키 공유
+        private const string DistributionProfilePrefsKey = "BuildCommitDistributionProfile";
         private const string BuildTagPrefix = "build";
 
         private BuildSettingsSO _settings; // 빌드 설정 SO
@@ -23,6 +24,7 @@ namespace ActionFit.BuildAutomation.Editor
         private BuildRequestPlatform _requestPlatform = BuildRequestPlatform.Current; // 원격 빌드 플랫폼
         private BuildRequestKind _requestKind = BuildRequestKind.Default; // 원격 빌드 종류
         private BuildRequestUploadTarget _uploadTarget = BuildRequestUploadTarget.None; // 업로드 대상
+        private BuildRequestDistributionProfile _distributionProfile = BuildRequestDistributionProfile.Actionfit; // 배포 계정 프로필
 
         private Vector2 _logScrollPosition; // 로그 스크롤 위치
         private readonly List<string> _logs = new(); // 실행 결과 로그 목록
@@ -122,6 +124,11 @@ namespace ActionFit.BuildAutomation.Editor
             _requestKind = (BuildRequestKind)EditorGUILayout.EnumPopup("Build Kind", _requestKind);
             _uploadTarget = (BuildRequestUploadTarget)EditorGUILayout.EnumPopup("Upload Target", _uploadTarget);
 
+            EditorGUI.BeginChangeCheck();
+            _distributionProfile = (BuildRequestDistributionProfile)EditorGUILayout.EnumPopup("Distribution Profile", _distributionProfile);
+            if (EditorGUI.EndChangeCheck())
+                EditorPrefs.SetInt(DistributionProfilePrefsKey, (int)_distributionProfile);
+
             string version = _serializedSettings.FindProperty("buildVersion").stringValue;
             string bundleNo = _serializedSettings.FindProperty("bundleNo").stringValue;
             string tagPreview = CreateBuildTag(version, bundleNo, "commit");
@@ -129,6 +136,16 @@ namespace ActionFit.BuildAutomation.Editor
             GUI.enabled = false;
             EditorGUILayout.TextField(tagPreview);
             GUI.enabled = true;
+
+            BuildRequestPlatform resolvedPlatform = ResolvePlatform(_requestPlatform);
+            if (resolvedPlatform == BuildRequestPlatform.Android || resolvedPlatform == BuildRequestPlatform.Both)
+            {
+                string androidAlias = BuildRequestUtility.GetAndroidKeyaliasName(_settings);
+                EditorGUILayout.LabelField("Android Alias:", EditorStyles.miniLabel);
+                GUI.enabled = false;
+                EditorGUILayout.TextField(string.IsNullOrEmpty(androidAlias) ? "Project Default" : androidAlias);
+                GUI.enabled = true;
+            }
 
             EditorGUILayout.HelpBox(
                 $"{BuildRequestUtility.RelativePath} will be committed as storage. GitHub Actions will build when the build tag is pushed.",
@@ -199,6 +216,10 @@ namespace ActionFit.BuildAutomation.Editor
 
             if (_settings != null)
                 _serializedSettings = new SerializedObject(_settings);
+
+            int savedProfile = EditorPrefs.GetInt(DistributionProfilePrefsKey, (int)BuildRequestDistributionProfile.Actionfit);
+            if (System.Enum.IsDefined(typeof(BuildRequestDistributionProfile), savedProfile))
+                _distributionProfile = (BuildRequestDistributionProfile)savedProfile;
         }
 
         // PlayerSettings에 버전/번들ID 적용
@@ -380,7 +401,7 @@ namespace ActionFit.BuildAutomation.Editor
         // BuildCommit 커밋에 포함할 원격 빌드 요청 파일 생성
         private bool SaveBuildRequest()
         {
-            var request = BuildRequestUtility.Create(_settings, _requestPlatform, _requestKind, _uploadTarget);
+            var request = BuildRequestUtility.Create(_settings, _requestPlatform, _requestKind, _uploadTarget, _distributionProfile);
             if (request == null) return false;
 
             bool saved = BuildRequestUtility.Save(request);

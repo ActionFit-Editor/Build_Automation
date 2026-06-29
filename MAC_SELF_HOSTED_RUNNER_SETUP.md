@@ -134,7 +134,7 @@ Xcode에서 Apple account와 team 접근도 확인합니다.
 Xcode > Settings > Accounts
 ```
 
-이 프로젝트의 Team ID는 `49W7A8489P`입니다. workflow는 `xcodebuild`에 `DEVELOPMENT_TEAM=49W7A8489P`, `CODE_SIGN_STYLE=Automatic`, `CODE_SIGN_IDENTITY="Apple Distribution"`을 넘깁니다.
+이 프로젝트의 기본 Actionfit Team ID는 `49W7A8489P`입니다. workflow는 BuildCommit의 `Distribution Profile`에 따라 `ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID` 또는 `STORMBORN_IOS_DEVELOPMENT_TEAM_ID`를 `xcodebuild`의 `DEVELOPMENT_TEAM`으로 넘깁니다.
 
 자동 provisioning을 쓰므로 App Store Connect API key에 profile 생성/갱신 권한이 필요합니다. 권한 문제가 있으면 `xcodebuild` 단계에서 signing 또는 provisioning profile 오류가 납니다.
 
@@ -146,19 +146,54 @@ GitHub repository의 아래 경로에서 Secrets를 등록합니다.
 Settings > Secrets and variables > Actions > Repository secrets
 ```
 
-Android:
+Actionfit Android:
+
+- `ACTIONFIT_ANDROID_KEYSTORE_PASS`
+- `ACTIONFIT_ANDROID_KEYALIAS_PASS`
+- `ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
+
+기존 설정과 호환하려면 Actionfit은 아래 unprefixed secrets도 fallback으로 사용할 수 있습니다.
 
 - `ANDROID_KEYSTORE_PASS`
 - `ANDROID_KEYALIAS_PASS`
 - `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
 
-iOS/TestFlight:
+Stormborn Android:
+
+- `STORMBORN_ANDROID_KEYSTORE_PASS`
+- `STORMBORN_ANDROID_KEYALIAS_PASS`
+- `STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
+
+Android alias 이름은 secret으로 넣지 않습니다. BuildCommit request가 BuildSetting의 `BuildSettingsSO.keyStoreAlias` 값을 `androidKeyaliasName`으로 전달하고, workflow는 secret에 저장된 비밀번호만 주입합니다.
+
+Actionfit iOS/TestFlight:
+
+- `ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID`
+- `ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID`
+- `ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8`
+
+기존 설정과 호환하려면 Actionfit은 아래 unprefixed secrets도 fallback으로 사용할 수 있습니다.
 
 - `APP_STORE_CONNECT_API_KEY_ID`
 - `APP_STORE_CONNECT_ISSUER_ID`
 - `APP_STORE_CONNECT_API_KEY_P8`
 
-`APP_STORE_CONNECT_API_KEY_P8`은 `.p8` 파일 내용을 그대로 넣습니다. 줄바꿈이 `\n` 문자로 들어가도 workflow가 실제 줄바꿈으로 변환합니다.
+Stormborn iOS/TestFlight:
+
+- `STORMBORN_APP_STORE_CONNECT_API_KEY_ID`
+- `STORMBORN_APP_STORE_CONNECT_ISSUER_ID`
+- `STORMBORN_APP_STORE_CONNECT_API_KEY_P8`
+
+`*_APP_STORE_CONNECT_API_KEY_P8`은 `.p8` 파일 내용을 그대로 넣습니다. 줄바꿈이 `\n` 문자로 들어가도 workflow가 실제 줄바꿈으로 변환합니다.
+
+또한 workflow 상단 env에서 profile별 공개 설정을 채워야 합니다.
+
+- `ACTIONFIT_ANDROID_PACKAGE_NAME`
+- `ACTIONFIT_IOS_BUNDLE_ID`
+- `ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID`
+- `STORMBORN_ANDROID_PACKAGE_NAME`
+- `STORMBORN_IOS_BUNDLE_ID`
+- `STORMBORN_IOS_DEVELOPMENT_TEAM_ID`
 
 ## 7. 첫 테스트 순서
 
@@ -257,15 +292,15 @@ Apple Silicon Mac에서는 `/opt/homebrew/bin/fastlane`, Intel Mac에서는 `/us
 확인 항목:
 
 - Apple Distribution 인증서와 private key가 login keychain에 있는지
-- Xcode account가 `49W7A8489P` team에 접근 가능한지
+- Xcode account가 선택한 profile의 Team ID에 접근 가능한지
 - App Store Connect API key가 provisioning 갱신 권한을 가지는지
-- bundle id `com.actionfit.catmerge.ios`의 App Store profile이 생성 가능한지
+- 선택한 profile의 bundle id로 App Store profile이 생성 가능한지
 
 ### Google Play upload 실패
 
 확인 항목:
 
-- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` 값이 JSON 원문인지
+- 선택한 profile의 `*_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` 값이 JSON 원문인지
 - Play Console에서 service account에 internal track release 권한이 있는지
 - 첫 릴리스가 Play Console에서 한 번 수동 업로드된 적이 있는지
 - Build Kind가 `AndroidAab`인지

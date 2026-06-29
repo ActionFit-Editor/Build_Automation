@@ -51,14 +51,17 @@ namespace ActionFit.BuildAutomation.Editor
 
         private static void ApplyRequest(BuildSettingsSO settings, BuildRequest request)
         {
+            string androidAlias = request.androidKeyaliasName?.Trim();
+
             if (!string.IsNullOrEmpty(request.buildVersion)) settings.buildVersion = request.buildVersion;
             if (!string.IsNullOrEmpty(request.bundleNo)) settings.bundleNo = request.bundleNo;
             if (!string.IsNullOrEmpty(request.buildFileName)) settings.buildFileName = request.buildFileName;
+            if (!string.IsNullOrEmpty(androidAlias)) settings.keyStoreAlias = androidAlias;
             settings.saveFileInProject = true;
 
             EditorUtility.SetDirty(settings);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[CIBuildEntry] Request applied: trigger={request.triggerSource}, platform={request.platform}, kind={request.buildKind}, upload={request.uploadTarget}");
+            Debug.Log($"[CIBuildEntry] Request applied: trigger={request.triggerSource}, platform={request.platform}, kind={request.buildKind}, upload={request.uploadTarget}, profile={request.distributionProfile}, androidAlias={androidAlias}");
         }
 
         private static BuildReport RunBuild(BuildSettingsSO settings, BuildRequest request)
@@ -69,7 +72,7 @@ namespace ActionFit.BuildAutomation.Editor
             {
                 case BuildRequestPlatform.Android:
 #if UNITY_ANDROID
-                    ApplyAndroidSigning();
+                    ApplyAndroidSigning(request);
                     bool aab = request.buildKind != BuildRequestKind.AndroidApk;
                     return AOSBuildProcess.BuildForCI(settings, aab);
 #else
@@ -105,25 +108,27 @@ namespace ActionFit.BuildAutomation.Editor
         }
 
 #if UNITY_ANDROID
-        // CI 환경변수로 전달된 keystore 비밀번호를 PlayerSettings에 주입한다.
-        // keystore 파일/alias 이름은 프로젝트 설정에 이미 저장되어 있으므로 비밀번호만 채운다.
-        // 환경변수가 없으면(로컬 빌드) 프로젝트에 저장된 서명 설정을 그대로 사용한다.
-        private static void ApplyAndroidSigning()
+        // CI에서는 alias 이름만 request에서 복원하고, 비밀번호는 환경변수로 주입한다.
+        // 환경변수와 alias 요청이 모두 없으면 프로젝트에 저장된 서명 설정을 그대로 사용한다.
+        private static void ApplyAndroidSigning(BuildRequest request)
         {
             string keystorePass = Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PASS");
             string keyaliasPass = Environment.GetEnvironmentVariable("ANDROID_KEYALIAS_PASS");
+            string aliasName = request.androidKeyaliasName?.Trim();
+            bool hasAliasName = !string.IsNullOrEmpty(aliasName);
 
-            if (string.IsNullOrEmpty(keystorePass) && string.IsNullOrEmpty(keyaliasPass))
+            if (!hasAliasName && string.IsNullOrEmpty(keystorePass) && string.IsNullOrEmpty(keyaliasPass))
             {
                 Debug.Log("[CIBuildEntry] No keystore env vars found; using project signing settings as-is");
                 return;
             }
 
             PlayerSettings.Android.useCustomKeystore = true;
+            if (hasAliasName) PlayerSettings.Android.keyaliasName = aliasName;
             if (!string.IsNullOrEmpty(keystorePass)) PlayerSettings.Android.keystorePass = keystorePass;
             if (!string.IsNullOrEmpty(keyaliasPass)) PlayerSettings.Android.keyaliasPass = keyaliasPass;
 
-            Debug.Log("[CIBuildEntry] Android keystore passwords injected from environment");
+            Debug.Log($"[CIBuildEntry] Android signing applied: alias={PlayerSettings.Android.keyaliasName}, keystorePassInjected={!string.IsNullOrEmpty(keystorePass)}, keyaliasPassInjected={!string.IsNullOrEmpty(keyaliasPass)}");
         }
 #endif
     }

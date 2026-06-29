@@ -21,6 +21,12 @@ env:
   ANDROID_PACKAGE_NAME: com.actionfit.catmerge
   IOS_BUNDLE_ID: com.actionfit.catmerge.ios
   IOS_DEVELOPMENT_TEAM_ID: 49W7A8489P
+  ACTIONFIT_ANDROID_PACKAGE_NAME: com.actionfit.catmerge
+  ACTIONFIT_IOS_BUNDLE_ID: com.actionfit.catmerge.ios
+  ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID: 49W7A8489P
+  STORMBORN_ANDROID_PACKAGE_NAME: ""
+  STORMBORN_IOS_BUNDLE_ID: ""
+  STORMBORN_IOS_DEVELOPMENT_TEAM_ID: ""
   IOS_XCODE_BUILD_PATH: Builds/iOS
   IOS_ARCHIVE_PATH: Builds/iOSArchive/Cat_Merge_Cafe.xcarchive
   IOS_EXPORT_PATH: Builds/iOSExport
@@ -34,6 +40,7 @@ jobs:
       platform: ${{ steps.detect.outputs.platform }}
       build_kind: ${{ steps.detect.outputs.build_kind }}
       upload_target: ${{ steps.detect.outputs.upload_target }}
+      distribution_profile: ${{ steps.detect.outputs.distribution_profile }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,6 +74,7 @@ jobs:
           platform = ""
           build_kind = ""
           upload_target = ""
+          distribution_profile = "Actionfit"
 
           if should_build && File.exist?(request_path)
             request = JSON.parse(File.read(request_path))
@@ -89,6 +97,11 @@ jobs:
               "2" => "TestFlight",
               "3" => "GooglePlayInternalAndTestFlight"
             }.fetch(request["uploadTarget"].to_s, request["uploadTarget"].to_s)
+            distribution_profile = {
+              "0" => "Actionfit",
+              "1" => "Stormborn"
+            }.fetch(request["distributionProfile"].to_s, request["distributionProfile"].to_s)
+            distribution_profile = "Actionfit" if distribution_profile.empty?
           else
             should_build = false
           end
@@ -98,6 +111,7 @@ jobs:
             output.puts("platform=#{platform}")
             output.puts("build_kind=#{build_kind}")
             output.puts("upload_target=#{upload_target}")
+            output.puts("distribution_profile=#{distribution_profile}")
           end
 
           puts "should_build=#{should_build}"
@@ -106,6 +120,7 @@ jobs:
           puts "platform=#{platform}"
           puts "build_kind=#{build_kind}"
           puts "upload_target=#{upload_target}"
+          puts "distribution_profile=#{distribution_profile}"
           RUBY
 
   android-build:
@@ -157,11 +172,39 @@ jobs:
       - name: Build signed Android from BuildCommit request
         shell: bash
         env:
-          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
-          ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+          DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
+          UPLOAD_TARGET: ${{ needs.detect.outputs.upload_target }}
+          ACTIONFIT_ANDROID_KEYSTORE_PASS: ${{ secrets.ACTIONFIT_ANDROID_KEYSTORE_PASS || secrets.ANDROID_KEYSTORE_PASS }}
+          ACTIONFIT_ANDROID_KEYALIAS_PASS: ${{ secrets.ACTIONFIT_ANDROID_KEYALIAS_PASS || secrets.ANDROID_KEYALIAS_PASS }}
+          STORMBORN_ANDROID_KEYSTORE_PASS: ${{ secrets.STORMBORN_ANDROID_KEYSTORE_PASS }}
+          STORMBORN_ANDROID_KEYALIAS_PASS: ${{ secrets.STORMBORN_ANDROID_KEYALIAS_PASS }}
         run: |
           set -euo pipefail
           mkdir -p Logs
+
+          case "$DISTRIBUTION_PROFILE" in
+            Actionfit)
+              export ANDROID_KEYSTORE_PASS="${ACTIONFIT_ANDROID_KEYSTORE_PASS:-}"
+              export ANDROID_KEYALIAS_PASS="${ACTIONFIT_ANDROID_KEYALIAS_PASS:-}"
+              ;;
+            Stormborn)
+              export ANDROID_KEYSTORE_PASS="${STORMBORN_ANDROID_KEYSTORE_PASS:-}"
+              export ANDROID_KEYALIAS_PASS="${STORMBORN_ANDROID_KEYALIAS_PASS:-}"
+              ;;
+            *)
+              echo "::error::Unsupported distribution profile: $DISTRIBUTION_PROFILE"
+              exit 1
+              ;;
+          esac
+
+          if [[ "$UPLOAD_TARGET" == "GooglePlayInternal" || "$UPLOAD_TARGET" == "GooglePlayInternalAndTestFlight" ]]; then
+            if [ -z "${ANDROID_KEYSTORE_PASS:-}" ] || [ -z "${ANDROID_KEYALIAS_PASS:-}" ]; then
+              echo "::error::Missing Android signing secrets for distribution profile: $DISTRIBUTION_PROFILE"
+              exit 1
+            fi
+          fi
+
+          echo "Using Android distribution profile: $DISTRIBUTION_PROFILE"
           "$UNITY_EXECUTABLE" \
             -batchmode \
             -quit \
@@ -188,12 +231,54 @@ jobs:
           echo "Found AAB: $aab_path"
           echo "Prepared upload AAB: $upload_path"
 
-      - name: Upload to Google Play (internal track)
+      - name: Validate Google Play profile config
         if: needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
+        shell: bash
+        env:
+          DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
+          ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON || secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+
+          case "$DISTRIBUTION_PROFILE" in
+            Actionfit)
+              package_name="${ACTIONFIT_ANDROID_PACKAGE_NAME:-${ANDROID_PACKAGE_NAME:-}}"
+              service_json="${ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON:-}"
+              ;;
+            Stormborn)
+              package_name="${STORMBORN_ANDROID_PACKAGE_NAME:-}"
+              service_json="${STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON:-}"
+              ;;
+            *)
+              echo "::error::Unsupported distribution profile: $DISTRIBUTION_PROFILE"
+              exit 1
+              ;;
+          esac
+
+          if [ -z "$package_name" ] || [ -z "$service_json" ]; then
+            echo "::error::Missing Google Play configuration for distribution profile: $DISTRIBUTION_PROFILE"
+            exit 1
+          fi
+
+          echo "Using Google Play distribution profile: $DISTRIBUTION_PROFILE"
+
+      - name: Upload to Google Play - Actionfit internal track
+        if: (needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight') && needs.detect.outputs.distribution_profile == 'Actionfit'
         uses: r0adkll/upload-google-play@v1
         with:
-          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: ${{ env.ANDROID_PACKAGE_NAME }}
+          serviceAccountJsonPlainText: ${{ secrets.ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON || secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ env.ACTIONFIT_ANDROID_PACKAGE_NAME }}
+          releaseFiles: ${{ steps.aab.outputs.path }}
+          track: internal
+          status: completed
+
+      - name: Upload to Google Play - Stormborn internal track
+        if: (needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight') && needs.detect.outputs.distribution_profile == 'Stormborn'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ env.STORMBORN_ANDROID_PACKAGE_NAME }}
           releaseFiles: ${{ steps.aab.outputs.path }}
           track: internal
           status: completed
@@ -275,38 +360,116 @@ jobs:
             -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest \
             -logFile Logs/unity-ios.log
 
+      - name: Install iOS CocoaPods dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ ! -f "$IOS_XCODE_BUILD_PATH/Podfile" ]; then
+            echo "No Podfile found under $IOS_XCODE_BUILD_PATH; skipping CocoaPods install."
+            exit 0
+          fi
+
+          ensure_pod() {
+            if command -v pod >/dev/null && pod --version >/dev/null 2>&1; then
+              return 0
+            fi
+
+            if [ ! -x /opt/homebrew/opt/ruby/bin/gem ]; then
+              echo "::error::CocoaPods is not working and Homebrew Ruby gem was not found."
+              return 1
+            fi
+
+            local pod_bin=""
+            local pod_gem_home=""
+            pod_bin="$(command -v pod || true)"
+            if [ -n "$pod_bin" ] && [ -f "$pod_bin" ]; then
+              pod_gem_home="$(sed -n 's/^GEM_HOME="\([^"]*\)".*/\1/p' "$pod_bin" | head -1)"
+            fi
+
+            if [ -z "$pod_gem_home" ]; then
+              echo "::error::CocoaPods is not working and its GEM_HOME could not be resolved."
+              return 1
+            fi
+
+            echo "::warning::CocoaPods is installed but not executable. Installing missing ffi gem into $pod_gem_home."
+            GEM_HOME="$pod_gem_home" /opt/homebrew/opt/ruby/bin/gem install ffi --no-document
+            pod --version >/dev/null
+          }
+
+          ensure_pod
+          pod --version
+
+          (
+            cd "$IOS_XCODE_BUILD_PATH"
+            pod install --repo-update
+          )
+
+          test -d "$IOS_XCODE_BUILD_PATH/Unity-iPhone.xcworkspace" || {
+            echo "::error::CocoaPods did not create Unity-iPhone.xcworkspace"
+            exit 1
+          }
+
       - name: Prepare App Store Connect API key
         id: asc_key
         if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
         shell: bash
         env:
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
+          ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID || secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8 || secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          STORMBORN_APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.STORMBORN_APP_STORE_CONNECT_API_KEY_ID }}
+          STORMBORN_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.STORMBORN_APP_STORE_CONNECT_ISSUER_ID }}
+          STORMBORN_APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.STORMBORN_APP_STORE_CONNECT_API_KEY_P8 }}
         run: |
           set -euo pipefail
 
-          if [ -z "${APP_STORE_CONNECT_API_KEY_ID:-}" ] || [ -z "${APP_STORE_CONNECT_ISSUER_ID:-}" ] || [ -z "${APP_STORE_CONNECT_API_KEY_P8:-}" ]; then
-            echo "::error::Missing App Store Connect API key secrets"
+          case "$DISTRIBUTION_PROFILE" in
+            Actionfit)
+              api_key_id="${ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID:-}"
+              issuer_id="${ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID:-}"
+              api_key_p8="${ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8:-}"
+              bundle_id="${ACTIONFIT_IOS_BUNDLE_ID:-${IOS_BUNDLE_ID:-}}"
+              team_id="${ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID:-${IOS_DEVELOPMENT_TEAM_ID:-}}"
+              ;;
+            Stormborn)
+              api_key_id="${STORMBORN_APP_STORE_CONNECT_API_KEY_ID:-}"
+              issuer_id="${STORMBORN_APP_STORE_CONNECT_ISSUER_ID:-}"
+              api_key_p8="${STORMBORN_APP_STORE_CONNECT_API_KEY_P8:-}"
+              bundle_id="${STORMBORN_IOS_BUNDLE_ID:-}"
+              team_id="${STORMBORN_IOS_DEVELOPMENT_TEAM_ID:-}"
+              ;;
+            *)
+              echo "::error::Unsupported distribution profile: $DISTRIBUTION_PROFILE"
+              exit 1
+              ;;
+          esac
+
+          if [ -z "$api_key_id" ] || [ -z "$issuer_id" ] || [ -z "$api_key_p8" ] || [ -z "$bundle_id" ] || [ -z "$team_id" ]; then
+            echo "::error::Missing iOS/TestFlight configuration for distribution profile: $DISTRIBUTION_PROFILE"
             exit 1
           fi
 
-          p8_path="$RUNNER_TEMP/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          p8_path="$RUNNER_TEMP/AuthKey_${api_key_id}.p8"
           api_key_json_path="$RUNNER_TEMP/app_store_connect_api_key.json"
           export ASC_P8_PATH="$p8_path"
           export ASC_API_KEY_JSON_PATH="$api_key_json_path"
+          export SELECTED_APP_STORE_CONNECT_API_KEY_ID="$api_key_id"
+          export SELECTED_APP_STORE_CONNECT_ISSUER_ID="$issuer_id"
+          export SELECTED_APP_STORE_CONNECT_API_KEY_P8="$api_key_p8"
 
           ruby <<'RUBY'
           require "json"
 
-          key = ENV.fetch("APP_STORE_CONNECT_API_KEY_P8").gsub("\\n", "\n")
+          key = ENV.fetch("SELECTED_APP_STORE_CONNECT_API_KEY_P8").gsub("\\n", "\n")
           File.write(ENV.fetch("ASC_P8_PATH"), key)
           File.write(
             ENV.fetch("ASC_API_KEY_JSON_PATH"),
             JSON.pretty_generate(
               {
-                key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
-                issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+                key_id: ENV.fetch("SELECTED_APP_STORE_CONNECT_API_KEY_ID"),
+                issuer_id: ENV.fetch("SELECTED_APP_STORE_CONNECT_ISSUER_ID"),
                 key: key,
                 duration: 1200,
                 in_house: false
@@ -316,8 +479,15 @@ jobs:
           RUBY
 
           chmod 600 "$p8_path" "$api_key_json_path"
+          {
+            echo "APP_STORE_CONNECT_API_KEY_ID=$api_key_id"
+            echo "APP_STORE_CONNECT_ISSUER_ID=$issuer_id"
+            echo "IOS_BUNDLE_ID=$bundle_id"
+            echo "IOS_DEVELOPMENT_TEAM_ID=$team_id"
+          } >> "$GITHUB_ENV"
           echo "p8_path=$p8_path" >> "$GITHUB_OUTPUT"
           echo "api_key_json_path=$api_key_json_path" >> "$GITHUB_OUTPUT"
+          echo "Using iOS distribution profile: $DISTRIBUTION_PROFILE"
 
       - name: Resolve fastlane
         if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
@@ -343,9 +513,6 @@ jobs:
         id: ipa
         if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
         shell: bash
-        env:
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           set -euo pipefail
           mkdir -p Logs "$IOS_EXPORT_PATH"
@@ -356,20 +523,44 @@ jobs:
             xcode_container=(-project "$IOS_XCODE_BUILD_PATH/Unity-iPhone.xcodeproj")
           fi
 
-          xcodebuild "${xcode_container[@]}" \
-            -scheme Unity-iPhone \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination "generic/platform=iOS" \
-            -archivePath "$IOS_ARCHIVE_PATH" \
-            DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM_ID" \
-            CODE_SIGN_STYLE=Automatic \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "${{ steps.asc_key.outputs.p8_path }}" \
-            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
-            archive | tee Logs/xcode-archive.log
+          archive_once() {
+            local attempt="$1"
+            echo "xcodebuild archive attempt ${attempt}/2" | tee -a Logs/xcode-archive.log
+            xcodebuild "${xcode_container[@]}" \
+              -scheme Unity-iPhone \
+              -configuration Release \
+              -sdk iphoneos \
+              -destination "generic/platform=iOS" \
+              -archivePath "$IOS_ARCHIVE_PATH" \
+              DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM_ID" \
+              CODE_SIGN_STYLE=Automatic \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "${{ steps.asc_key.outputs.p8_path }}" \
+              -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+              -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+              archive 2>&1 | tee -a Logs/xcode-archive.log
+          }
+
+          reset_interface_builder() {
+            xcrun simctl list runtimes >/dev/null 2>&1 || true
+            pkill -x ibtoold >/dev/null 2>&1 || true
+          }
+
+          : > Logs/xcode-archive.log
+          archive_status=0
+          archive_once 1 || archive_status=$?
+
+          if [ "$archive_status" -ne 0 ] && grep -Eq "Command CompileXIB failed|ibtoold|Interface Builder" Logs/xcode-archive.log; then
+            echo "::warning::xcodebuild archive failed in the Interface Builder/XIB path. Resetting ibtoold and retrying once."
+            reset_interface_builder
+            rm -rf "$IOS_ARCHIVE_PATH"
+            archive_status=0
+            archive_once 2 || archive_status=$?
+          fi
+
+          if [ "$archive_status" -ne 0 ]; then
+            exit "$archive_status"
+          fi
 
           cat > ExportOptions.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>

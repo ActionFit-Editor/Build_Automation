@@ -10,7 +10,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 {
   "dependencies": {
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.0",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.0"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.1"
   }
 }
 ```
@@ -31,6 +31,10 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 
 실제 GitHub Actions 빌드 요청은 저장 커밋 push가 아니라 `build/**` 태그 push로 발생합니다. 저장 커밋은 요청 JSON과 변경사항을 남기는 용도이며, 같은 버전으로 재요청할 수 있도록 커밋은 `--allow-empty`를 허용합니다.
 
+Android 요청에서는 `BuildSettingsSO.keyStoreAlias` 값을 `androidKeyaliasName`으로 함께 저장합니다. alias 이름은 비밀값이 아니므로 request에 포함하지만, keystore password와 alias password는 계속 GitHub Actions Secrets에서 주입합니다.
+
+`Distribution Profile`은 배포 계정 선택값입니다. BuildCommit은 `Actionfit` 또는 `Stormborn`을 `distributionProfile`로 request에 저장하고, workflow는 이 값으로 Google Play/App Store Connect credential 묶음을 선택합니다. secret 값 자체는 request에 저장하지 않습니다.
+
 ## CI Build
 
 원격 빌드머신은 BuildCommit이 태그로 지정한 저장 커밋에서 `.build/build_request.json`을 읽어 같은 `BuildSettingsSO` 기반 빌드를 재현합니다. `CIBuildEntry`는 request의 `triggerSource`가 `BuildCommit`인 경우만 처리합니다.
@@ -42,6 +46,8 @@ Unity -batchmode -quit -projectPath . -executeMethod ActionFit.BuildAutomation.E
 기본 GitHub Actions workflow template은 `WorkflowTemplates/buildcommit-auto-build.yml`에 있습니다. 프로젝트에서 사용하려면 내용을 `.github/workflows/buildcommit-auto-build.yml`로 복사한 뒤, 프로젝트별 env 값을 조정합니다.
 
 workflow는 macOS self-hosted runner 기준입니다. runner에는 `self-hosted`, `macOS`, `unity-mobile` 라벨이 있어야 하며, 같은 Mac에서 Unity CLI로 Android/iOS를 빌드합니다. `Platform=Both` 요청은 workflow가 Android job과 iOS job으로 나눠 `.build/build_request.json`의 platform 값을 임시 변환한 뒤 `CIBuildEntry.BuildFromRequest`를 각각 호출합니다.
+
+Actionfit은 기존 unprefixed secrets도 fallback으로 사용합니다. Stormborn은 `STORMBORN_ANDROID_KEYSTORE_PASS`, `STORMBORN_ANDROID_KEYALIAS_PASS`, `STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `STORMBORN_APP_STORE_CONNECT_API_KEY_ID`, `STORMBORN_APP_STORE_CONNECT_ISSUER_ID`, `STORMBORN_APP_STORE_CONNECT_API_KEY_P8`를 별도로 등록해야 합니다.
 
 상세 Mac 서버 준비 절차는 [MAC_SELF_HOSTED_RUNNER_SETUP.md](MAC_SELF_HOSTED_RUNNER_SETUP.md)를 참고합니다.
 

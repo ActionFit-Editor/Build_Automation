@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.0`
+- Current package version at generation time: `1.0.1`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -57,6 +57,8 @@ Read this file when:
 - Build request path: `.build/build_request.json`.
 - Build tag prefix: `build/**`.
 - Storage commit message prefix: `[BuildRequest]`.
+- Distribution profile request field: `distributionProfile`. Current profiles are `Actionfit` and `Stormborn`; only the profile name is stored in request JSON.
+- Android request alias field: `androidKeyaliasName`, copied from `BuildSettingsSO.keyStoreAlias`. Do not store keystore or alias passwords in the request.
 - CI entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`.
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.
 - Build Automation depends on `com.actionfit.buildsetting@1.1.0` or newer.

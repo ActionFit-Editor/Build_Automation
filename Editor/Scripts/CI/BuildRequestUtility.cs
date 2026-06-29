@@ -13,6 +13,7 @@ namespace ActionFit.BuildAutomation.Editor
     public static class BuildRequestUtility
     {
         public const string RelativePath = ".build/build_request.json";
+        private const string EmptyKeystoreAliasPlaceholder = "[Enter Keystore Alias]";
 
         public static string AbsolutePath => Path.GetFullPath(Path.Combine(ProjectRoot, RelativePath));
 
@@ -22,7 +23,8 @@ namespace ActionFit.BuildAutomation.Editor
             BuildSettingsSO settings,
             BuildRequestPlatform platform,
             BuildRequestKind buildKind,
-            BuildRequestUploadTarget uploadTarget)
+            BuildRequestUploadTarget uploadTarget,
+            BuildRequestDistributionProfile distributionProfile)
         {
             if (settings == null)
             {
@@ -38,13 +40,40 @@ namespace ActionFit.BuildAutomation.Editor
                 platform = resolvedPlatform,
                 buildKind = buildKind,
                 uploadTarget = uploadTarget,
+                distributionProfile = distributionProfile,
                 buildVersion = settings.buildVersion,
                 bundleNo = settings.bundleNo,
                 buildFileName = settings.buildFileName,
+                androidKeyaliasName = UsesAndroid(resolvedPlatform) ? GetAndroidKeyaliasName(settings) : "",
                 sourceBranch = RunGitCommand("rev-parse --abbrev-ref HEAD"),
                 sourceCommit = RunGitCommand("rev-parse HEAD"),
                 createdAtUtc = DateTime.UtcNow.ToString("o")
             };
+        }
+
+        public static BuildRequest Create(
+            BuildSettingsSO settings,
+            BuildRequestPlatform platform,
+            BuildRequestKind buildKind,
+            BuildRequestUploadTarget uploadTarget)
+        {
+            return Create(settings, platform, buildKind, uploadTarget, BuildRequestDistributionProfile.Actionfit);
+        }
+
+        public static string GetAndroidKeyaliasName(BuildSettingsSO settings)
+        {
+            if (settings == null) return "";
+
+            string alias = settings.keyStoreAlias;
+            if (string.IsNullOrWhiteSpace(alias)) return "";
+
+            alias = alias.Trim();
+            return alias == EmptyKeystoreAliasPlaceholder ? "" : alias;
+        }
+
+        private static bool UsesAndroid(BuildRequestPlatform platform)
+        {
+            return platform == BuildRequestPlatform.Android || platform == BuildRequestPlatform.Both;
         }
 
         public static bool Save(BuildRequest request)
