@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b5ab7e2b67b436db878fd7b023d8616, type: 3}
+  m_Name: ActionFitPackageInfo_SO
+  m_EditorClassIdentifier: 
+  _packageId: com.actionfit.buildautomation
+  _displayName: Build Automation
+  _repoName: Build_Automation
+  _owner: "\uC1A1\uC81C\uC6B0"
+  _status: verified
+  _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
+    workflow templates, and macOS self-hosted mobile build guidance for ActionFit
+    Unity projects.
+  _releaseNote: "- `Build Commit` \uCC3D\uACFC `.build/build_request.json` \uC694\uCCAD
+    \uC0DD\uC131 \uAE30\uB2A5\uC744 `com.actionfit.buildsetting`\uC5D0\uC11C \uBD84\uB9AC\uD574
+    `com.actionfit.buildautomation` \uD328\uD0A4\uC9C0\uB85C \uC81C\uACF5\uD569\uB2C8\uB2E4.\n-
+    Git tag \uAE30\uBC18 `build/**` CI \uD2B8\uB9AC\uAC70\uC640 `CIBuildEntry.BuildFromRequest`\uB97C
+    \uC0C8 \uD328\uD0A4\uC9C0 namespace\uC778 `ActionFit.BuildAutomation.Editor`\uC5D0\uC11C
+    \uC81C\uACF5\uD569\uB2C8\uB2E4.\n- GitHub Actions workflow template\uACFC macOS
+    self-hosted runner \uAC00\uC774\uB4DC\uB97C \uD328\uD0A4\uC9C0\uC5D0 \uD3EC\uD568\uD574
+    \uC790\uB3D9 \uBE4C\uB4DC \uC138\uD305\uC744 \uB2E4\uB978 \uD504\uB85C\uC81D\uD2B8\uB85C
+    \uC62E\uAE38 \uC218 \uC788\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n- \uC8FC\uC758: \uC774
+    \uD328\uD0A4\uC9C0\uB294 `com.actionfit.buildsetting@1.1.0` \uC774\uC0C1\uC774
+    \uD544\uC694\uD558\uBA70, \uC2E4\uC81C \uBC30\uD3EC \uC804 `Build_Automation`
+    \uB808\uD3EC \uC0DD\uC131\uACFC \uD328\uD0A4\uC9C0 publish\uAC00 \uD544\uC694\uD569\uB2C8\uB2E4."
+  _dependenciesOverride: com.actionfit.buildsetting@1.1.0

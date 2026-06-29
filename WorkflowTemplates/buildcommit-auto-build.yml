@@ -1,0 +1,434 @@
+name: BuildCommit Auto Build
+
+on:
+  push:
+    tags:
+      - "build/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: buildcommit-auto-build-${{ github.ref }}
+  cancel-in-progress: false
+
+# 프로젝트별 설정 — 다른 프로젝트로 재사용할 때 이 env 블록만 교체하면 된다.
+env:
+  UNITY_VERSION: "6000.2.6f2"
+  UNITY_EXECUTABLE: "/Applications/Unity/Hub/Editor/6000.2.6f2/Unity.app/Contents/MacOS/Unity"
+  DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer"
+  ANDROID_PACKAGE_NAME: com.actionfit.catmerge
+  IOS_BUNDLE_ID: com.actionfit.catmerge.ios
+  IOS_DEVELOPMENT_TEAM_ID: 49W7A8489P
+  IOS_XCODE_BUILD_PATH: Builds/iOS
+  IOS_ARCHIVE_PATH: Builds/iOSArchive/Cat_Merge_Cafe.xcarchive
+  IOS_EXPORT_PATH: Builds/iOSExport
+
+jobs:
+  detect:
+    name: Detect BuildCommit Request
+    runs-on: [self-hosted, macOS, unity-mobile]
+    outputs:
+      should_build: ${{ steps.detect.outputs.should_build }}
+      platform: ${{ steps.detect.outputs.platform }}
+      build_kind: ${{ steps.detect.outputs.build_kind }}
+      upload_target: ${{ steps.detect.outputs.upload_target }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Detect request
+        id: detect
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_DELETED: ${{ github.event.deleted }}
+        run: |
+          ruby <<'RUBY'
+          require "json"
+
+          event_name = ENV.fetch("EVENT_NAME", "")
+          ref_type = ENV.fetch("REF_TYPE", "")
+          ref_name = ENV.fetch("REF_NAME", "")
+          deleted = ENV.fetch("EVENT_DELETED", "false") == "true"
+          request_path = ".build/build_request.json"
+
+          tag_request = event_name == "push" &&
+                        ref_type == "tag" &&
+                        ref_name.start_with?("build/") &&
+                        !deleted
+          manual_request = event_name == "workflow_dispatch"
+          should_build = tag_request || manual_request
+          platform = ""
+          build_kind = ""
+          upload_target = ""
+
+          if should_build && File.exist?(request_path)
+            request = JSON.parse(File.read(request_path))
+            should_build = request["triggerSource"] == "BuildCommit"
+            platform = {
+              "0" => "Current",
+              "1" => "Android",
+              "2" => "iOS",
+              "3" => "Both"
+            }.fetch(request["platform"].to_s, request["platform"].to_s)
+            build_kind = {
+              "0" => "Default",
+              "1" => "AndroidApk",
+              "2" => "AndroidAab",
+              "3" => "iOSXcodeProject"
+            }.fetch(request["buildKind"].to_s, request["buildKind"].to_s)
+            upload_target = {
+              "0" => "None",
+              "1" => "GooglePlayInternal",
+              "2" => "TestFlight",
+              "3" => "GooglePlayInternalAndTestFlight"
+            }.fetch(request["uploadTarget"].to_s, request["uploadTarget"].to_s)
+          else
+            should_build = false
+          end
+
+          File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |output|
+            output.puts("should_build=#{should_build}")
+            output.puts("platform=#{platform}")
+            output.puts("build_kind=#{build_kind}")
+            output.puts("upload_target=#{upload_target}")
+          end
+
+          puts "should_build=#{should_build}"
+          puts "ref_type=#{ref_type}"
+          puts "ref_name=#{ref_name}"
+          puts "platform=#{platform}"
+          puts "build_kind=#{build_kind}"
+          puts "upload_target=#{upload_target}"
+          RUBY
+
+  android-build:
+    name: Android Build & Deploy
+    needs: detect
+    if: needs.detect.outputs.should_build == 'true' && (needs.detect.outputs.platform == 'Android' || needs.detect.outputs.platform == 'Both')
+    runs-on: [self-hosted, macOS, unity-mobile]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-macOS-Android-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-macOS-Android-
+
+      - name: Prepare Android BuildCommit request
+        shell: bash
+        run: |
+          ruby <<'RUBY'
+          require "json"
+
+          path = ".build/build_request.json"
+          request = JSON.parse(File.read(path))
+          request["platform"] = 1
+
+          kind = request["buildKind"].to_s
+          if ["", "0", "3", "Default", "iOSXcodeProject"].include?(kind)
+            request["buildKind"] = 2
+          end
+
+          File.write(path, JSON.pretty_generate(request))
+          puts File.read(path)
+          RUBY
+
+      - name: Check Unity executable
+        shell: bash
+        run: |
+          test -x "$UNITY_EXECUTABLE" || {
+            echo "::error::Unity executable not found: $UNITY_EXECUTABLE"
+            exit 1
+          }
+
+      - name: Build signed Android from BuildCommit request
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+        run: |
+          set -euo pipefail
+          mkdir -p Logs
+          "$UNITY_EXECUTABLE" \
+            -batchmode \
+            -quit \
+            -projectPath "$GITHUB_WORKSPACE" \
+            -buildTarget Android \
+            -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest \
+            -logFile Logs/unity-android.log
+
+      - name: Locate AAB for upload
+        id: aab
+        if: needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
+        shell: bash
+        run: |
+          set -euo pipefail
+          aab_path="$(find Builds -name '*.aab' -print -quit)"
+          if [ -z "$aab_path" ]; then
+            echo "::error::No .aab found under Builds/. Google Play upload requires an AAB build (buildKind must not be AndroidApk)."
+            exit 1
+          fi
+          upload_path=".build/google-play-upload/Cat_Merge_Cafe.aab"
+          mkdir -p "$(dirname "$upload_path")"
+          cp "$aab_path" "$upload_path"
+          echo "path=$upload_path" >> "$GITHUB_OUTPUT"
+          echo "Found AAB: $aab_path"
+          echo "Prepared upload AAB: $upload_path"
+
+      - name: Upload to Google Play (internal track)
+        if: needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ env.ANDROID_PACKAGE_NAME }}
+          releaseFiles: ${{ steps.aab.outputs.path }}
+          track: internal
+          status: completed
+
+      - name: Upload build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-BuildCommit-Build
+          path: |
+            Builds/**
+            .build/build_request.json
+            Logs/**
+            *.log
+          if-no-files-found: warn
+
+  ios-build:
+    name: iOS Build & Deploy
+    needs: detect
+    if: needs.detect.outputs.should_build == 'true' && (needs.detect.outputs.platform == 'iOS' || needs.detect.outputs.platform == 'Both')
+    runs-on: [self-hosted, macOS, unity-mobile]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-macOS-iOS-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-macOS-iOS-
+
+      - name: Prepare iOS BuildCommit request
+        shell: bash
+        run: |
+          ruby <<'RUBY'
+          require "json"
+
+          path = ".build/build_request.json"
+          request = JSON.parse(File.read(path))
+          request["platform"] = 2
+          request["buildKind"] = 3
+
+          File.write(path, JSON.pretty_generate(request))
+          puts File.read(path)
+          RUBY
+
+      - name: Check Unity executable
+        shell: bash
+        run: |
+          test -x "$UNITY_EXECUTABLE" || {
+            echo "::error::Unity executable not found: $UNITY_EXECUTABLE"
+            exit 1
+          }
+
+      - name: Check Xcode tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcodebuild -showsdks | grep -q "iphoneos" || {
+            echo "::error::iOS SDK is not available in DEVELOPER_DIR=$DEVELOPER_DIR"
+            exit 1
+          }
+
+      - name: Build iOS Xcode project from BuildCommit request
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p Logs
+          "$UNITY_EXECUTABLE" \
+            -batchmode \
+            -quit \
+            -projectPath "$GITHUB_WORKSPACE" \
+            -buildTarget iOS \
+            -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest \
+            -logFile Logs/unity-ios.log
+
+      - name: Prepare App Store Connect API key
+        id: asc_key
+        if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
+        shell: bash
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${APP_STORE_CONNECT_API_KEY_ID:-}" ] || [ -z "${APP_STORE_CONNECT_ISSUER_ID:-}" ] || [ -z "${APP_STORE_CONNECT_API_KEY_P8:-}" ]; then
+            echo "::error::Missing App Store Connect API key secrets"
+            exit 1
+          fi
+
+          p8_path="$RUNNER_TEMP/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          api_key_json_path="$RUNNER_TEMP/app_store_connect_api_key.json"
+          export ASC_P8_PATH="$p8_path"
+          export ASC_API_KEY_JSON_PATH="$api_key_json_path"
+
+          ruby <<'RUBY'
+          require "json"
+
+          key = ENV.fetch("APP_STORE_CONNECT_API_KEY_P8").gsub("\\n", "\n")
+          File.write(ENV.fetch("ASC_P8_PATH"), key)
+          File.write(
+            ENV.fetch("ASC_API_KEY_JSON_PATH"),
+            JSON.pretty_generate(
+              {
+                key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
+                issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+                key: key,
+                duration: 1200,
+                in_house: false
+              }
+            )
+          )
+          RUBY
+
+          chmod 600 "$p8_path" "$api_key_json_path"
+          echo "p8_path=$p8_path" >> "$GITHUB_OUTPUT"
+          echo "api_key_json_path=$api_key_json_path" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve fastlane
+        if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if command -v fastlane >/dev/null; then
+            fastlane_cmd="$(command -v fastlane)"
+          elif [ -x /opt/homebrew/bin/fastlane ]; then
+            fastlane_cmd="/opt/homebrew/bin/fastlane"
+          elif [ -x /usr/local/bin/fastlane ]; then
+            fastlane_cmd="/usr/local/bin/fastlane"
+          else
+            echo "::error::fastlane is required on the self-hosted macOS runner"
+            exit 1
+          fi
+
+          "$fastlane_cmd" --version
+          echo "FASTLANE_CMD=$fastlane_cmd" >> "$GITHUB_ENV"
+
+      - name: Archive and export IPA
+        id: ipa
+        if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
+        shell: bash
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p Logs "$IOS_EXPORT_PATH"
+
+          if [ -d "$IOS_XCODE_BUILD_PATH/Unity-iPhone.xcworkspace" ]; then
+            xcode_container=(-workspace "$IOS_XCODE_BUILD_PATH/Unity-iPhone.xcworkspace")
+          else
+            xcode_container=(-project "$IOS_XCODE_BUILD_PATH/Unity-iPhone.xcodeproj")
+          fi
+
+          xcodebuild "${xcode_container[@]}" \
+            -scheme Unity-iPhone \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -archivePath "$IOS_ARCHIVE_PATH" \
+            DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${{ steps.asc_key.outputs.p8_path }}" \
+            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            archive | tee Logs/xcode-archive.log
+
+          cat > ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>teamID</key>
+            <string>${IOS_DEVELOPMENT_TEAM_ID}</string>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath "$IOS_ARCHIVE_PATH" \
+            -exportPath "$IOS_EXPORT_PATH" \
+            -exportOptionsPlist ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${{ steps.asc_key.outputs.p8_path }}" \
+            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            | tee Logs/xcode-export.log
+
+          ipa_path="$(find "$IOS_EXPORT_PATH" -name '*.ipa' -print -quit)"
+          if [ -z "$ipa_path" ]; then
+            echo "::error::No .ipa found under $IOS_EXPORT_PATH"
+            exit 1
+          fi
+
+          echo "path=$ipa_path" >> "$GITHUB_OUTPUT"
+          echo "Found IPA: $ipa_path"
+
+      - name: Upload to TestFlight
+        if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          "$FASTLANE_CMD" pilot upload \
+            --api_key_path "${{ steps.asc_key.outputs.api_key_json_path }}" \
+            --app_identifier "$IOS_BUNDLE_ID" \
+            --ipa "${{ steps.ipa.outputs.path }}" \
+            --skip_waiting_for_build_processing
+
+      - name: Upload build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOS-BuildCommit-Build
+          path: |
+            Builds/iOS/**
+            Builds/iOSArchive/**
+            Builds/iOSExport/**
+            .build/build_request.json
+            Logs/**
+            *.log
+          if-no-files-found: warn
