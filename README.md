@@ -10,7 +10,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 {
   "dependencies": {
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.0",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.1"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.2"
   }
 }
 ```
@@ -47,7 +47,7 @@ Unity -batchmode -quit -projectPath . -executeMethod ActionFit.BuildAutomation.E
 
 workflow는 macOS self-hosted runner 기준입니다. runner에는 `self-hosted`, `macOS`, `unity-mobile` 라벨이 있어야 하며, 같은 Mac에서 Unity CLI로 Android/iOS를 빌드합니다. `Platform=Both` 요청은 workflow가 Android job과 iOS job으로 나눠 `.build/build_request.json`의 platform 값을 임시 변환한 뒤 `CIBuildEntry.BuildFromRequest`를 각각 호출합니다.
 
-Actionfit은 기존 unprefixed secrets도 fallback으로 사용합니다. Stormborn은 `STORMBORN_ANDROID_KEYSTORE_PASS`, `STORMBORN_ANDROID_KEYALIAS_PASS`, `STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `STORMBORN_APP_STORE_CONNECT_API_KEY_ID`, `STORMBORN_APP_STORE_CONNECT_ISSUER_ID`, `STORMBORN_APP_STORE_CONNECT_API_KEY_P8`를 별도로 등록해야 합니다.
+Android signing 비밀번호는 profile과 무관하게 공통 `ANDROID_KEYSTORE_PASS`, `ANDROID_KEYALIAS_PASS`를 사용합니다. 업로드 계정 secret은 profile별 prefix를 명시합니다. Actionfit은 `ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID`, `ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID`, `ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8`를 사용하고, Stormborn은 같은 형식의 `STORMBORN_*` secrets를 사용합니다.
 
 상세 Mac 서버 준비 절차는 [MAC_SELF_HOSTED_RUNNER_SETUP.md](MAC_SELF_HOSTED_RUNNER_SETUP.md)를 참고합니다.
 

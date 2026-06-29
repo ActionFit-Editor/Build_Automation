@@ -146,22 +146,19 @@ GitHub repository의 아래 경로에서 Secrets를 등록합니다.
 Settings > Secrets and variables > Actions > Repository secrets
 ```
 
-Actionfit Android:
-
-- `ACTIONFIT_ANDROID_KEYSTORE_PASS`
-- `ACTIONFIT_ANDROID_KEYALIAS_PASS`
-- `ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
-
-기존 설정과 호환하려면 Actionfit은 아래 unprefixed secrets도 fallback으로 사용할 수 있습니다.
+Android signing:
 
 - `ANDROID_KEYSTORE_PASS`
 - `ANDROID_KEYALIAS_PASS`
-- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
 
-Stormborn Android:
+이 두 비밀번호는 `Distribution Profile`과 무관하게 공통으로 사용합니다.
 
-- `STORMBORN_ANDROID_KEYSTORE_PASS`
-- `STORMBORN_ANDROID_KEYALIAS_PASS`
+Actionfit Android upload:
+
+- `ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
+
+Stormborn Android upload:
+
 - `STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
 
 Android alias 이름은 secret으로 넣지 않습니다. BuildCommit request가 BuildSetting의 `BuildSettingsSO.keyStoreAlias` 값을 `androidKeyaliasName`으로 전달하고, workflow는 secret에 저장된 비밀번호만 주입합니다.
@@ -171,12 +168,6 @@ Actionfit iOS/TestFlight:
 - `ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID`
 - `ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID`
 - `ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8`
-
-기존 설정과 호환하려면 Actionfit은 아래 unprefixed secrets도 fallback으로 사용할 수 있습니다.
-
-- `APP_STORE_CONNECT_API_KEY_ID`
-- `APP_STORE_CONNECT_ISSUER_ID`
-- `APP_STORE_CONNECT_API_KEY_P8`
 
 Stormborn iOS/TestFlight:
 

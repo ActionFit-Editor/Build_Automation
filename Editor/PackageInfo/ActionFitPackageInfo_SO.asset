@@ -20,14 +20,12 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- BuildCommit \uC694\uCCAD\uC5D0 `distributionProfile`\uC744 \uCD94\uAC00\uD574
-    `Actionfit`/`Stormborn` \uBC30\uD3EC \uACC4\uC815\uC744 \uC120\uD0DD\uD560 \uC218
-    \uC788\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n- GitHub Actions workflow\uAC00 \uC120\uD0DD\uB41C
-    profile\uC5D0 \uB530\uB77C Android signing, Google Play, App Store Connect, iOS
-    Team/Bundle \uC124\uC815\uC744 \uBD84\uAE30\uD558\uB3C4\uB85D \uD588\uC2B5\uB2C8\uB2E4.\n-
-    Android \uC694\uCCAD\uC758 `androidKeyaliasName`\uACFC \uBC30\uD3EC profile \uC774\uB984\uB9CC
-    request\uC5D0 \uC800\uC7A5\uD558\uACE0, \uBE44\uBC00\uBC88\uD638/API key/service
-    account \uAC12\uC740 \uACC4\uC18D GitHub Actions Secrets\uC5D0\uC11C\uB9CC \uC8FC\uC785\uD569\uB2C8\uB2E4.\n-
-    Actionfit\uC740 \uAE30\uC874 unprefixed secrets\uB97C fallback\uC73C\uB85C \uC9C0\uC6D0\uD558\uACE0,
-    Stormborn\uC740 `STORMBORN_*` secrets\uB97C \uBCC4\uB3C4\uB85C \uC694\uAD6C\uD569\uB2C8\uB2E4."
+  _releaseNote: "- Android signing \uBE44\uBC00\uBC88\uD638\uB97C profile\uACFC \uBB34\uAD00\uD55C
+    \uACF5\uD1B5 `ANDROID_KEYSTORE_PASS`, `ANDROID_KEYALIAS_PASS`\uB85C \uC815\uB9AC\uD588\uC2B5\uB2C8\uB2E4.\n-
+    Google Play/App Store Connect \uC5C5\uB85C\uB4DC \uACC4\uC815 secret\uC740 `ACTIONFIT_*`,
+    `STORMBORN_*`\uCC98\uB7FC profile prefix\uAC00 \uBD99\uC740 \uC774\uB984\uB9CC
+    \uC0AC\uC6A9\uD558\uB3C4\uB85D \uBA85\uD655\uD788 \uD588\uC2B5\uB2C8\uB2E4.\n-
+    workflow \uC0C1\uB2E8 \uC571 \uACF5\uAC1C \uC124\uC815\uB3C4 `ACTIONFIT_ANDROID_PACKAGE_NAME`,
+    `ACTIONFIT_IOS_BUNDLE_ID`, `ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID`\uCC98\uB7FC profile\uBCC4
+    \uC774\uB984\uB9CC \uC0AC\uC6A9\uD569\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.buildsetting@1.1.0

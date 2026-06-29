@@ -18,15 +18,13 @@ env:
   UNITY_VERSION: "6000.2.6f2"
   UNITY_EXECUTABLE: "/Applications/Unity/Hub/Editor/6000.2.6f2/Unity.app/Contents/MacOS/Unity"
   DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer"
-  ANDROID_PACKAGE_NAME: com.actionfit.catmerge
-  IOS_BUNDLE_ID: com.actionfit.catmerge.ios
-  IOS_DEVELOPMENT_TEAM_ID: 49W7A8489P
   ACTIONFIT_ANDROID_PACKAGE_NAME: com.actionfit.catmerge
   ACTIONFIT_IOS_BUNDLE_ID: com.actionfit.catmerge.ios
   ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID: 49W7A8489P
   STORMBORN_ANDROID_PACKAGE_NAME: ""
   STORMBORN_IOS_BUNDLE_ID: ""
   STORMBORN_IOS_DEVELOPMENT_TEAM_ID: ""
+  IOS_DISTRIBUTION_SIGNING_IDENTITY: "Apple Distribution"
   IOS_XCODE_BUILD_PATH: Builds/iOS
   IOS_ARCHIVE_PATH: Builds/iOSArchive/Cat_Merge_Cafe.xcarchive
   IOS_EXPORT_PATH: Builds/iOSExport
@@ -172,39 +170,21 @@ jobs:
       - name: Build signed Android from BuildCommit request
         shell: bash
         env:
-          DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
           UPLOAD_TARGET: ${{ needs.detect.outputs.upload_target }}
-          ACTIONFIT_ANDROID_KEYSTORE_PASS: ${{ secrets.ACTIONFIT_ANDROID_KEYSTORE_PASS || secrets.ANDROID_KEYSTORE_PASS }}
-          ACTIONFIT_ANDROID_KEYALIAS_PASS: ${{ secrets.ACTIONFIT_ANDROID_KEYALIAS_PASS || secrets.ANDROID_KEYALIAS_PASS }}
-          STORMBORN_ANDROID_KEYSTORE_PASS: ${{ secrets.STORMBORN_ANDROID_KEYSTORE_PASS }}
-          STORMBORN_ANDROID_KEYALIAS_PASS: ${{ secrets.STORMBORN_ANDROID_KEYALIAS_PASS }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
         run: |
           set -euo pipefail
           mkdir -p Logs
 
-          case "$DISTRIBUTION_PROFILE" in
-            Actionfit)
-              export ANDROID_KEYSTORE_PASS="${ACTIONFIT_ANDROID_KEYSTORE_PASS:-}"
-              export ANDROID_KEYALIAS_PASS="${ACTIONFIT_ANDROID_KEYALIAS_PASS:-}"
-              ;;
-            Stormborn)
-              export ANDROID_KEYSTORE_PASS="${STORMBORN_ANDROID_KEYSTORE_PASS:-}"
-              export ANDROID_KEYALIAS_PASS="${STORMBORN_ANDROID_KEYALIAS_PASS:-}"
-              ;;
-            *)
-              echo "::error::Unsupported distribution profile: $DISTRIBUTION_PROFILE"
-              exit 1
-              ;;
-          esac
-
           if [[ "$UPLOAD_TARGET" == "GooglePlayInternal" || "$UPLOAD_TARGET" == "GooglePlayInternalAndTestFlight" ]]; then
             if [ -z "${ANDROID_KEYSTORE_PASS:-}" ] || [ -z "${ANDROID_KEYALIAS_PASS:-}" ]; then
-              echo "::error::Missing Android signing secrets for distribution profile: $DISTRIBUTION_PROFILE"
+              echo "::error::Missing Android signing secrets: ANDROID_KEYSTORE_PASS and ANDROID_KEYALIAS_PASS"
               exit 1
             fi
           fi
 
-          echo "Using Android distribution profile: $DISTRIBUTION_PROFILE"
+          echo "Using shared Android signing password secrets"
           "$UNITY_EXECUTABLE" \
             -batchmode \
             -quit \
@@ -236,14 +216,14 @@ jobs:
         shell: bash
         env:
           DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
-          ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON || secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
 
           case "$DISTRIBUTION_PROFILE" in
             Actionfit)
-              package_name="${ACTIONFIT_ANDROID_PACKAGE_NAME:-${ANDROID_PACKAGE_NAME:-}}"
+              package_name="${ACTIONFIT_ANDROID_PACKAGE_NAME:-}"
               service_json="${ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON:-}"
               ;;
             Stormborn)
@@ -267,7 +247,7 @@ jobs:
         if: (needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight') && needs.detect.outputs.distribution_profile == 'Actionfit'
         uses: r0adkll/upload-google-play@v1
         with:
-          serviceAccountJsonPlainText: ${{ secrets.ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON || secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          serviceAccountJsonPlainText: ${{ secrets.ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: ${{ env.ACTIONFIT_ANDROID_PACKAGE_NAME }}
           releaseFiles: ${{ steps.aab.outputs.path }}
           track: internal
@@ -416,9 +396,9 @@ jobs:
         shell: bash
         env:
           DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
-          ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID || secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8 || secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID }}
+          ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID }}
+          ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8 }}
           STORMBORN_APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.STORMBORN_APP_STORE_CONNECT_API_KEY_ID }}
           STORMBORN_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.STORMBORN_APP_STORE_CONNECT_ISSUER_ID }}
           STORMBORN_APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.STORMBORN_APP_STORE_CONNECT_API_KEY_P8 }}
@@ -430,8 +410,8 @@ jobs:
               api_key_id="${ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID:-}"
               issuer_id="${ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID:-}"
               api_key_p8="${ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8:-}"
-              bundle_id="${ACTIONFIT_IOS_BUNDLE_ID:-${IOS_BUNDLE_ID:-}}"
-              team_id="${ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID:-${IOS_DEVELOPMENT_TEAM_ID:-}}"
+              bundle_id="${ACTIONFIT_IOS_BUNDLE_ID:-}"
+              team_id="${ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID:-}"
               ;;
             Stormborn)
               api_key_id="${STORMBORN_APP_STORE_CONNECT_API_KEY_ID:-}"
@@ -523,6 +503,12 @@ jobs:
             xcode_container=(-project "$IOS_XCODE_BUILD_PATH/Unity-iPhone.xcodeproj")
           fi
 
+          if ! security find-identity -v -p codesigning | grep -F "Apple Distribution:" | grep -F "($IOS_DEVELOPMENT_TEAM_ID)" >/dev/null; then
+            echo "::error::Apple Distribution signing identity for team ${IOS_DEVELOPMENT_TEAM_ID} is required on the runner"
+            security find-identity -v -p codesigning || true
+            exit 1
+          fi
+
           archive_once() {
             local attempt="$1"
             echo "xcodebuild archive attempt ${attempt}/2" | tee -a Logs/xcode-archive.log
@@ -534,6 +520,7 @@ jobs:
               -archivePath "$IOS_ARCHIVE_PATH" \
               DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM_ID" \
               CODE_SIGN_STYLE=Automatic \
+              CODE_SIGN_IDENTITY="$IOS_DISTRIBUTION_SIGNING_IDENTITY" \
               -allowProvisioningUpdates \
               -authenticationKeyPath "${{ steps.asc_key.outputs.p8_path }}" \
               -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
