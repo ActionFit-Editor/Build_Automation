@@ -309,6 +309,19 @@ jobs:
             exit 1
           }
 
+      - name: Clear iOS Scriptable Build Pipeline cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache_path="$GITHUB_WORKSPACE/Library/BuildCache"
+          if [ -d "$cache_path" ]; then
+            du -sh "$cache_path" || true
+            rm -rf "$cache_path"
+            echo "Cleared Unity Scriptable Build Pipeline cache: $cache_path"
+          else
+            echo "No Unity Scriptable Build Pipeline cache found at: $cache_path"
+          fi
+
       - name: Build iOS Xcode project from BuildCommit request
         shell: bash
         run: |
