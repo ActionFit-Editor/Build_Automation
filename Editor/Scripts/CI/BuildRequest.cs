@@ -39,7 +39,7 @@ namespace ActionFit.BuildAutomation.Editor
     {
         public const string BuildCommitTriggerSource = "BuildCommit";
 
-        public int schemaVersion = 2;
+        public int schemaVersion = 3;
         public string triggerSource = BuildCommitTriggerSource;
         public BuildRequestPlatform platform = BuildRequestPlatform.Current;
         public BuildRequestKind buildKind = BuildRequestKind.Default;
@@ -48,6 +48,8 @@ namespace ActionFit.BuildAutomation.Editor
         public string buildVersion;
         public string bundleNo;
         public string buildFileName;
+        public string androidPackageName;
+        public string iosBundleId;
         public string androidKeyaliasName;
         public string sourceBranch;
         public string sourceCommit;

@@ -13,6 +13,8 @@ namespace ActionFit.BuildAutomation.Editor
     public static class BuildRequestUtility
     {
         public const string RelativePath = ".build/build_request.json";
+        private const string EmptyAndroidPackagePlaceholder = "[Enter Android Package Name]";
+        private const string EmptyIosBundlePlaceholder = "[Enter iOS Bundle ID]";
         private const string EmptyKeystoreAliasPlaceholder = "[Enter Keystore Alias]";
 
         public static string AbsolutePath => Path.GetFullPath(Path.Combine(ProjectRoot, RelativePath));
@@ -44,6 +46,8 @@ namespace ActionFit.BuildAutomation.Editor
                 buildVersion = settings.buildVersion,
                 bundleNo = settings.bundleNo,
                 buildFileName = settings.buildFileName,
+                androidPackageName = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.androidPackageName, EmptyAndroidPackagePlaceholder) : "",
+                iosBundleId = UsesIos(resolvedPlatform) ? SanitizeSettingValue(settings.iosPackageName, EmptyIosBundlePlaceholder) : "",
                 androidKeyaliasName = UsesAndroid(resolvedPlatform) ? GetAndroidKeyaliasName(settings) : "",
                 sourceBranch = RunGitCommand("rev-parse --abbrev-ref HEAD"),
                 sourceCommit = RunGitCommand("rev-parse HEAD"),
@@ -64,16 +68,25 @@ namespace ActionFit.BuildAutomation.Editor
         {
             if (settings == null) return "";
 
-            string alias = settings.keyStoreAlias;
-            if (string.IsNullOrWhiteSpace(alias)) return "";
-
-            alias = alias.Trim();
-            return alias == EmptyKeystoreAliasPlaceholder ? "" : alias;
+            return SanitizeSettingValue(settings.keyStoreAlias, EmptyKeystoreAliasPlaceholder);
         }
 
         private static bool UsesAndroid(BuildRequestPlatform platform)
         {
             return platform == BuildRequestPlatform.Android || platform == BuildRequestPlatform.Both;
+        }
+
+        private static bool UsesIos(BuildRequestPlatform platform)
+        {
+            return platform == BuildRequestPlatform.iOS || platform == BuildRequestPlatform.Both;
+        }
+
+        private static string SanitizeSettingValue(string value, string placeholder)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "";
+
+            string result = value.Trim();
+            return result == placeholder ? "" : result;
         }
 
         public static bool Save(BuildRequest request)

@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.2`
+- Current package version at generation time: `1.0.4`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -59,8 +59,10 @@ Read this file when:
 - Storage commit message prefix: `[BuildRequest]`.
 - Distribution profile request field: `distributionProfile`. Current profiles are `Actionfit` and `Stormborn`; only the profile name is stored in request JSON.
 - Android request alias field: `androidKeyaliasName`, copied from `BuildSettingsSO.keyStoreAlias`. Do not store keystore or alias passwords in the request.
+- App identifier request fields: `androidPackageName`, copied from `BuildSettingsSO.androidPackageName`, and `iosBundleId`, copied from `BuildSettingsSO.iosPackageName`. The workflow uses these request values for Google Play `packageName` and TestFlight `app_identifier`.
+- iOS development team id is not stored in the request. Keep team ids in the workflow or Actions-side configuration such as `ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID` and `STORMBORN_IOS_DEVELOPMENT_TEAM_ID`.
 - Android signing password secrets are shared across distribution profiles: `ANDROID_KEYSTORE_PASS` and `ANDROID_KEYALIAS_PASS`.
-- Store upload credential secrets with explicit distribution prefixes such as `ACTIONFIT_*` and `STORMBORN_*`.
+- Google Play upload uses the shared `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` secret; App Store Connect upload uses explicit distribution prefixes such as `ACTIONFIT_*` and `STORMBORN_*`.
 - CI entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`.
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.
 - Build Automation depends on `com.actionfit.buildsetting@1.1.0` or newer.

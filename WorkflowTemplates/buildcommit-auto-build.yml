@@ -18,11 +18,7 @@ env:
   UNITY_VERSION: "6000.2.6f2"
   UNITY_EXECUTABLE: "/Applications/Unity/Hub/Editor/6000.2.6f2/Unity.app/Contents/MacOS/Unity"
   DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer"
-  ACTIONFIT_ANDROID_PACKAGE_NAME: com.actionfit.catmerge
-  ACTIONFIT_IOS_BUNDLE_ID: com.actionfit.catmerge.ios
   ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID: 49W7A8489P
-  STORMBORN_ANDROID_PACKAGE_NAME: ""
-  STORMBORN_IOS_BUNDLE_ID: ""
   STORMBORN_IOS_DEVELOPMENT_TEAM_ID: ""
   IOS_DISTRIBUTION_SIGNING_IDENTITY: "Apple Distribution"
   IOS_XCODE_BUILD_PATH: Builds/iOS
@@ -39,6 +35,8 @@ jobs:
       build_kind: ${{ steps.detect.outputs.build_kind }}
       upload_target: ${{ steps.detect.outputs.upload_target }}
       distribution_profile: ${{ steps.detect.outputs.distribution_profile }}
+      android_package_name: ${{ steps.detect.outputs.android_package_name }}
+      ios_bundle_id: ${{ steps.detect.outputs.ios_bundle_id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,6 +71,8 @@ jobs:
           build_kind = ""
           upload_target = ""
           distribution_profile = "Actionfit"
+          android_package_name = ""
+          ios_bundle_id = ""
 
           if should_build && File.exist?(request_path)
             request = JSON.parse(File.read(request_path))
@@ -100,6 +100,8 @@ jobs:
               "1" => "Stormborn"
             }.fetch(request["distributionProfile"].to_s, request["distributionProfile"].to_s)
             distribution_profile = "Actionfit" if distribution_profile.empty?
+            android_package_name = request["androidPackageName"].to_s.strip
+            ios_bundle_id = request["iosBundleId"].to_s.strip
           else
             should_build = false
           end
@@ -110,6 +112,8 @@ jobs:
             output.puts("build_kind=#{build_kind}")
             output.puts("upload_target=#{upload_target}")
             output.puts("distribution_profile=#{distribution_profile}")
+            output.puts("android_package_name=#{android_package_name}")
+            output.puts("ios_bundle_id=#{ios_bundle_id}")
           end
 
           puts "should_build=#{should_build}"
@@ -119,6 +123,8 @@ jobs:
           puts "build_kind=#{build_kind}"
           puts "upload_target=#{upload_target}"
           puts "distribution_profile=#{distribution_profile}"
+          puts "android_package_name=#{android_package_name}"
+          puts "ios_bundle_id=#{ios_bundle_id}"
           RUBY
 
   android-build:
@@ -215,50 +221,26 @@ jobs:
         if: needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
         shell: bash
         env:
-          DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
-          ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          ANDROID_PACKAGE_NAME: ${{ needs.detect.outputs.android_package_name }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
-
-          case "$DISTRIBUTION_PROFILE" in
-            Actionfit)
-              package_name="${ACTIONFIT_ANDROID_PACKAGE_NAME:-}"
-              service_json="${ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON:-}"
-              ;;
-            Stormborn)
-              package_name="${STORMBORN_ANDROID_PACKAGE_NAME:-}"
-              service_json="${STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON:-}"
-              ;;
-            *)
-              echo "::error::Unsupported distribution profile: $DISTRIBUTION_PROFILE"
-              exit 1
-              ;;
-          esac
+          package_name="${ANDROID_PACKAGE_NAME:-}"
+          service_json="${GOOGLE_PLAY_SERVICE_ACCOUNT_JSON:-}"
 
           if [ -z "$package_name" ] || [ -z "$service_json" ]; then
-            echo "::error::Missing Google Play configuration for distribution profile: $DISTRIBUTION_PROFILE"
+            echo "::error::Missing Google Play configuration: androidPackageName in BuildCommit request and GOOGLE_PLAY_SERVICE_ACCOUNT_JSON are required"
             exit 1
           fi
 
-          echo "Using Google Play distribution profile: $DISTRIBUTION_PROFILE"
+          echo "Using Google Play package name from BuildCommit request: $package_name"
 
-      - name: Upload to Google Play - Actionfit internal track
-        if: (needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight') && needs.detect.outputs.distribution_profile == 'Actionfit'
+      - name: Upload to Google Play (internal track)
+        if: needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
         uses: r0adkll/upload-google-play@v1
         with:
-          serviceAccountJsonPlainText: ${{ secrets.ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: ${{ env.ACTIONFIT_ANDROID_PACKAGE_NAME }}
-          releaseFiles: ${{ steps.aab.outputs.path }}
-          track: internal
-          status: completed
-
-      - name: Upload to Google Play - Stormborn internal track
-        if: (needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight') && needs.detect.outputs.distribution_profile == 'Stormborn'
-        uses: r0adkll/upload-google-play@v1
-        with:
-          serviceAccountJsonPlainText: ${{ secrets.STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: ${{ env.STORMBORN_ANDROID_PACKAGE_NAME }}
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ needs.detect.outputs.android_package_name }}
           releaseFiles: ${{ steps.aab.outputs.path }}
           track: internal
           status: completed
@@ -402,22 +384,22 @@ jobs:
           STORMBORN_APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.STORMBORN_APP_STORE_CONNECT_API_KEY_ID }}
           STORMBORN_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.STORMBORN_APP_STORE_CONNECT_ISSUER_ID }}
           STORMBORN_APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.STORMBORN_APP_STORE_CONNECT_API_KEY_P8 }}
+          IOS_BUNDLE_ID_FROM_REQUEST: ${{ needs.detect.outputs.ios_bundle_id }}
         run: |
           set -euo pipefail
+          bundle_id="${IOS_BUNDLE_ID_FROM_REQUEST:-}"
 
           case "$DISTRIBUTION_PROFILE" in
             Actionfit)
               api_key_id="${ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID:-}"
               issuer_id="${ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID:-}"
               api_key_p8="${ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8:-}"
-              bundle_id="${ACTIONFIT_IOS_BUNDLE_ID:-}"
               team_id="${ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID:-}"
               ;;
             Stormborn)
               api_key_id="${STORMBORN_APP_STORE_CONNECT_API_KEY_ID:-}"
               issuer_id="${STORMBORN_APP_STORE_CONNECT_ISSUER_ID:-}"
               api_key_p8="${STORMBORN_APP_STORE_CONNECT_API_KEY_P8:-}"
-              bundle_id="${STORMBORN_IOS_BUNDLE_ID:-}"
               team_id="${STORMBORN_IOS_DEVELOPMENT_TEAM_ID:-}"
               ;;
             *)

@@ -36,6 +36,7 @@ namespace ActionFit.BuildAutomation.Editor
 
             ApplyRequest(settings, request);
             BuildSettingsApplier.ApplyVersionSettings(settings);
+            ApplyPlayerIdentifiers(settings);
 
             BuildReport report = RunBuild(settings, request);
             if (report == null)
@@ -52,16 +53,29 @@ namespace ActionFit.BuildAutomation.Editor
         private static void ApplyRequest(BuildSettingsSO settings, BuildRequest request)
         {
             string androidAlias = request.androidKeyaliasName?.Trim();
+            string androidPackageName = request.androidPackageName?.Trim();
+            string iosBundleId = request.iosBundleId?.Trim();
 
             if (!string.IsNullOrEmpty(request.buildVersion)) settings.buildVersion = request.buildVersion;
             if (!string.IsNullOrEmpty(request.bundleNo)) settings.bundleNo = request.bundleNo;
             if (!string.IsNullOrEmpty(request.buildFileName)) settings.buildFileName = request.buildFileName;
+            if (!string.IsNullOrEmpty(androidPackageName)) settings.androidPackageName = androidPackageName;
+            if (!string.IsNullOrEmpty(iosBundleId)) settings.iosPackageName = iosBundleId;
             if (!string.IsNullOrEmpty(androidAlias)) settings.keyStoreAlias = androidAlias;
             settings.saveFileInProject = true;
 
             EditorUtility.SetDirty(settings);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[CIBuildEntry] Request applied: trigger={request.triggerSource}, platform={request.platform}, kind={request.buildKind}, upload={request.uploadTarget}, profile={request.distributionProfile}, androidAlias={androidAlias}");
+            Debug.Log($"[CIBuildEntry] Request applied: trigger={request.triggerSource}, platform={request.platform}, kind={request.buildKind}, upload={request.uploadTarget}, profile={request.distributionProfile}, androidPackage={androidPackageName}, iosBundle={iosBundleId}, androidAlias={androidAlias}");
+        }
+
+        private static void ApplyPlayerIdentifiers(BuildSettingsSO settings)
+        {
+            if (!string.IsNullOrWhiteSpace(settings.androidPackageName))
+                PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, settings.androidPackageName.Trim());
+
+            if (!string.IsNullOrWhiteSpace(settings.iosPackageName))
+                PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.iOS, settings.iosPackageName.Trim());
         }
 
         private static BuildReport RunBuild(BuildSettingsSO settings, BuildRequest request)

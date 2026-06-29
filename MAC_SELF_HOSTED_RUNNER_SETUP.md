@@ -153,15 +153,15 @@ Android signing:
 
 이 두 비밀번호는 `Distribution Profile`과 무관하게 공통으로 사용합니다.
 
-Actionfit Android upload:
+Android Google Play upload:
 
-- `ACTIONFIT_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
+- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
 
-Stormborn Android upload:
-
-- `STORMBORN_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
+이 service account가 Actionfit/Stormborn 양쪽 Play Console 앱에 업로드 권한을 가져야 합니다. Google Play `packageName`은 BuildCommit request의 `androidPackageName` 값을 사용하며, 이 값은 BuildSetting의 `BuildSettingsSO.androidPackageName`에서 옵니다.
 
 Android alias 이름은 secret으로 넣지 않습니다. BuildCommit request가 BuildSetting의 `BuildSettingsSO.keyStoreAlias` 값을 `androidKeyaliasName`으로 전달하고, workflow는 secret에 저장된 비밀번호만 주입합니다.
+
+iOS bundle id도 secret이나 workflow env로 넣지 않습니다. BuildCommit request가 BuildSetting의 `BuildSettingsSO.iosPackageName` 값을 `iosBundleId`로 전달하고, workflow는 이 값을 TestFlight `app_identifier`로 사용합니다.
 
 Actionfit iOS/TestFlight:
 
@@ -177,14 +177,12 @@ Stormborn iOS/TestFlight:
 
 `*_APP_STORE_CONNECT_API_KEY_P8`은 `.p8` 파일 내용을 그대로 넣습니다. 줄바꿈이 `\n` 문자로 들어가도 workflow가 실제 줄바꿈으로 변환합니다.
 
-또한 workflow 상단 env에서 profile별 공개 설정을 채워야 합니다.
+또한 workflow 상단 env에서 iOS team id를 채워야 합니다.
 
-- `ACTIONFIT_ANDROID_PACKAGE_NAME`
-- `ACTIONFIT_IOS_BUNDLE_ID`
 - `ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID`
-- `STORMBORN_ANDROID_PACKAGE_NAME`
-- `STORMBORN_IOS_BUNDLE_ID`
 - `STORMBORN_IOS_DEVELOPMENT_TEAM_ID`
+
+Android package name과 iOS bundle id는 `Tools > ActionFit > Build Setting`에서 설정한 값을 BuildCommit request로 전달하므로 workflow 상단 env에 따로 추가하지 않습니다.
 
 ## 7. 첫 테스트 순서
 
@@ -291,7 +289,7 @@ Apple Silicon Mac에서는 `/opt/homebrew/bin/fastlane`, Intel Mac에서는 `/us
 
 확인 항목:
 
-- 선택한 profile의 `*_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` 값이 JSON 원문인지
+- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` 값이 JSON 원문인지
 - Play Console에서 service account에 internal track release 권한이 있는지
 - 첫 릴리스가 Play Console에서 한 번 수동 업로드된 적이 있는지
 - Build Kind가 `AndroidAab`인지
