@@ -20,10 +20,9 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- BuildCommit request\uC5D0 BuildSetting\uC758 Android package name\uACFC
-    iOS bundle id\uB97C \uD568\uAED8 \uC800\uC7A5\uD569\uB2C8\uB2E4.\n- workflow\uB294
-    request\uC758 app identifier \uAC12\uC744 Google Play packageName\uACFC TestFlight
-    app_identifier\uB85C \uC0AC\uC6A9\uD569\uB2C8\uB2E4.\n- profile\uBCC4 package/bundle
-    id env \uC124\uC815\uC740 \uC81C\uAC70\uD558\uACE0, iOS development team id\uB294
-    Actions \uCABD \uC124\uC815\uC73C\uB85C \uC720\uC9C0\uD569\uB2C8\uB2E4."
-  _dependenciesOverride: com.actionfit.buildsetting@1.1.0
+  _releaseNote: "- BuildCommit \uCC3D\uC758 Google Play service account JSON, App
+    Store Connect API key id, issuer id, P8 \uC785\uB825\uAC12\uC744 BuildSettingsSO\uC5D0
+    \uC784\uC2DC \uC800\uC7A5\uD558\uB3C4\uB85D \uBCC0\uACBD\uD588\uC2B5\uB2C8\uB2E4.\n-
+    Build Automation \uC758\uC874\uC131\uC744 com.actionfit.buildsetting@1.1.1\uB85C
+    \uC62C\uB838\uC2B5\uB2C8\uB2E4."
+  _dependenciesOverride: com.actionfit.buildsetting@1.1.1

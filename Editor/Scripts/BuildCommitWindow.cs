@@ -18,6 +18,10 @@ namespace ActionFit.BuildAutomation.Editor
         private const string SOPrefsKey = "LastUsedBuildSettings"; // BuildSettingsWindow와 동일한 키 공유
         private const string DistributionProfilePrefsKey = "BuildCommitDistributionProfile";
         private const string BuildTagPrefix = "build";
+        private const string GooglePlayServiceAccountJsonPropertyName = "buildCommitGooglePlayServiceAccountJson";
+        private const string AppStoreConnectApiKeyIdPropertyName = "buildCommitAppStoreConnectApiKeyId";
+        private const string AppStoreConnectIssuerIdPropertyName = "buildCommitAppStoreConnectIssuerId";
+        private const string AppStoreConnectApiKeyP8PropertyName = "buildCommitAppStoreConnectApiKeyP8";
 
         private BuildSettingsSO _settings; // 빌드 설정 SO
         private SerializedObject _serializedSettings; // SO 직렬화 래퍼
@@ -44,6 +48,7 @@ namespace ActionFit.BuildAutomation.Editor
         private void OnEnable()
         {
             LoadSO();
+            ApplyDefaultRequestOptionsForPlatform(ResolvePlatform(_requestPlatform));
         }
 
         #endregion
@@ -120,7 +125,12 @@ namespace ActionFit.BuildAutomation.Editor
         private void DrawBuildRequestOptions()
         {
             EditorGUILayout.LabelField("CI Build Request", EditorStyles.boldLabel);
+
+            EditorGUI.BeginChangeCheck();
             _requestPlatform = (BuildRequestPlatform)EditorGUILayout.EnumPopup("Platform", _requestPlatform);
+            if (EditorGUI.EndChangeCheck())
+                ApplyDefaultRequestOptionsForPlatform(ResolvePlatform(_requestPlatform));
+
             _requestKind = (BuildRequestKind)EditorGUILayout.EnumPopup("Build Kind", _requestKind);
             _uploadTarget = (BuildRequestUploadTarget)EditorGUILayout.EnumPopup("Upload Target", _uploadTarget);
 
@@ -147,9 +157,61 @@ namespace ActionFit.BuildAutomation.Editor
                 GUI.enabled = true;
             }
 
+            DrawAndroidRequestSecrets(resolvedPlatform);
+            DrawAppStoreConnectRequestOverrides(resolvedPlatform);
+
             EditorGUILayout.HelpBox(
                 $"{BuildRequestUtility.RelativePath} will be committed as storage. GitHub Actions will build when the build tag is pushed.",
                 MessageType.Info);
+        }
+
+        private void DrawAndroidRequestSecrets(BuildRequestPlatform resolvedPlatform)
+        {
+            if (resolvedPlatform != BuildRequestPlatform.Android && resolvedPlatform != BuildRequestPlatform.Both) return;
+
+            EditorGUILayout.Space(6);
+            EditorGUILayout.LabelField("Android Request Secrets", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "Experimental: BuildSetting signing passwords and BuildCommit override values are serialized into .build/build_request.json and committed. BuildCommit override inputs are temporarily saved in BuildSettingsSO.",
+                MessageType.Warning);
+
+            if (!UsesAndroidUpload(resolvedPlatform, _uploadTarget)) return;
+
+            EditorGUILayout.LabelField("Google Play Service Account JSON");
+            DrawTextAreaProperty(GooglePlayServiceAccountJsonPropertyName, 60);
+        }
+
+        private void DrawAppStoreConnectRequestOverrides(BuildRequestPlatform resolvedPlatform)
+        {
+            if (!UsesIosUpload(resolvedPlatform, _uploadTarget)) return;
+
+            EditorGUILayout.Space(6);
+            EditorGUILayout.LabelField("App Store Connect Request Override", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "Experimental: these values are temporarily saved in BuildSettingsSO, serialized into .build/build_request.json, and committed. Leave blank to use GitHub Actions Secrets.",
+                MessageType.Warning);
+
+            DrawStringProperty(AppStoreConnectApiKeyIdPropertyName, "API Key ID");
+            DrawStringProperty(AppStoreConnectIssuerIdPropertyName, "Issuer ID");
+
+            EditorGUILayout.LabelField("API Key P8");
+            DrawTextAreaProperty(AppStoreConnectApiKeyP8PropertyName, 60);
+        }
+
+        private void DrawStringProperty(string propertyName, string label)
+        {
+            SerializedProperty property = _serializedSettings.FindProperty(propertyName);
+            if (property == null) return;
+
+            EditorGUILayout.PropertyField(property, new GUIContent(label));
+        }
+
+        private void DrawTextAreaProperty(string propertyName, float minHeight)
+        {
+            SerializedProperty property = _serializedSettings.FindProperty(propertyName);
+            if (property == null) return;
+
+            property.stringValue = EditorGUILayout.TextArea(property.stringValue, GUILayout.MinHeight(minHeight));
         }
 
         // Apply / Commit, Tag & Push 버튼 영역
@@ -341,6 +403,29 @@ namespace ActionFit.BuildAutomation.Editor
             }
         }
 
+        private void ApplyDefaultRequestOptionsForPlatform(BuildRequestPlatform resolvedPlatform)
+        {
+            switch (resolvedPlatform)
+            {
+                case BuildRequestPlatform.Android:
+                    _requestKind = BuildRequestKind.AndroidAab;
+                    _uploadTarget = BuildRequestUploadTarget.GooglePlayInternal;
+                    break;
+                case BuildRequestPlatform.iOS:
+                    _requestKind = BuildRequestKind.iOSXcodeProject;
+                    _uploadTarget = BuildRequestUploadTarget.TestFlight;
+                    break;
+                case BuildRequestPlatform.Both:
+                    _requestKind = BuildRequestKind.AndroidAabAndiOSXcodeProject;
+                    _uploadTarget = BuildRequestUploadTarget.GooglePlayInternalAndTestFlight;
+                    break;
+                default:
+                    _requestKind = BuildRequestKind.Default;
+                    _uploadTarget = BuildRequestUploadTarget.None;
+                    break;
+            }
+        }
+
         private string GetUploadToken(BuildRequestUploadTarget uploadTarget)
         {
             switch (uploadTarget)
@@ -354,6 +439,20 @@ namespace ActionFit.BuildAutomation.Editor
                 default:
                     return "none";
             }
+        }
+
+        private bool UsesAndroidUpload(BuildRequestPlatform platform, BuildRequestUploadTarget uploadTarget)
+        {
+            return (platform == BuildRequestPlatform.Android || platform == BuildRequestPlatform.Both) &&
+                   (uploadTarget == BuildRequestUploadTarget.GooglePlayInternal ||
+                    uploadTarget == BuildRequestUploadTarget.GooglePlayInternalAndTestFlight);
+        }
+
+        private bool UsesIosUpload(BuildRequestPlatform platform, BuildRequestUploadTarget uploadTarget)
+        {
+            return (platform == BuildRequestPlatform.iOS || platform == BuildRequestPlatform.Both) &&
+                   (uploadTarget == BuildRequestUploadTarget.TestFlight ||
+                    uploadTarget == BuildRequestUploadTarget.GooglePlayInternalAndTestFlight);
         }
 
         private string SanitizeTagSegment(string value, string fallback)
@@ -401,7 +500,12 @@ namespace ActionFit.BuildAutomation.Editor
         // BuildCommit 커밋에 포함할 원격 빌드 요청 파일 생성
         private bool SaveBuildRequest()
         {
-            var request = BuildRequestUtility.Create(_settings, _requestPlatform, _requestKind, _uploadTarget, _distributionProfile);
+            var request = BuildRequestUtility.Create(
+                _settings,
+                _requestPlatform,
+                _requestKind,
+                _uploadTarget,
+                _distributionProfile);
             if (request == null) return false;
 
             bool saved = BuildRequestUtility.Save(request);

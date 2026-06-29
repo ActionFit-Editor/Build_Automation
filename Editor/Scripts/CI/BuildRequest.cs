@@ -17,7 +17,9 @@ namespace ActionFit.BuildAutomation.Editor
         Default = 0,
         AndroidApk = 1,
         AndroidAab = 2,
-        iOSXcodeProject = 3
+        iOSXcodeProject = 3,
+        [UnityEngine.InspectorName("Android AAB + iOS Xcode Project")]
+        AndroidAabAndiOSXcodeProject = 4
     }
 
     public enum BuildRequestUploadTarget
@@ -39,7 +41,7 @@ namespace ActionFit.BuildAutomation.Editor
     {
         public const string BuildCommitTriggerSource = "BuildCommit";
 
-        public int schemaVersion = 3;
+        public int schemaVersion = 5;
         public string triggerSource = BuildCommitTriggerSource;
         public BuildRequestPlatform platform = BuildRequestPlatform.Current;
         public BuildRequestKind buildKind = BuildRequestKind.Default;
@@ -50,6 +52,13 @@ namespace ActionFit.BuildAutomation.Editor
         public string buildFileName;
         public string androidPackageName;
         public string iosBundleId;
+        public string iosDevelopmentTeamId;
+        public string androidKeystorePassword;
+        public string androidAliasPassword;
+        public string googlePlayServiceAccountJson;
+        public string appStoreConnectApiKeyId;
+        public string appStoreConnectIssuerId;
+        public string appStoreConnectApiKeyP8;
         public string androidKeyaliasName;
         public string sourceBranch;
         public string sourceCommit;

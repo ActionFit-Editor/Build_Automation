@@ -151,17 +151,17 @@ Android signing:
 - `ANDROID_KEYSTORE_PASS`
 - `ANDROID_KEYALIAS_PASS`
 
-이 두 비밀번호는 `Distribution Profile`과 무관하게 공통으로 사용합니다.
+이 두 비밀번호는 `Distribution Profile`과 무관하게 공통으로 사용합니다. 실험용으로 BuildCommit request의 `androidKeystorePassword`, `androidAliasPassword`가 있으면 workflow가 request 값을 우선 사용하고, 없으면 이 secrets로 fallback합니다.
 
 Android Google Play upload:
 
 - `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
 
-이 service account가 Actionfit/Stormborn 양쪽 Play Console 앱에 업로드 권한을 가져야 합니다. Google Play `packageName`은 BuildCommit request의 `androidPackageName` 값을 사용하며, 이 값은 BuildSetting의 `BuildSettingsSO.androidPackageName`에서 옵니다.
+이 service account가 Actionfit/Stormborn 양쪽 Play Console 앱에 업로드 권한을 가져야 합니다. Google Play `packageName`은 BuildCommit request의 `androidPackageName` 값을 사용하며, 이 값은 BuildSetting의 `BuildSettingsSO.androidPackageName`에서 옵니다. 실험용으로 BuildCommit request의 `googlePlayServiceAccountJson`이 있으면 workflow가 request 값을 우선 사용하고, 없으면 이 secret으로 fallback합니다.
 
 Android alias 이름은 secret으로 넣지 않습니다. BuildCommit request가 BuildSetting의 `BuildSettingsSO.keyStoreAlias` 값을 `androidKeyaliasName`으로 전달하고, workflow는 secret에 저장된 비밀번호만 주입합니다.
 
-iOS bundle id도 secret이나 workflow env로 넣지 않습니다. BuildCommit request가 BuildSetting의 `BuildSettingsSO.iosPackageName` 값을 `iosBundleId`로 전달하고, workflow는 이 값을 TestFlight `app_identifier`로 사용합니다.
+iOS bundle id도 secret이나 workflow env로 넣지 않습니다. BuildCommit request가 BuildSetting의 `BuildSettingsSO.iosPackageName` 값을 `iosBundleId`로 전달하고, workflow는 이 값을 TestFlight `app_identifier`로 사용합니다. 실험용 App Store Connect request override가 있으면 workflow가 request 값을 우선 사용하고, 없으면 profile별 secrets로 fallback합니다.
 
 Actionfit iOS/TestFlight:
 
@@ -182,7 +182,7 @@ Stormborn iOS/TestFlight:
 - `ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID`
 - `STORMBORN_IOS_DEVELOPMENT_TEAM_ID`
 
-Android package name과 iOS bundle id는 `Tools > ActionFit > Build Setting`에서 설정한 값을 BuildCommit request로 전달하므로 workflow 상단 env에 따로 추가하지 않습니다.
+BuildCommit request의 `iosDevelopmentTeamId`가 있으면 workflow가 request 값을 우선 사용하고, 없으면 workflow 상단 env 값으로 fallback합니다. Android package name과 iOS bundle id는 `Tools > ActionFit > Build Setting`에서 설정한 값을 BuildCommit request로 전달하므로 workflow 상단 env에 따로 추가하지 않습니다.
 
 ## 7. 첫 테스트 순서
 

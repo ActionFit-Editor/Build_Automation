@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.4`
+- Current package version at generation time: `1.0.7`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -58,14 +58,14 @@ Read this file when:
 - Build tag prefix: `build/**`.
 - Storage commit message prefix: `[BuildRequest]`.
 - Distribution profile request field: `distributionProfile`. Current profiles are `Actionfit` and `Stormborn`; only the profile name is stored in request JSON.
-- Android request alias field: `androidKeyaliasName`, copied from `BuildSettingsSO.keyStoreAlias`. Do not store keystore or alias passwords in the request.
+- Android request alias field: `androidKeyaliasName`, copied from `BuildSettingsSO.keyStoreAlias`. Default production signing should still use GitHub Actions Secrets.
+- BuildCommit window platform changes reset default request options: Android uses `AndroidAab` and `GooglePlayInternal`; iOS uses `iOSXcodeProject` and `TestFlight`; Both uses `AndroidAabAndiOSXcodeProject` and `GooglePlayInternalAndTestFlight`.
 - App identifier request fields: `androidPackageName`, copied from `BuildSettingsSO.androidPackageName`, and `iosBundleId`, copied from `BuildSettingsSO.iosPackageName`. The workflow uses these request values for Google Play `packageName` and TestFlight `app_identifier`.
-- iOS development team id is not stored in the request. Keep team ids in the workflow or Actions-side configuration such as `ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID` and `STORMBORN_IOS_DEVELOPMENT_TEAM_ID`.
-- Android signing password secrets are shared across distribution profiles: `ANDROID_KEYSTORE_PASS` and `ANDROID_KEYALIAS_PASS`.
-- Google Play upload uses the shared `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` secret; App Store Connect upload uses explicit distribution prefixes such as `ACTIONFIT_*` and `STORMBORN_*`.
+- Experimental secret override request fields: `androidKeystorePassword`, `androidAliasPassword`, `googlePlayServiceAccountJson`, `appStoreConnectApiKeyId`, `appStoreConnectIssuerId`, `appStoreConnectApiKeyP8`, and `iosDevelopmentTeamId`. Google Play service account JSON and App Store Connect API key id, issuer id, and P8 are edited in BuildCommit and stored temporarily on `BuildSettingsSO`. These are committed in `.build/build_request.json`; use them only for temporary experiments.
+- Default credential fallback remains GitHub Actions Secrets/env: `ANDROID_KEYSTORE_PASS`, `ANDROID_KEYALIAS_PASS`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, profile-prefixed App Store Connect secrets, and `ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID`/`STORMBORN_IOS_DEVELOPMENT_TEAM_ID`.
 - CI entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`.
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.
-- Build Automation depends on `com.actionfit.buildsetting@1.1.0` or newer.
+- Build Automation depends on `com.actionfit.buildsetting@1.1.1` or newer.
 - The storage commit alone should not trigger CI. The pushed `build/**` tag is the actual CI request.
 - `Platform=Both` is split by the workflow into Android and iOS jobs before calling `CIBuildEntry`.
 

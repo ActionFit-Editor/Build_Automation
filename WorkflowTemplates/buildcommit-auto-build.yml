@@ -87,7 +87,8 @@ jobs:
               "0" => "Default",
               "1" => "AndroidApk",
               "2" => "AndroidAab",
-              "3" => "iOSXcodeProject"
+              "3" => "iOSXcodeProject",
+              "4" => "AndroidAabAndiOSXcodeProject"
             }.fetch(request["buildKind"].to_s, request["buildKind"].to_s)
             upload_target = {
               "0" => "None",
@@ -157,12 +158,12 @@ jobs:
           request["platform"] = 1
 
           kind = request["buildKind"].to_s
-          if ["", "0", "3", "Default", "iOSXcodeProject"].include?(kind)
+          if ["", "0", "3", "4", "Default", "iOSXcodeProject", "AndroidAabAndiOSXcodeProject"].include?(kind)
             request["buildKind"] = 2
           end
 
           File.write(path, JSON.pretty_generate(request))
-          puts File.read(path)
+          puts "Prepared Android BuildCommit request: platform=#{request["platform"]}, buildKind=#{request["buildKind"]}"
           RUBY
 
       - name: Check Unity executable
@@ -184,13 +185,29 @@ jobs:
           mkdir -p Logs
 
           if [[ "$UPLOAD_TARGET" == "GooglePlayInternal" || "$UPLOAD_TARGET" == "GooglePlayInternalAndTestFlight" ]]; then
-            if [ -z "${ANDROID_KEYSTORE_PASS:-}" ] || [ -z "${ANDROID_KEYALIAS_PASS:-}" ]; then
-              echo "::error::Missing Android signing secrets: ANDROID_KEYSTORE_PASS and ANDROID_KEYALIAS_PASS"
-              exit 1
-            fi
+          ruby <<'RUBY'
+          require "json"
+
+          request = JSON.parse(File.read(".build/build_request.json"))
+          request_keystore_pass = request["androidKeystorePassword"].to_s.strip
+          request_alias_pass = request["androidAliasPassword"].to_s.strip
+
+          puts "::add-mask::#{request_keystore_pass}" unless request_keystore_pass.empty?
+          puts "::add-mask::#{request_alias_pass}" unless request_alias_pass.empty?
+
+          has_keystore_pass = !request_keystore_pass.empty? || !ENV.fetch("ANDROID_KEYSTORE_PASS", "").empty?
+          has_alias_pass = !request_alias_pass.empty? || !ENV.fetch("ANDROID_KEYALIAS_PASS", "").empty?
+
+          unless has_keystore_pass && has_alias_pass
+            puts "::error::Missing Android signing passwords: request androidKeystorePassword/androidAliasPassword or ANDROID_KEYSTORE_PASS/ANDROID_KEYALIAS_PASS are required"
+            exit 1
+          end
+
+          source = (!request_keystore_pass.empty? || !request_alias_pass.empty?) ? "BuildCommit request with GitHub Secrets fallback" : "GitHub Actions Secrets"
+          puts "Android signing password source: #{source}"
+          RUBY
           fi
 
-          echo "Using shared Android signing password secrets"
           "$UNITY_EXECUTABLE" \
             -batchmode \
             -quit \
@@ -217,7 +234,8 @@ jobs:
           echo "Found AAB: $aab_path"
           echo "Prepared upload AAB: $upload_path"
 
-      - name: Validate Google Play profile config
+      - name: Prepare Google Play profile config
+        id: google_play_config
         if: needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
         shell: bash
         env:
@@ -225,21 +243,41 @@ jobs:
           GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
-          package_name="${ANDROID_PACKAGE_NAME:-}"
-          service_json="${GOOGLE_PLAY_SERVICE_ACCOUNT_JSON:-}"
+          ruby <<'RUBY'
+          require "json"
 
-          if [ -z "$package_name" ] || [ -z "$service_json" ]; then
-            echo "::error::Missing Google Play configuration: androidPackageName in BuildCommit request and GOOGLE_PLAY_SERVICE_ACCOUNT_JSON are required"
+          request = JSON.parse(File.read(".build/build_request.json"))
+          package_name = ENV.fetch("ANDROID_PACKAGE_NAME", "").strip
+          service_json = request["googlePlayServiceAccountJson"].to_s.strip
+          source = "BuildCommit request"
+
+          if service_json.empty?
+            service_json = ENV.fetch("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "").strip
+            source = "GitHub Actions Secrets"
+          end
+
+          if package_name.empty? || service_json.empty?
+            puts "::error::Missing Google Play configuration: androidPackageName in BuildCommit request and googlePlayServiceAccountJson or GOOGLE_PLAY_SERVICE_ACCOUNT_JSON are required"
             exit 1
-          fi
+          end
 
-          echo "Using Google Play package name from BuildCommit request: $package_name"
+          service_json_path = File.join(ENV.fetch("RUNNER_TEMP"), "google_play_service_account.json")
+          File.write(service_json_path, service_json)
+          File.chmod(0600, service_json_path)
+
+          File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |output|
+            output.puts("service_account_json_path=#{service_json_path}")
+          end
+
+          puts "Using Google Play package name from BuildCommit request: #{package_name}"
+          puts "Using Google Play service account from #{source}"
+          RUBY
 
       - name: Upload to Google Play (internal track)
         if: needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
         uses: r0adkll/upload-google-play@v1
         with:
-          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          serviceAccountJson: ${{ steps.google_play_config.outputs.service_account_json_path }}
           packageName: ${{ needs.detect.outputs.android_package_name }}
           releaseFiles: ${{ steps.aab.outputs.path }}
           track: internal
@@ -252,7 +290,6 @@ jobs:
           name: Android-BuildCommit-Build
           path: |
             Builds/**
-            .build/build_request.json
             Logs/**
             *.log
           if-no-files-found: warn
@@ -288,7 +325,7 @@ jobs:
           request["buildKind"] = 3
 
           File.write(path, JSON.pretty_generate(request))
-          puts File.read(path)
+          puts "Prepared iOS BuildCommit request: platform=#{request["platform"]}, buildKind=#{request["buildKind"]}"
           RUBY
 
       - name: Check Unity executable
@@ -404,15 +441,15 @@ jobs:
 
           case "$DISTRIBUTION_PROFILE" in
             Actionfit)
-              api_key_id="${ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID:-}"
-              issuer_id="${ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID:-}"
-              api_key_p8="${ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8:-}"
+              profile_api_key_id="${ACTIONFIT_APP_STORE_CONNECT_API_KEY_ID:-}"
+              profile_issuer_id="${ACTIONFIT_APP_STORE_CONNECT_ISSUER_ID:-}"
+              profile_api_key_p8="${ACTIONFIT_APP_STORE_CONNECT_API_KEY_P8:-}"
               team_id="${ACTIONFIT_IOS_DEVELOPMENT_TEAM_ID:-}"
               ;;
             Stormborn)
-              api_key_id="${STORMBORN_APP_STORE_CONNECT_API_KEY_ID:-}"
-              issuer_id="${STORMBORN_APP_STORE_CONNECT_ISSUER_ID:-}"
-              api_key_p8="${STORMBORN_APP_STORE_CONNECT_API_KEY_P8:-}"
+              profile_api_key_id="${STORMBORN_APP_STORE_CONNECT_API_KEY_ID:-}"
+              profile_issuer_id="${STORMBORN_APP_STORE_CONNECT_ISSUER_ID:-}"
+              profile_api_key_p8="${STORMBORN_APP_STORE_CONNECT_API_KEY_P8:-}"
               team_id="${STORMBORN_IOS_DEVELOPMENT_TEAM_ID:-}"
               ;;
             *)
@@ -421,48 +458,86 @@ jobs:
               ;;
           esac
 
-          if [ -z "$api_key_id" ] || [ -z "$issuer_id" ] || [ -z "$api_key_p8" ] || [ -z "$bundle_id" ] || [ -z "$team_id" ]; then
-            echo "::error::Missing iOS/TestFlight configuration for distribution profile: $DISTRIBUTION_PROFILE"
-            exit 1
-          fi
-
-          p8_path="$RUNNER_TEMP/AuthKey_${api_key_id}.p8"
-          api_key_json_path="$RUNNER_TEMP/app_store_connect_api_key.json"
-          export ASC_P8_PATH="$p8_path"
-          export ASC_API_KEY_JSON_PATH="$api_key_json_path"
-          export SELECTED_APP_STORE_CONNECT_API_KEY_ID="$api_key_id"
-          export SELECTED_APP_STORE_CONNECT_ISSUER_ID="$issuer_id"
-          export SELECTED_APP_STORE_CONNECT_API_KEY_P8="$api_key_p8"
+          export SELECTED_PROFILE_API_KEY_ID="$profile_api_key_id"
+          export SELECTED_PROFILE_ISSUER_ID="$profile_issuer_id"
+          export SELECTED_PROFILE_API_KEY_P8="$profile_api_key_p8"
+          export SELECTED_IOS_BUNDLE_ID="$bundle_id"
+          export SELECTED_IOS_DEVELOPMENT_TEAM_ID="$team_id"
 
           ruby <<'RUBY'
           require "json"
 
-          key = ENV.fetch("SELECTED_APP_STORE_CONNECT_API_KEY_P8").gsub("\\n", "\n")
-          File.write(ENV.fetch("ASC_P8_PATH"), key)
+          def request_value(request, key)
+            value = request[key]
+            value.nil? ? "" : value.to_s.strip
+          end
+
+          def pick_value(request, key, fallback)
+            value = request_value(request, key)
+            value.empty? ? fallback.to_s.strip : value
+          end
+
+          request_path = ".build/build_request.json"
+          request = File.exist?(request_path) ? JSON.parse(File.read(request_path)) : {}
+
+          api_key_id = pick_value(request, "appStoreConnectApiKeyId", ENV.fetch("SELECTED_PROFILE_API_KEY_ID", ""))
+          issuer_id = pick_value(request, "appStoreConnectIssuerId", ENV.fetch("SELECTED_PROFILE_ISSUER_ID", ""))
+          api_key_p8 = pick_value(request, "appStoreConnectApiKeyP8", ENV.fetch("SELECTED_PROFILE_API_KEY_P8", ""))
+          bundle_id = ENV.fetch("SELECTED_IOS_BUNDLE_ID", "").strip
+          team_id = pick_value(request, "iosDevelopmentTeamId", ENV.fetch("SELECTED_IOS_DEVELOPMENT_TEAM_ID", ""))
+
+          missing = []
+          missing << "APP_STORE_CONNECT_API_KEY_ID" if api_key_id.empty?
+          missing << "APP_STORE_CONNECT_ISSUER_ID" if issuer_id.empty?
+          missing << "APP_STORE_CONNECT_API_KEY_P8" if api_key_p8.empty?
+          missing << "IOS_BUNDLE_ID" if bundle_id.empty?
+          missing << "IOS_DEVELOPMENT_TEAM_ID" if team_id.empty?
+
+          unless missing.empty?
+            puts "::error::Missing iOS/TestFlight configuration for distribution profile: #{ENV.fetch("DISTRIBUTION_PROFILE", "")}: #{missing.join(", ")}"
+            exit 1
+          end
+
+          key = api_key_p8.gsub("\\n", "\n")
+          p8_path = File.join(ENV.fetch("RUNNER_TEMP"), "AuthKey_#{api_key_id}.p8")
+          api_key_json_path = File.join(ENV.fetch("RUNNER_TEMP"), "app_store_connect_api_key.json")
+
+          File.write(p8_path, key)
           File.write(
-            ENV.fetch("ASC_API_KEY_JSON_PATH"),
+            api_key_json_path,
             JSON.pretty_generate(
               {
-                key_id: ENV.fetch("SELECTED_APP_STORE_CONNECT_API_KEY_ID"),
-                issuer_id: ENV.fetch("SELECTED_APP_STORE_CONNECT_ISSUER_ID"),
+                key_id: api_key_id,
+                issuer_id: issuer_id,
                 key: key,
                 duration: 1200,
                 in_house: false
               }
             )
           )
-          RUBY
+          File.chmod(0600, p8_path, api_key_json_path)
 
-          chmod 600 "$p8_path" "$api_key_json_path"
-          {
-            echo "APP_STORE_CONNECT_API_KEY_ID=$api_key_id"
-            echo "APP_STORE_CONNECT_ISSUER_ID=$issuer_id"
-            echo "IOS_BUNDLE_ID=$bundle_id"
-            echo "IOS_DEVELOPMENT_TEAM_ID=$team_id"
-          } >> "$GITHUB_ENV"
-          echo "p8_path=$p8_path" >> "$GITHUB_OUTPUT"
-          echo "api_key_json_path=$api_key_json_path" >> "$GITHUB_OUTPUT"
-          echo "Using iOS distribution profile: $DISTRIBUTION_PROFILE"
+          File.open(ENV.fetch("GITHUB_ENV"), "a") do |env|
+            env.puts("APP_STORE_CONNECT_API_KEY_ID=#{api_key_id}")
+            env.puts("APP_STORE_CONNECT_ISSUER_ID=#{issuer_id}")
+            env.puts("IOS_BUNDLE_ID=#{bundle_id}")
+            env.puts("IOS_DEVELOPMENT_TEAM_ID=#{team_id}")
+          end
+
+          File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |output|
+            output.puts("p8_path=#{p8_path}")
+            output.puts("api_key_json_path=#{api_key_json_path}")
+          end
+
+          request_override = %w[
+            appStoreConnectApiKeyId
+            appStoreConnectIssuerId
+            appStoreConnectApiKeyP8
+          ].any? { |key_name| !request_value(request, key_name).empty? }
+
+          puts "Using iOS distribution profile: #{ENV.fetch("DISTRIBUTION_PROFILE", "")}"
+          puts request_override ? "Using App Store Connect credential override from BuildCommit request" : "Using App Store Connect credentials from GitHub Actions Secrets"
+          RUBY
 
       - name: Resolve fastlane
         if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
@@ -601,7 +676,6 @@ jobs:
             Builds/iOS/**
             Builds/iOSArchive/**
             Builds/iOSExport/**
-            .build/build_request.json
             Logs/**
             *.log
           if-no-files-found: warn

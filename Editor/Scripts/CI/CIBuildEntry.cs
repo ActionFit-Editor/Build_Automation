@@ -55,18 +55,20 @@ namespace ActionFit.BuildAutomation.Editor
             string androidAlias = request.androidKeyaliasName?.Trim();
             string androidPackageName = request.androidPackageName?.Trim();
             string iosBundleId = request.iosBundleId?.Trim();
+            string iosDevelopmentTeamId = request.iosDevelopmentTeamId?.Trim();
 
             if (!string.IsNullOrEmpty(request.buildVersion)) settings.buildVersion = request.buildVersion;
             if (!string.IsNullOrEmpty(request.bundleNo)) settings.bundleNo = request.bundleNo;
             if (!string.IsNullOrEmpty(request.buildFileName)) settings.buildFileName = request.buildFileName;
             if (!string.IsNullOrEmpty(androidPackageName)) settings.androidPackageName = androidPackageName;
             if (!string.IsNullOrEmpty(iosBundleId)) settings.iosPackageName = iosBundleId;
+            if (!string.IsNullOrEmpty(iosDevelopmentTeamId)) settings.developmentTeamId = iosDevelopmentTeamId;
             if (!string.IsNullOrEmpty(androidAlias)) settings.keyStoreAlias = androidAlias;
             settings.saveFileInProject = true;
 
             EditorUtility.SetDirty(settings);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[CIBuildEntry] Request applied: trigger={request.triggerSource}, platform={request.platform}, kind={request.buildKind}, upload={request.uploadTarget}, profile={request.distributionProfile}, androidPackage={androidPackageName}, iosBundle={iosBundleId}, androidAlias={androidAlias}");
+            Debug.Log($"[CIBuildEntry] Request applied: trigger={request.triggerSource}, platform={request.platform}, kind={request.buildKind}, upload={request.uploadTarget}, profile={request.distributionProfile}, androidPackage={androidPackageName}, iosBundle={iosBundleId}, iosTeamId={iosDevelopmentTeamId}, androidAlias={androidAlias}");
         }
 
         private static void ApplyPlayerIdentifiers(BuildSettingsSO settings)
@@ -122,12 +124,12 @@ namespace ActionFit.BuildAutomation.Editor
         }
 
 #if UNITY_ANDROID
-        // CI에서는 alias 이름만 request에서 복원하고, 비밀번호는 환경변수로 주입한다.
-        // 환경변수와 alias 요청이 모두 없으면 프로젝트에 저장된 서명 설정을 그대로 사용한다.
+        // CI에서는 request 값을 우선 사용하고, 비어 있으면 환경변수로 fallback한다.
+        // 환경변수와 request 값이 모두 없으면 프로젝트에 저장된 서명 설정을 그대로 사용한다.
         private static void ApplyAndroidSigning(BuildRequest request)
         {
-            string keystorePass = Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PASS");
-            string keyaliasPass = Environment.GetEnvironmentVariable("ANDROID_KEYALIAS_PASS");
+            string keystorePass = PickRequestOrEnvironment(request.androidKeystorePassword, "ANDROID_KEYSTORE_PASS");
+            string keyaliasPass = PickRequestOrEnvironment(request.androidAliasPassword, "ANDROID_KEYALIAS_PASS");
             string aliasName = request.androidKeyaliasName?.Trim();
             bool hasAliasName = !string.IsNullOrEmpty(aliasName);
 
@@ -143,6 +145,14 @@ namespace ActionFit.BuildAutomation.Editor
             if (!string.IsNullOrEmpty(keyaliasPass)) PlayerSettings.Android.keyaliasPass = keyaliasPass;
 
             Debug.Log($"[CIBuildEntry] Android signing applied: alias={PlayerSettings.Android.keyaliasName}, keystorePassInjected={!string.IsNullOrEmpty(keystorePass)}, keyaliasPassInjected={!string.IsNullOrEmpty(keyaliasPass)}");
+        }
+
+        private static string PickRequestOrEnvironment(string requestValue, string environmentVariableName)
+        {
+            string normalizedRequestValue = requestValue?.Trim();
+            if (!string.IsNullOrEmpty(normalizedRequestValue)) return normalizedRequestValue;
+
+            return Environment.GetEnvironmentVariable(environmentVariableName);
         }
 #endif
     }
