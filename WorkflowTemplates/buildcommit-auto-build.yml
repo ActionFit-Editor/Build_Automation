@@ -486,38 +486,131 @@ jobs:
           "$fastlane_cmd" --version
           echo "FASTLANE_CMD=$fastlane_cmd" >> "$GITHUB_ENV"
 
-      - name: Prepare iOS signing keychain
+      - name: Prepare iOS signing assets
         if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
         shell: bash
         run: |
           set -euo pipefail
-          keychain_path="${IOS_KEYCHAIN_PATH:-$HOME/Library/Keychains/login.keychain-db}"
-          keychain_password="${IOS_KEYCHAIN_PASSWORD:-}"
+          keychain_is_temp=false
+          if [ -n "${IOS_KEYCHAIN_PATH:-}" ]; then
+            keychain_path="$IOS_KEYCHAIN_PATH"
+            if [ -z "${IOS_KEYCHAIN_PASSWORD:-}" ]; then
+              echo "::error::IOS_KEYCHAIN_PASSWORD is required when IOS_KEYCHAIN_PATH is set"
+              exit 1
+            fi
+            keychain_password="$IOS_KEYCHAIN_PASSWORD"
+          else
+            keychain_is_temp=true
+            keychain_path="$RUNNER_TEMP/ios-signing.keychain-db"
+            keychain_password="${IOS_KEYCHAIN_PASSWORD:-$(uuidgen)-$(uuidgen)}"
+          fi
 
-          if [ -z "$keychain_password" ]; then
-            echo "::error::IOS_KEYCHAIN_PASSWORD is required in the local runner secret bundle"
+          if [ -z "${IOS_DISTRIBUTION_CERTIFICATE_P12_PATH:-}" ] || [ ! -r "$IOS_DISTRIBUTION_CERTIFICATE_P12_PATH" ]; then
+            echo "::error::IOS_DISTRIBUTION_CERTIFICATE_P12_PATH is not readable: ${IOS_DISTRIBUTION_CERTIFICATE_P12_PATH:-}"
+            exit 1
+          fi
+
+          if [ -z "${IOS_APP_STORE_PROVISIONING_PROFILE_PATH:-}" ] || [ ! -r "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH" ]; then
+            echo "::error::IOS_APP_STORE_PROVISIONING_PROFILE_PATH is not readable: ${IOS_APP_STORE_PROVISIONING_PROFILE_PATH:-}"
+            exit 1
+          fi
+
+          if [ -z "${IOS_DISTRIBUTION_CERTIFICATE_PASSWORD:-}" ]; then
+            echo "::error::IOS_DISTRIBUTION_CERTIFICATE_PASSWORD is required in the local runner secret bundle"
             exit 1
           fi
 
           echo "::add-mask::$keychain_password"
-          echo "Using iOS keychain password from local runner secret bundle"
+          echo "::add-mask::$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD"
 
-          test -f "$keychain_path" || {
-            echo "::error::iOS signing keychain not found: $keychain_path"
-            exit 1
-          }
+          if [ "$keychain_is_temp" = true ]; then
+            rm -f "$keychain_path"
+            security create-keychain -p "$keychain_password" "$keychain_path"
+          elif [ ! -f "$keychain_path" ]; then
+            security create-keychain -p "$keychain_password" "$keychain_path"
+          fi
 
           security default-keychain -d user -s "$keychain_path"
           security list-keychains -d user -s "$keychain_path"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
+
+          security import "$IOS_DISTRIBUTION_CERTIFICATE_P12_PATH" \
+            -k "$keychain_path" \
+            -P "$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security \
+            -T /usr/bin/xcodebuild >/dev/null
+
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
             -s \
             -k "$keychain_password" \
             "$keychain_path" >/dev/null
 
-          echo "IOS_KEYCHAIN_PATH=$keychain_path" >> "$GITHUB_ENV"
+          identity_line="$(security find-identity -v -p codesigning "$keychain_path" | grep -F "Apple Distribution:" | grep -F "($IOS_DEVELOPMENT_TEAM_ID)" | head -1 || true)"
+          if [ -z "$identity_line" ]; then
+            echo "::error::Apple Distribution signing identity for team ${IOS_DEVELOPMENT_TEAM_ID} is required in IOS_DISTRIBUTION_CERTIFICATE_P12_PATH"
+            security find-identity -v -p codesigning "$keychain_path" || true
+            exit 1
+          fi
+
+          identity_sha="$(printf '%s\n' "$identity_line" | awk '{print $2}')"
+          identity_name="$(printf '%s\n' "$identity_line" | sed -E 's/^.*"([^"]+)".*$/\1/')"
+
+          profile_plist="$RUNNER_TEMP/ios-app-store-profile.plist"
+          security cms -D -i "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH" > "$profile_plist"
+          profile_uuid="$(/usr/libexec/PlistBuddy -c 'Print UUID' "$profile_plist")"
+          profile_name="$(/usr/libexec/PlistBuddy -c 'Print Name' "$profile_plist")"
+          profile_app_id="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "$profile_plist")"
+          expected_app_id="${IOS_DEVELOPMENT_TEAM_ID}.${IOS_BUNDLE_ID}"
+
+          if [ "$profile_app_id" != "$expected_app_id" ]; then
+            echo "::error::App Store provisioning profile application-identifier mismatch. expected=${expected_app_id}, actual=${profile_app_id}"
+            exit 1
+          fi
+
+          ruby -ropenssl -rbase64 -rrexml/document -e '
+            plist = File.read(ARGV.fetch(0))
+            expected_sha = ARGV.fetch(1).delete(":").upcase
+            doc = REXML::Document.new(plist)
+            certs = nil
+            REXML::XPath.each(doc, "/plist/dict/key") do |key|
+              if key.text == "DeveloperCertificates"
+                certs = key.next_element
+                break
+              end
+            end
+            abort("DeveloperCertificates not found in provisioning profile") unless certs
+            matched = false
+            certs.elements.each("data") do |node|
+              der = Base64.decode64(node.text.to_s)
+              sha = OpenSSL::X509::Certificate.new(der).digest(OpenSSL::Digest::SHA1.new).to_s.delete(":").upcase
+              matched ||= sha == expected_sha
+            end
+            exit(matched ? 0 : 1)
+          ' "$profile_plist" "$identity_sha" || {
+            echo "::error::App Store provisioning profile does not include signing certificate: $identity_name ($identity_sha)"
+            exit 1
+          }
+
+          profile_install_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$profile_install_dir"
+          installed_profile_path="$profile_install_dir/$profile_uuid.mobileprovision"
+          cp "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH" "$installed_profile_path"
+
+          {
+            echo "IOS_KEYCHAIN_PATH=$keychain_path"
+            echo "IOS_SIGNING_KEYCHAIN_IS_TEMP=$keychain_is_temp"
+            echo "IOS_DISTRIBUTION_SIGNING_IDENTITY_SHA=$identity_sha"
+            echo "IOS_DISTRIBUTION_SIGNING_IDENTITY_NAME=$identity_name"
+            echo "IOS_APP_STORE_PROFILE_UUID=$profile_uuid"
+            echo "IOS_APP_STORE_PROFILE_NAME=$profile_name"
+            echo "IOS_APP_STORE_PROVISIONING_PROFILE_INSTALLED_PATH=$installed_profile_path"
+          } >> "$GITHUB_ENV"
+
+          echo "Installed Apple Distribution identity: $identity_name"
+          echo "Installed App Store provisioning profile: $profile_name ($profile_uuid)"
           security find-identity -v -p codesigning "$keychain_path"
 
       - name: Archive and export IPA
@@ -534,7 +627,7 @@ jobs:
             xcode_container=(-project "$IOS_XCODE_BUILD_PATH/Unity-iPhone.xcodeproj")
           fi
 
-          if ! security find-identity -v -p codesigning "$IOS_KEYCHAIN_PATH" | grep -F "Apple Distribution:" | grep -F "($IOS_DEVELOPMENT_TEAM_ID)" >/dev/null; then
+          if ! security find-identity -v -p codesigning "$IOS_KEYCHAIN_PATH" | grep -F "$IOS_DISTRIBUTION_SIGNING_IDENTITY_SHA" >/dev/null; then
             echo "::error::Apple Distribution signing identity for team ${IOS_DEVELOPMENT_TEAM_ID} is required on the runner"
             security find-identity -v -p codesigning "$IOS_KEYCHAIN_PATH" || true
             exit 1
@@ -554,10 +647,6 @@ jobs:
               DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM_ID" \
               CODE_SIGN_STYLE=Automatic \
               OTHER_CODE_SIGN_FLAGS="--keychain $IOS_KEYCHAIN_PATH" \
-              -allowProvisioningUpdates \
-              -authenticationKeyPath "${{ steps.asc_key.outputs.p8_path }}" \
-              -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
-              -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
               archive 2>&1 | tee -a Logs/xcode-archive.log
           }
 
@@ -582,32 +671,39 @@ jobs:
             exit "$archive_status"
           fi
 
-          cat > ExportOptions.plist <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>app-store-connect</string>
-            <key>signingStyle</key>
-            <string>automatic</string>
-            <key>stripSwiftSymbols</key>
-            <true/>
-            <key>teamID</key>
-            <string>${IOS_DEVELOPMENT_TEAM_ID}</string>
-          </dict>
-          </plist>
-          EOF
+          rm -f ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Clear dict" ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :method string app-store-connect" ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :signingStyle string manual" ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :signingCertificate string $IOS_DISTRIBUTION_SIGNING_IDENTITY_NAME" ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict" ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$IOS_BUNDLE_ID string $IOS_APP_STORE_PROFILE_NAME" ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :stripSwiftSymbols bool true" ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :teamID string $IOS_DEVELOPMENT_TEAM_ID" ExportOptions.plist
 
+          copy_distribution_logs() {
+            local latest_logs=""
+            latest_logs="$(find "${TMPDIR:-/tmp}" -name '*.xcdistributionlogs' -type d -mmin -30 -print 2>/dev/null | sort | tail -1 || true)"
+            if [ -n "$latest_logs" ]; then
+              rm -rf Logs/xcdistributionlogs
+              cp -R "$latest_logs" Logs/xcdistributionlogs
+              echo "Copied Xcode distribution logs: $latest_logs"
+            fi
+          }
+
+          set +e
           xcodebuild -exportArchive \
             -archivePath "$IOS_ARCHIVE_PATH" \
             -exportPath "$IOS_EXPORT_PATH" \
             -exportOptionsPlist ExportOptions.plist \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "${{ steps.asc_key.outputs.p8_path }}" \
-            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
-            | tee Logs/xcode-export.log
+            2>&1 | tee Logs/xcode-export.log
+          export_status="${PIPESTATUS[0]}"
+          set -e
+          copy_distribution_logs
+
+          if [ "$export_status" -ne 0 ]; then
+            exit "$export_status"
+          fi
 
           ipa_path="$(find "$IOS_EXPORT_PATH" -name '*.ipa' -print -quit)"
           if [ -z "$ipa_path" ]; then
@@ -629,6 +725,20 @@ jobs:
             --app_identifier "$IOS_BUNDLE_ID" \
             --ipa "${{ steps.ipa.outputs.path }}" \
             --skip_waiting_for_build_processing
+
+      - name: Cleanup iOS signing assets
+        if: always() && (needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight')
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${IOS_APP_STORE_PROVISIONING_PROFILE_INSTALLED_PATH:-}" ]; then
+            rm -f "$IOS_APP_STORE_PROVISIONING_PROFILE_INSTALLED_PATH"
+          fi
+          if [ "${IOS_SIGNING_KEYCHAIN_IS_TEMP:-false}" = "true" ] && [ -n "${IOS_KEYCHAIN_PATH:-}" ]; then
+            security default-keychain -d user -s "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 || true
+            security list-keychains -d user -s "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 || true
+            security delete-keychain "$IOS_KEYCHAIN_PATH" >/dev/null 2>&1 || true
+          fi
 
       - name: Upload build artifact
         if: always()

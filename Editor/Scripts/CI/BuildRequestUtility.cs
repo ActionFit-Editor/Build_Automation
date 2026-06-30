@@ -15,6 +15,7 @@ namespace ActionFit.BuildAutomation.Editor
         public const string RelativePath = ".build/build_request.json";
         private const string EmptyAndroidPackagePlaceholder = "[Enter Android Package Name]";
         private const string EmptyIosBundlePlaceholder = "[Enter iOS Bundle ID]";
+        private const string EmptyKeystorePathPlaceholder = "[Enter Keystore Path]";
         private const string EmptyKeystoreAliasPlaceholder = "[Enter Keystore Alias]";
         private const string EmptyKeystorePasswordPlaceholder = "[Enter KeyStore Password]";
         private const string EmptyAliasPasswordPlaceholder = "[Enter Alias Password]";
@@ -51,6 +52,8 @@ namespace ActionFit.BuildAutomation.Editor
                 androidPackageName = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.androidPackageName, EmptyAndroidPackagePlaceholder) : "",
                 iosBundleId = UsesIos(resolvedPlatform) ? SanitizeSettingValue(settings.iosPackageName, EmptyIosBundlePlaceholder) : "",
                 iosDevelopmentTeamId = "",
+                androidKeystoreFileName = UsesAndroid(resolvedPlatform) ? GetAndroidKeystoreFileName(settings) : "",
+                androidKeystoreBase64 = UsesAndroid(resolvedPlatform) ? GetAndroidKeystoreBase64(settings) : "",
                 androidKeystorePassword = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.keystorePassword, EmptyKeystorePasswordPlaceholder) : "",
                 androidAliasPassword = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.aliasPassword, EmptyAliasPasswordPlaceholder) : "",
                 googlePlayServiceAccountJson = "",
@@ -78,6 +81,63 @@ namespace ActionFit.BuildAutomation.Editor
             if (settings == null) return "";
 
             return SanitizeSettingValue(settings.keyStoreAlias, EmptyKeystoreAliasPlaceholder);
+        }
+
+        private static string GetAndroidKeystoreFileName(BuildSettingsSO settings)
+        {
+            string keystorePath = ResolveAndroidKeystorePath(settings);
+            return string.IsNullOrEmpty(keystorePath) ? "" : Path.GetFileName(keystorePath);
+        }
+
+        private static string GetAndroidKeystoreBase64(BuildSettingsSO settings)
+        {
+            string keystorePath = ResolveAndroidKeystorePath(settings);
+            if (string.IsNullOrEmpty(keystorePath)) return "";
+
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(keystorePath);
+                return Convert.ToBase64String(bytes);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[BuildRequestUtility] Failed to read Android keystore file: {keystorePath}\n{ex}");
+                return "";
+            }
+        }
+
+        private static string ResolveAndroidKeystorePath(BuildSettingsSO settings)
+        {
+            if (settings == null) return "";
+
+            string configuredPath = SanitizeSettingValue(settings.keyStorePath, EmptyKeystorePathPlaceholder);
+            string resolvedPath = ResolveKeystorePath(configuredPath);
+            if (!string.IsNullOrEmpty(resolvedPath)) return resolvedPath;
+
+            string playerSettingsPath = PlayerSettings.Android.keystoreName;
+            resolvedPath = ResolveKeystorePath(playerSettingsPath);
+            if (!string.IsNullOrEmpty(resolvedPath)) return resolvedPath;
+
+            if (!string.IsNullOrEmpty(configuredPath))
+                Debug.LogWarning($"[BuildRequestUtility] Android keystore file not found: {configuredPath}");
+
+            return "";
+        }
+
+        private static string ResolveKeystorePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return "";
+
+            string normalizedPath = path.Trim();
+            const string InProjectPrefix = "{inproject}:";
+            if (normalizedPath.StartsWith(InProjectPrefix, StringComparison.OrdinalIgnoreCase))
+                normalizedPath = normalizedPath.Substring(InProjectPrefix.Length).Trim();
+
+            string absolutePath = Path.IsPathRooted(normalizedPath)
+                ? normalizedPath
+                : Path.GetFullPath(Path.Combine(ProjectRoot, normalizedPath));
+
+            return File.Exists(absolutePath) ? absolutePath : "";
         }
 
         private static bool UsesAndroid(BuildRequestPlatform platform)

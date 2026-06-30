@@ -41,8 +41,9 @@ write_if_missing "$secret_root/profiles/stormborn/android-signing.env" \
   "# ANDROID_KEYALIAS_PASS=\"\""
 
 write_if_missing "$secret_root/shared/ios-keychain.env" \
-  "# Password for the keychain used by the GitHub Actions runner service." \
-  "# Leave IOS_KEYCHAIN_PATH blank to use \$HOME/Library/Keychains/login.keychain-db." \
+  "# Optional password for the temporary keychain created by the iOS workflow." \
+  "# Leave IOS_KEYCHAIN_PASSWORD blank to let the workflow generate a per-run password." \
+  "# Leave IOS_KEYCHAIN_PATH blank to let the workflow create a per-run temporary keychain." \
   "IOS_KEYCHAIN_PASSWORD=\"\"" \
   "IOS_KEYCHAIN_PATH=\"\""
 
@@ -52,7 +53,10 @@ write_if_missing "$secret_root/profiles/actionfit/profile.env" \
   "IOS_DEVELOPMENT_TEAM_ID=\"49W7A8489P\"" \
   "APP_STORE_CONNECT_API_KEY_ID=\"\"" \
   "APP_STORE_CONNECT_ISSUER_ID=\"\"" \
-  "APP_STORE_CONNECT_API_KEY_P8_PATH=\"$secret_root/profiles/actionfit/ios/AuthKey_Actionfit.p8\""
+  "APP_STORE_CONNECT_API_KEY_P8_PATH=\"$secret_root/profiles/actionfit/ios/AuthKey_Actionfit.p8\"" \
+  "IOS_DISTRIBUTION_CERTIFICATE_P12_PATH=\"$secret_root/profiles/actionfit/ios/AppleDistribution_Actionfit.p12\"" \
+  "IOS_DISTRIBUTION_CERTIFICATE_PASSWORD=\"\"" \
+  "IOS_APP_STORE_PROVISIONING_PROFILE_PATH=\"$secret_root/profiles/actionfit/ios/AppStore_Actionfit.mobileprovision\""
 
 write_if_missing "$secret_root/profiles/stormborn/profile.env" \
   "ANDROID_KEYSTORE_PATH=\"$secret_root/profiles/stormborn/android/upload.keystore\"" \
@@ -60,10 +64,13 @@ write_if_missing "$secret_root/profiles/stormborn/profile.env" \
   "IOS_DEVELOPMENT_TEAM_ID=\"\"" \
   "APP_STORE_CONNECT_API_KEY_ID=\"\"" \
   "APP_STORE_CONNECT_ISSUER_ID=\"\"" \
-  "APP_STORE_CONNECT_API_KEY_P8_PATH=\"$secret_root/profiles/stormborn/ios/AuthKey_Stormborn.p8\""
+  "APP_STORE_CONNECT_API_KEY_P8_PATH=\"$secret_root/profiles/stormborn/ios/AuthKey_Stormborn.p8\"" \
+  "IOS_DISTRIBUTION_CERTIFICATE_P12_PATH=\"$secret_root/profiles/stormborn/ios/AppleDistribution_Stormborn.p12\"" \
+  "IOS_DISTRIBUTION_CERTIFICATE_PASSWORD=\"\"" \
+  "IOS_APP_STORE_PROVISIONING_PROFILE_PATH=\"$secret_root/profiles/stormborn/ios/AppStore_Stormborn.mobileprovision\""
 
 find "$secret_root" -type d -exec chmod 700 {} \;
-find "$secret_root" -type f -name "*.env" -exec chmod 600 {} \;
+find "$secret_root" -type f -exec chmod 600 {} \;
 
 cat <<EOF
 
@@ -71,7 +78,7 @@ Local runner secret folders are ready:
   $secret_root
 
 Next:
-  1. Copy keystore, Google Play JSON, and App Store Connect .p8 files into the profile folders.
+  1. Copy keystore, Google Play JSON, App Store Connect .p8, Apple Distribution .p12, and App Store .mobileprovision files into the profile folders.
   2. Fill these env files:
      - $secret_root/shared/android-signing.env
      - $secret_root/shared/ios-keychain.env

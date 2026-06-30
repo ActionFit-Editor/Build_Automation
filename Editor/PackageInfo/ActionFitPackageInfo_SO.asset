@@ -20,16 +20,12 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: '- BuildCommit now serializes Android alias, keystore password, and
-    alias password from BuildSetting into the request.
+  _releaseNote: '- AutoBuild now serializes the Android keystore file as base64 in
+    the BuildCommit request for Mac Studio test builds.
 
-    - RunnerSetup keeps keystore
-    files, Google Play, App Store Connect, and keychain credentials on the Mac runner,
-    with Android password env values as fallback.
+    - CI restores request
+    keystore bytes into a temporary file before Android signing, with local runner
+    keystore env values as fallback.
 
-    - AutoBuild uses the BuildSetting
-    default SO auto-create flow and remains under the Tools/ActionFit/BuildSetting
-    menu group.
-
-    - Build Automation depends on com.actionfit.buildsetting@1.1.2.'
+    - Bumped Build Automation to 1.0.10.'
   _dependenciesOverride: com.actionfit.buildsetting@1.1.2

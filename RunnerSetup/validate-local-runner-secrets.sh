@@ -131,6 +131,15 @@ validate_json_file() {
   }
 }
 
+validate_base64_value() {
+  local label="$1"
+  local value="$2"
+  ruby -rbase64 -e 'Base64.strict_decode64(ARGV.fetch(0))' "$value" >/dev/null || {
+    echo "::error::$label is not valid base64"
+    exit 1
+  }
+}
+
 read_request_value() {
   local field="$1"
   if [ ! -r "$request_path" ]; then
@@ -145,9 +154,19 @@ source_env_file "profile env" "$profile_env"
 if [ "$uses_android" -eq 1 ]; then
   source_optional_env_file "$android_env"
   source_optional_env_file "$profile_android_env"
+  request_keystore_base64="$(read_request_value "androidKeystoreBase64")"
   request_keystore_pass="$(read_request_value "androidKeystorePassword")"
   request_keyalias_pass="$(read_request_value "androidAliasPassword")"
-  require_readable_file "ANDROID_KEYSTORE_PATH" "${ANDROID_KEYSTORE_PATH:-}"
+  if [ -z "${ANDROID_KEYSTORE_PATH:-}" ] && [ -z "$request_keystore_base64" ]; then
+    echo "::error::ANDROID_KEYSTORE_PATH is empty and BuildCommit request androidKeystoreBase64 is empty"
+    exit 1
+  fi
+  if [ -n "${ANDROID_KEYSTORE_PATH:-}" ]; then
+    require_readable_file "ANDROID_KEYSTORE_PATH" "${ANDROID_KEYSTORE_PATH:-}"
+  fi
+  if [ -n "$request_keystore_base64" ]; then
+    validate_base64_value "BuildCommit request androidKeystoreBase64" "$request_keystore_base64"
+  fi
   if [ -z "${ANDROID_KEYSTORE_PASS:-}" ] && [ -z "$request_keystore_pass" ]; then
     echo "::error::ANDROID_KEYSTORE_PASS is empty and BuildCommit request androidKeystorePassword is empty"
     exit 1
@@ -160,7 +179,9 @@ if [ "$uses_android" -eq 1 ]; then
   mask_value "${ANDROID_KEYALIAS_PASS:-}"
   mask_value "$request_keystore_pass"
   mask_value "$request_keyalias_pass"
-  append_github_env "ANDROID_KEYSTORE_PATH" "${ANDROID_KEYSTORE_PATH:-}"
+  if [ -n "${ANDROID_KEYSTORE_PATH:-}" ]; then
+    append_github_env "ANDROID_KEYSTORE_PATH" "${ANDROID_KEYSTORE_PATH:-}"
+  fi
   if [ -n "${ANDROID_KEYSTORE_PASS:-}" ]; then
     append_github_env "ANDROID_KEYSTORE_PASS" "${ANDROID_KEYSTORE_PASS:-}"
   fi
@@ -195,7 +216,9 @@ if [ "$uses_testflight" -eq 1 ]; then
   require_nonempty "APP_STORE_CONNECT_API_KEY_ID" "${APP_STORE_CONNECT_API_KEY_ID:-}"
   require_nonempty "APP_STORE_CONNECT_ISSUER_ID" "${APP_STORE_CONNECT_ISSUER_ID:-}"
   require_readable_file "APP_STORE_CONNECT_API_KEY_P8_PATH" "${APP_STORE_CONNECT_API_KEY_P8_PATH:-}"
-  require_nonempty "IOS_KEYCHAIN_PASSWORD" "${IOS_KEYCHAIN_PASSWORD:-}"
+  require_readable_file "IOS_DISTRIBUTION_CERTIFICATE_P12_PATH" "${IOS_DISTRIBUTION_CERTIFICATE_P12_PATH:-}"
+  require_nonempty "IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" "${IOS_DISTRIBUTION_CERTIFICATE_PASSWORD:-}"
+  require_readable_file "IOS_APP_STORE_PROVISIONING_PROFILE_PATH" "${IOS_APP_STORE_PROVISIONING_PROFILE_PATH:-}"
 
   if ! grep -q "BEGIN PRIVATE KEY" "${APP_STORE_CONNECT_API_KEY_P8_PATH:-}"; then
     echo "::error::APP_STORE_CONNECT_API_KEY_P8_PATH does not look like an App Store Connect private key: ${APP_STORE_CONNECT_API_KEY_P8_PATH:-}"
@@ -203,11 +226,19 @@ if [ "$uses_testflight" -eq 1 ]; then
   fi
 
   mask_value "${IOS_KEYCHAIN_PASSWORD:-}"
+  mask_value "${IOS_DISTRIBUTION_CERTIFICATE_PASSWORD:-}"
   append_github_env "APP_STORE_CONNECT_API_KEY_ID" "${APP_STORE_CONNECT_API_KEY_ID:-}"
   append_github_env "APP_STORE_CONNECT_ISSUER_ID" "${APP_STORE_CONNECT_ISSUER_ID:-}"
   append_github_env "APP_STORE_CONNECT_API_KEY_P8_PATH" "${APP_STORE_CONNECT_API_KEY_P8_PATH:-}"
-  append_github_env "IOS_KEYCHAIN_PASSWORD" "${IOS_KEYCHAIN_PASSWORD:-}"
+  append_github_env "IOS_DISTRIBUTION_CERTIFICATE_P12_PATH" "${IOS_DISTRIBUTION_CERTIFICATE_P12_PATH:-}"
+  append_github_env "IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" "${IOS_DISTRIBUTION_CERTIFICATE_PASSWORD:-}"
+  append_github_env "IOS_APP_STORE_PROVISIONING_PROFILE_PATH" "${IOS_APP_STORE_PROVISIONING_PROFILE_PATH:-}"
+  if [ -n "${IOS_KEYCHAIN_PASSWORD:-}" ]; then
+    append_github_env "IOS_KEYCHAIN_PASSWORD" "${IOS_KEYCHAIN_PASSWORD:-}"
+  fi
   append_github_output "app_store_connect_api_key_p8_path" "${APP_STORE_CONNECT_API_KEY_P8_PATH:-}"
+  append_github_output "ios_distribution_certificate_p12_path" "${IOS_DISTRIBUTION_CERTIFICATE_P12_PATH:-}"
+  append_github_output "ios_app_store_provisioning_profile_path" "${IOS_APP_STORE_PROVISIONING_PROFILE_PATH:-}"
 fi
 
 echo "Local runner secrets validated: root=$secret_root, profile=$profile_slug, platform=$platform, upload=$upload_target"

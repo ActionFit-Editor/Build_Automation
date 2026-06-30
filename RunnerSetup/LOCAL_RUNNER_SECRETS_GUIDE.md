@@ -2,7 +2,7 @@
 
 This guide describes the local secret bundle used by the `BuildCommit Auto Build` workflow on a macOS self-hosted runner.
 
-The BuildCommit request contains distribution profile, platform, build kind, upload target, app identifiers, version, bundle number, Android alias, and Android signing passwords copied from BuildSetting. Keystore files, Google Play JSON, App Store Connect API keys, and keychain passwords stay on the Mac runner.
+The BuildCommit request contains distribution profile, platform, build kind, upload target, app identifiers, version, bundle number, Android keystore bytes, Android alias, and Android signing passwords copied from BuildSetting. Google Play JSON, App Store Connect API keys, Apple Distribution certificates, and App Store provisioning profiles stay on the Mac runner.
 
 ## Directory Layout
 
@@ -30,6 +30,8 @@ ci-secrets/cat-merge-cafe/
         google-play-service-account.json
       ios/
         AuthKey_Actionfit.p8
+        AppleDistribution_Actionfit.p12
+        AppStore_Actionfit.mobileprovision
     stormborn/
       profile.env
       android-signing.env
@@ -38,6 +40,8 @@ ci-secrets/cat-merge-cafe/
         google-play-service-account.json
       ios/
         AuthKey_Stormborn.p8
+        AppleDistribution_Stormborn.p12
+        AppStore_Stormborn.mobileprovision
 ```
 
 ## Create Template Files
@@ -74,15 +78,11 @@ Leave profile override values commented to use `shared/android-signing.env`. Unc
 `shared/ios-keychain.env`
 
 ```bash
-IOS_KEYCHAIN_PASSWORD="..."
+IOS_KEYCHAIN_PASSWORD=""
 IOS_KEYCHAIN_PATH=""
 ```
 
-Leave `IOS_KEYCHAIN_PATH` blank to use:
-
-```bash
-$HOME/Library/Keychains/login.keychain-db
-```
+Leave both values blank for the normal portable setup. The workflow will create a temporary keychain for each run, import the profile-specific `.p12`, and delete the temporary keychain during cleanup. Set these only when the runner must use a specific persistent keychain.
 
 `profiles/actionfit/profile.env`
 
@@ -93,9 +93,16 @@ IOS_DEVELOPMENT_TEAM_ID="49W7A8489P"
 APP_STORE_CONNECT_API_KEY_ID="..."
 APP_STORE_CONNECT_ISSUER_ID="..."
 APP_STORE_CONNECT_API_KEY_P8_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/ios/AuthKey_Actionfit.p8"
+IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
+IOS_DISTRIBUTION_CERTIFICATE_PASSWORD="..."
+IOS_APP_STORE_PROVISIONING_PROFILE_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/ios/AppStore_Actionfit.mobileprovision"
 ```
 
 `profiles/stormborn/profile.env` uses the same keys with Stormborn values.
+
+`ANDROID_KEYSTORE_PATH` is a fallback for manual or legacy requests where `.build/build_request.json` does not contain `androidKeystoreBase64`. New BuildCommit requests restore the Android keystore file from request base64 first.
+
+The App Store provisioning profile must be for the same bundle id as the BuildCommit request and must include the Apple Distribution certificate stored in `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`.
 
 ## Permissions
 
@@ -137,15 +144,18 @@ The workflow calls `validate-local-runner-secrets.sh` before Unity build steps.
 
 Android:
 
-- Injects `ANDROID_KEYSTORE_PATH` into Unity batchmode.
+- Restores `androidKeystoreBase64` from `.build/build_request.json` into `.build/ci-keystore/` and uses that file for Unity signing.
+- Uses `ANDROID_KEYSTORE_PATH` only when the request does not contain keystore bytes.
 - Uses `androidKeystorePassword` and `androidAliasPassword` from `.build/build_request.json`; `ANDROID_KEYSTORE_PASS` and `ANDROID_KEYALIAS_PASS` are fallback values.
 - Uses `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH` for Google Play upload.
 
 iOS:
 
 - Injects `IOS_DEVELOPMENT_TEAM_ID` before Unity generates the Xcode project.
-- Uses `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, and `APP_STORE_CONNECT_API_KEY_P8_PATH` for archive/export and TestFlight upload.
-- Unlocks the runner keychain with `IOS_KEYCHAIN_PASSWORD`.
+- Uses `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, and `APP_STORE_CONNECT_API_KEY_P8_PATH` for TestFlight upload.
+- Creates a temporary keychain by default, imports `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`, and grants codesign access.
+- Validates that `IOS_APP_STORE_PROVISIONING_PROFILE_PATH` matches `IOS_DEVELOPMENT_TEAM_ID`, the request bundle id, and the imported Apple Distribution certificate.
+- Exports the `.ipa` with manual App Store signing, using the installed profile name in `ExportOptions.plist`.
 
 ## Security Rule
 

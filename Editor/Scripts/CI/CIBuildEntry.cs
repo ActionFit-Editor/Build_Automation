@@ -129,7 +129,7 @@ namespace ActionFit.BuildAutomation.Editor
         // legacy request 값은 과거 BuildCommit request 호환용 fallback이다.
         private static void ApplyAndroidSigning(BuildRequest request)
         {
-            string keystorePath = PickEnvironmentOrRequest("ANDROID_KEYSTORE_PATH", "");
+            string keystorePath = ResolveAndroidKeystorePath(request);
             string keystorePass = PickRequestOrEnvironment(request.androidKeystorePassword, "ANDROID_KEYSTORE_PASS");
             string keyaliasPass = PickRequestOrEnvironment(request.androidAliasPassword, "ANDROID_KEYALIAS_PASS");
             string aliasName = request.androidKeyaliasName?.Trim();
@@ -156,6 +156,46 @@ namespace ActionFit.BuildAutomation.Editor
             Debug.Log($"[CIBuildEntry] Android signing applied: keystorePathInjected={!string.IsNullOrEmpty(keystorePath)}, alias={PlayerSettings.Android.keyaliasName}, keystorePassInjected={!string.IsNullOrEmpty(keystorePass)}, keyaliasPassInjected={!string.IsNullOrEmpty(keyaliasPass)}");
         }
 #endif
+
+        private static string ResolveAndroidKeystorePath(BuildRequest request)
+        {
+            string requestKeystoreBase64 = request.androidKeystoreBase64?.Trim();
+            if (!string.IsNullOrEmpty(requestKeystoreBase64))
+                return WriteRequestKeystore(request);
+
+            return PickEnvironmentOrRequest("ANDROID_KEYSTORE_PATH", "");
+        }
+
+        private static string WriteRequestKeystore(BuildRequest request)
+        {
+            string fileName = SanitizeFileName(request.androidKeystoreFileName, "android-request.keystore");
+            string directory = Path.GetFullPath(Path.Combine(Application.dataPath, "..", ".build", "ci-keystore"));
+            string path = Path.Combine(directory, fileName);
+
+            try
+            {
+                Directory.CreateDirectory(directory);
+                byte[] bytes = Convert.FromBase64String(request.androidKeystoreBase64);
+                File.WriteAllBytes(path, bytes);
+                Debug.Log($"[CIBuildEntry] Android keystore restored from BuildCommit request: {path}");
+                return path;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("[CIBuildEntry] Failed to restore Android keystore from BuildCommit request", ex);
+            }
+        }
+
+        private static string SanitizeFileName(string value, string fallback)
+        {
+            string fileName = Path.GetFileName(value?.Trim());
+            if (string.IsNullOrEmpty(fileName)) fileName = fallback;
+
+            foreach (char invalidChar in Path.GetInvalidFileNameChars())
+                fileName = fileName.Replace(invalidChar, '_');
+
+            return string.IsNullOrEmpty(fileName) ? fallback : fileName;
+        }
 
         private static string PickEnvironmentOrRequest(string environmentVariableName, string requestValue)
         {

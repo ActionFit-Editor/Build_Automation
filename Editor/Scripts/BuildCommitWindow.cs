@@ -180,7 +180,7 @@ namespace ActionFit.BuildAutomation.Editor
             EditorGUILayout.Space(6);
             EditorGUILayout.LabelField("Runner Credentials", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "BuildCommit serializes Android alias, keystore password, and alias password from BuildSetting into the committed request. Keystore files, Google Play, App Store Connect, and keychain credentials stay on the self-hosted Mac runner.",
+                "Test mode: BuildCommit serializes the Android keystore file, alias, keystore password, and alias password from BuildSetting into the committed request. Google Play, App Store Connect, and keychain credentials stay on the self-hosted Mac runner.",
                 MessageType.Warning);
         }
 
