@@ -15,13 +15,9 @@ namespace ActionFit.BuildAutomation.Editor
     {
         #region Fields
 
-        private const string SOPrefsKey = "LastUsedBuildSettings"; // BuildSettingsWindow와 동일한 키 공유
+        private const string SOPrefsKey = BuildSettingsSO.SOPrefsKey; // BuildSettingsWindow와 동일한 키 공유
         private const string DistributionProfilePrefsKey = "BuildCommitDistributionProfile";
         private const string BuildTagPrefix = "build";
-        private const string GooglePlayServiceAccountJsonPropertyName = "buildCommitGooglePlayServiceAccountJson";
-        private const string AppStoreConnectApiKeyIdPropertyName = "buildCommitAppStoreConnectApiKeyId";
-        private const string AppStoreConnectIssuerIdPropertyName = "buildCommitAppStoreConnectIssuerId";
-        private const string AppStoreConnectApiKeyP8PropertyName = "buildCommitAppStoreConnectApiKeyP8";
 
         private BuildSettingsSO _settings; // 빌드 설정 SO
         private SerializedObject _serializedSettings; // SO 직렬화 래퍼
@@ -37,10 +33,10 @@ namespace ActionFit.BuildAutomation.Editor
 
         #region Window
 
-        [MenuItem("Tools/ActionFit/Build Commit", false, 21)]
+        [MenuItem("Tools/ActionFit/BuildSetting/AutoBuild", false, 21)]
         public static void ShowWindow()
         {
-            var window = GetWindow<BuildCommitWindow>("Build Commit");
+            var window = GetWindow<BuildCommitWindow>("AutoBuild");
             window.minSize = new Vector2(360, 320);
             window.Show();
         }
@@ -60,6 +56,9 @@ namespace ActionFit.BuildAutomation.Editor
             EditorGUILayout.Space(8);
             DrawSOField();
             EditorGUILayout.Space(8);
+
+            if (_settings == null)
+                LoadSO();
 
             if (_settings == null)
             {
@@ -92,10 +91,17 @@ namespace ActionFit.BuildAutomation.Editor
 
             EditorGUI.BeginChangeCheck();
             _settings = (BuildSettingsSO)EditorGUILayout.ObjectField(_settings, typeof(BuildSettingsSO), false);
-            if (EditorGUI.EndChangeCheck() && _settings != null)
+            if (EditorGUI.EndChangeCheck())
             {
-                _serializedSettings = new SerializedObject(_settings);
-                EditorPrefs.SetString(SOPrefsKey, AssetDatabase.GetAssetPath(_settings));
+                if (_settings != null)
+                {
+                    _serializedSettings = new SerializedObject(_settings);
+                    EditorPrefs.SetString(SOPrefsKey, AssetDatabase.GetAssetPath(_settings));
+                }
+                else
+                {
+                    _serializedSettings = null;
+                }
             }
 
             EditorGUILayout.EndHorizontal();
@@ -157,61 +163,25 @@ namespace ActionFit.BuildAutomation.Editor
                 GUI.enabled = true;
             }
 
-            DrawAndroidRequestSecrets(resolvedPlatform);
-            DrawAppStoreConnectRequestOverrides(resolvedPlatform);
+            DrawLocalRunnerSecretNotice(resolvedPlatform);
 
             EditorGUILayout.HelpBox(
                 $"{BuildRequestUtility.RelativePath} will be committed as storage. GitHub Actions will build when the build tag is pushed.",
                 MessageType.Info);
         }
 
-        private void DrawAndroidRequestSecrets(BuildRequestPlatform resolvedPlatform)
+        private void DrawLocalRunnerSecretNotice(BuildRequestPlatform resolvedPlatform)
         {
-            if (resolvedPlatform != BuildRequestPlatform.Android && resolvedPlatform != BuildRequestPlatform.Both) return;
+            if (resolvedPlatform != BuildRequestPlatform.Android &&
+                resolvedPlatform != BuildRequestPlatform.iOS &&
+                resolvedPlatform != BuildRequestPlatform.Both)
+                return;
 
             EditorGUILayout.Space(6);
-            EditorGUILayout.LabelField("Android Request Secrets", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Runner Credentials", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "Experimental: BuildSetting signing passwords and BuildCommit override values are serialized into .build/build_request.json and committed. BuildCommit override inputs are temporarily saved in BuildSettingsSO.",
-                MessageType.Warning);
-
-            if (!UsesAndroidUpload(resolvedPlatform, _uploadTarget)) return;
-
-            EditorGUILayout.LabelField("Google Play Service Account JSON");
-            DrawTextAreaProperty(GooglePlayServiceAccountJsonPropertyName, 60);
-        }
-
-        private void DrawAppStoreConnectRequestOverrides(BuildRequestPlatform resolvedPlatform)
-        {
-            if (!UsesIosUpload(resolvedPlatform, _uploadTarget)) return;
-
-            EditorGUILayout.Space(6);
-            EditorGUILayout.LabelField("App Store Connect Request Override", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox(
-                "Experimental: these values are temporarily saved in BuildSettingsSO, serialized into .build/build_request.json, and committed. Leave blank to use GitHub Actions Secrets.",
-                MessageType.Warning);
-
-            DrawStringProperty(AppStoreConnectApiKeyIdPropertyName, "API Key ID");
-            DrawStringProperty(AppStoreConnectIssuerIdPropertyName, "Issuer ID");
-
-            EditorGUILayout.LabelField("API Key P8");
-            DrawTextAreaProperty(AppStoreConnectApiKeyP8PropertyName, 60);
-        }
-
-        private void DrawStringProperty(string propertyName, string label)
-        {
-            SerializedProperty property = _serializedSettings.FindProperty(propertyName);
-            if (property == null) return;
-
-            EditorGUILayout.PropertyField(property, new GUIContent(label));
-        }
-
-        private void DrawTextAreaProperty(string propertyName, float minHeight)
-        {
-            SerializedProperty property = _serializedSettings.FindProperty(propertyName);
-            if (property == null) return;
-
-            property.stringValue = EditorGUILayout.TextArea(property.stringValue, GUILayout.MinHeight(minHeight));
+                "BuildCommit stores only non-secret build metadata. The self-hosted Mac runner resolves keystore, Google Play, App Store Connect, and keychain credentials from its local CI_SECRET_ROOT bundle by Distribution Profile.",
+                MessageType.Info);
         }
 
         // Apply / Commit, Tag & Push 버튼 영역
@@ -274,7 +244,7 @@ namespace ActionFit.BuildAutomation.Editor
                 _settings = AssetDatabase.LoadAssetAtPath<BuildSettingsSO>(savedPath);
 
             if (_settings == null)
-                _settings = BuildSettingsSO.FindSettingsAsset();
+                _settings = BuildSettingsSO.FindOrCreateSettingsAsset();
 
             if (_settings != null)
                 _serializedSettings = new SerializedObject(_settings);
@@ -439,20 +409,6 @@ namespace ActionFit.BuildAutomation.Editor
                 default:
                     return "none";
             }
-        }
-
-        private bool UsesAndroidUpload(BuildRequestPlatform platform, BuildRequestUploadTarget uploadTarget)
-        {
-            return (platform == BuildRequestPlatform.Android || platform == BuildRequestPlatform.Both) &&
-                   (uploadTarget == BuildRequestUploadTarget.GooglePlayInternal ||
-                    uploadTarget == BuildRequestUploadTarget.GooglePlayInternalAndTestFlight);
-        }
-
-        private bool UsesIosUpload(BuildRequestPlatform platform, BuildRequestUploadTarget uploadTarget)
-        {
-            return (platform == BuildRequestPlatform.iOS || platform == BuildRequestPlatform.Both) &&
-                   (uploadTarget == BuildRequestUploadTarget.TestFlight ||
-                    uploadTarget == BuildRequestUploadTarget.GooglePlayInternalAndTestFlight);
         }
 
         private string SanitizeTagSegment(string value, string fallback)

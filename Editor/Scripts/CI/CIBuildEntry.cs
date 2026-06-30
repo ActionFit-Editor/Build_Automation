@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 
 using System;
+using System.IO;
 using ActionFit.BuildSetting.Editor;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
@@ -55,7 +56,7 @@ namespace ActionFit.BuildAutomation.Editor
             string androidAlias = request.androidKeyaliasName?.Trim();
             string androidPackageName = request.androidPackageName?.Trim();
             string iosBundleId = request.iosBundleId?.Trim();
-            string iosDevelopmentTeamId = request.iosDevelopmentTeamId?.Trim();
+            string iosDevelopmentTeamId = PickEnvironmentOrRequest("IOS_DEVELOPMENT_TEAM_ID", request.iosDevelopmentTeamId);
 
             if (!string.IsNullOrEmpty(request.buildVersion)) settings.buildVersion = request.buildVersion;
             if (!string.IsNullOrEmpty(request.bundleNo)) settings.bundleNo = request.bundleNo;
@@ -124,37 +125,45 @@ namespace ActionFit.BuildAutomation.Editor
         }
 
 #if UNITY_ANDROID
-        // CI에서는 request 값을 우선 사용하고, 비어 있으면 환경변수로 fallback한다.
-        // 환경변수와 request 값이 모두 없으면 프로젝트에 저장된 서명 설정을 그대로 사용한다.
+        // CI에서는 self-hosted runner 로컬 secret env를 우선 사용한다.
+        // legacy request 값은 과거 BuildCommit request 호환용 fallback이다.
         private static void ApplyAndroidSigning(BuildRequest request)
         {
-            string keystorePass = PickRequestOrEnvironment(request.androidKeystorePassword, "ANDROID_KEYSTORE_PASS");
-            string keyaliasPass = PickRequestOrEnvironment(request.androidAliasPassword, "ANDROID_KEYALIAS_PASS");
+            string keystorePath = PickEnvironmentOrRequest("ANDROID_KEYSTORE_PATH", "");
+            string keystorePass = PickEnvironmentOrRequest("ANDROID_KEYSTORE_PASS", request.androidKeystorePassword);
+            string keyaliasPass = PickEnvironmentOrRequest("ANDROID_KEYALIAS_PASS", request.androidAliasPassword);
             string aliasName = request.androidKeyaliasName?.Trim();
             bool hasAliasName = !string.IsNullOrEmpty(aliasName);
 
-            if (!hasAliasName && string.IsNullOrEmpty(keystorePass) && string.IsNullOrEmpty(keyaliasPass))
+            if (string.IsNullOrEmpty(keystorePath) && !hasAliasName && string.IsNullOrEmpty(keystorePass) && string.IsNullOrEmpty(keyaliasPass))
             {
                 Debug.Log("[CIBuildEntry] No keystore env vars found; using project signing settings as-is");
                 return;
             }
 
             PlayerSettings.Android.useCustomKeystore = true;
+            if (!string.IsNullOrEmpty(keystorePath))
+            {
+                if (!File.Exists(keystorePath))
+                    throw new FileNotFoundException("[CIBuildEntry] Android keystore file not found", keystorePath);
+                else
+                    PlayerSettings.Android.keystoreName = keystorePath;
+            }
             if (hasAliasName) PlayerSettings.Android.keyaliasName = aliasName;
             if (!string.IsNullOrEmpty(keystorePass)) PlayerSettings.Android.keystorePass = keystorePass;
             if (!string.IsNullOrEmpty(keyaliasPass)) PlayerSettings.Android.keyaliasPass = keyaliasPass;
 
-            Debug.Log($"[CIBuildEntry] Android signing applied: alias={PlayerSettings.Android.keyaliasName}, keystorePassInjected={!string.IsNullOrEmpty(keystorePass)}, keyaliasPassInjected={!string.IsNullOrEmpty(keyaliasPass)}");
-        }
-
-        private static string PickRequestOrEnvironment(string requestValue, string environmentVariableName)
-        {
-            string normalizedRequestValue = requestValue?.Trim();
-            if (!string.IsNullOrEmpty(normalizedRequestValue)) return normalizedRequestValue;
-
-            return Environment.GetEnvironmentVariable(environmentVariableName);
+            Debug.Log($"[CIBuildEntry] Android signing applied: keystorePathInjected={!string.IsNullOrEmpty(keystorePath)}, alias={PlayerSettings.Android.keyaliasName}, keystorePassInjected={!string.IsNullOrEmpty(keystorePass)}, keyaliasPassInjected={!string.IsNullOrEmpty(keyaliasPass)}");
         }
 #endif
+
+        private static string PickEnvironmentOrRequest(string environmentVariableName, string requestValue)
+        {
+            string environmentValue = Environment.GetEnvironmentVariable(environmentVariableName)?.Trim();
+            if (!string.IsNullOrEmpty(environmentValue)) return environmentValue;
+
+            return requestValue?.Trim();
+        }
     }
 }
 

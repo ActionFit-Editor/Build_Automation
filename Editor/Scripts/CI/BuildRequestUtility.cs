@@ -16,9 +16,6 @@ namespace ActionFit.BuildAutomation.Editor
         private const string EmptyAndroidPackagePlaceholder = "[Enter Android Package Name]";
         private const string EmptyIosBundlePlaceholder = "[Enter iOS Bundle ID]";
         private const string EmptyKeystoreAliasPlaceholder = "[Enter Keystore Alias]";
-        private const string EmptyKeystorePasswordPlaceholder = "[Enter KeyStore Password]";
-        private const string EmptyAliasPasswordPlaceholder = "[Enter Alias Password]";
-        private const string EmptyIosDevelopmentTeamPlaceholder = "[Enter Apple Team ID]";
 
         public static string AbsolutePath => Path.GetFullPath(Path.Combine(ProjectRoot, RelativePath));
 
@@ -29,11 +26,7 @@ namespace ActionFit.BuildAutomation.Editor
             BuildRequestPlatform platform,
             BuildRequestKind buildKind,
             BuildRequestUploadTarget uploadTarget,
-            BuildRequestDistributionProfile distributionProfile,
-            string googlePlayServiceAccountJson = "",
-            string appStoreConnectApiKeyId = "",
-            string appStoreConnectIssuerId = "",
-            string appStoreConnectApiKeyP8 = "")
+            BuildRequestDistributionProfile distributionProfile)
         {
             if (settings == null)
             {
@@ -42,18 +35,6 @@ namespace ActionFit.BuildAutomation.Editor
             }
 
             BuildRequestPlatform resolvedPlatform = ResolvePlatform(platform);
-            string selectedGooglePlayServiceAccountJson = PickOptionalText(
-                googlePlayServiceAccountJson,
-                settings.buildCommitGooglePlayServiceAccountJson);
-            string selectedAppStoreConnectApiKeyId = PickOptionalText(
-                appStoreConnectApiKeyId,
-                settings.buildCommitAppStoreConnectApiKeyId);
-            string selectedAppStoreConnectIssuerId = PickOptionalText(
-                appStoreConnectIssuerId,
-                settings.buildCommitAppStoreConnectIssuerId);
-            string selectedAppStoreConnectApiKeyP8 = PickOptionalText(
-                appStoreConnectApiKeyP8,
-                settings.buildCommitAppStoreConnectApiKeyP8);
 
             return new BuildRequest
             {
@@ -67,13 +48,13 @@ namespace ActionFit.BuildAutomation.Editor
                 buildFileName = settings.buildFileName,
                 androidPackageName = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.androidPackageName, EmptyAndroidPackagePlaceholder) : "",
                 iosBundleId = UsesIos(resolvedPlatform) ? SanitizeSettingValue(settings.iosPackageName, EmptyIosBundlePlaceholder) : "",
-                iosDevelopmentTeamId = UsesIos(resolvedPlatform) ? SanitizeSettingValue(settings.developmentTeamId, EmptyIosDevelopmentTeamPlaceholder) : "",
-                androidKeystorePassword = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.keystorePassword, EmptyKeystorePasswordPlaceholder) : "",
-                androidAliasPassword = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.aliasPassword, EmptyAliasPasswordPlaceholder) : "",
-                googlePlayServiceAccountJson = UsesAndroidUpload(resolvedPlatform, uploadTarget) ? NormalizeOptionalText(selectedGooglePlayServiceAccountJson) : "",
-                appStoreConnectApiKeyId = UsesIosUpload(resolvedPlatform, uploadTarget) ? NormalizeOptionalText(selectedAppStoreConnectApiKeyId) : "",
-                appStoreConnectIssuerId = UsesIosUpload(resolvedPlatform, uploadTarget) ? NormalizeOptionalText(selectedAppStoreConnectIssuerId) : "",
-                appStoreConnectApiKeyP8 = UsesIosUpload(resolvedPlatform, uploadTarget) ? NormalizeOptionalText(selectedAppStoreConnectApiKeyP8) : "",
+                iosDevelopmentTeamId = "",
+                androidKeystorePassword = "",
+                androidAliasPassword = "",
+                googlePlayServiceAccountJson = "",
+                appStoreConnectApiKeyId = "",
+                appStoreConnectIssuerId = "",
+                appStoreConnectApiKeyP8 = "",
                 androidKeyaliasName = UsesAndroid(resolvedPlatform) ? GetAndroidKeyaliasName(settings) : "",
                 sourceBranch = RunGitCommand("rev-parse --abbrev-ref HEAD"),
                 sourceCommit = RunGitCommand("rev-parse HEAD"),
@@ -107,36 +88,12 @@ namespace ActionFit.BuildAutomation.Editor
             return platform == BuildRequestPlatform.iOS || platform == BuildRequestPlatform.Both;
         }
 
-        private static bool UsesAndroidUpload(BuildRequestPlatform platform, BuildRequestUploadTarget uploadTarget)
-        {
-            return UsesAndroid(platform) &&
-                   (uploadTarget == BuildRequestUploadTarget.GooglePlayInternal ||
-                    uploadTarget == BuildRequestUploadTarget.GooglePlayInternalAndTestFlight);
-        }
-
-        private static bool UsesIosUpload(BuildRequestPlatform platform, BuildRequestUploadTarget uploadTarget)
-        {
-            return UsesIos(platform) &&
-                   (uploadTarget == BuildRequestUploadTarget.TestFlight ||
-                    uploadTarget == BuildRequestUploadTarget.GooglePlayInternalAndTestFlight);
-        }
-
         private static string SanitizeSettingValue(string value, string placeholder)
         {
             if (string.IsNullOrWhiteSpace(value)) return "";
 
             string result = value.Trim();
             return result == placeholder ? "" : result;
-        }
-
-        private static string PickOptionalText(string value, string fallback)
-        {
-            return string.IsNullOrWhiteSpace(value) ? fallback : value;
-        }
-
-        private static string NormalizeOptionalText(string value)
-        {
-            return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
         }
 
         public static bool Save(BuildRequest request)

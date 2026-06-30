@@ -41,7 +41,7 @@ namespace ActionFit.BuildAutomation.Editor
     {
         public const string BuildCommitTriggerSource = "BuildCommit";
 
-        public int schemaVersion = 5;
+        public int schemaVersion = 6;
         public string triggerSource = BuildCommitTriggerSource;
         public BuildRequestPlatform platform = BuildRequestPlatform.Current;
         public BuildRequestKind buildKind = BuildRequestKind.Default;
