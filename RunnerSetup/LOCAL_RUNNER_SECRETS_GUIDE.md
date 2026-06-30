@@ -2,7 +2,7 @@
 
 This guide describes the local secret bundle used by the `BuildCommit Auto Build` workflow on a macOS self-hosted runner.
 
-The BuildCommit request should contain build metadata only: distribution profile, platform, build kind, upload target, app identifiers, version, bundle number, and Android alias. Keystore passwords, keystore files, Google Play JSON, App Store Connect API keys, and keychain passwords stay on the Mac runner.
+The BuildCommit request contains distribution profile, platform, build kind, upload target, app identifiers, version, bundle number, Android alias, and Android signing passwords copied from BuildSetting. Keystore files, Google Play JSON, App Store Connect API keys, and keychain passwords stay on the Mac runner.
 
 ## Directory Layout
 
@@ -24,6 +24,7 @@ ci-secrets/cat-merge-cafe/
   profiles/
     actionfit/
       profile.env
+      android-signing.env
       android/
         upload.keystore
         google-play-service-account.json
@@ -31,6 +32,7 @@ ci-secrets/cat-merge-cafe/
         AuthKey_Actionfit.p8
     stormborn/
       profile.env
+      android-signing.env
       android/
         upload.keystore
         google-play-service-account.json
@@ -57,6 +59,17 @@ Then copy the real secret files into the generated folders and fill the `.env` f
 ANDROID_KEYSTORE_PASS="..."
 ANDROID_KEYALIAS_PASS="..."
 ```
+
+This file is a fallback for manual or legacy requests where `.build/build_request.json` does not contain Android signing passwords. New BuildCommit requests use the Android passwords copied from BuildSetting first.
+
+`profiles/actionfit/android-signing.env`
+
+```bash
+# ANDROID_KEYSTORE_PASS=""
+# ANDROID_KEYALIAS_PASS=""
+```
+
+Leave profile override values commented to use `shared/android-signing.env`. Uncomment and fill them only when a manual or legacy request needs profile-specific fallback passwords. The workflow loads `shared/android-signing.env` first and then loads `profiles/<profile>/android-signing.env`, so profile values win. BuildCommit request passwords still win inside Unity.
 
 `shared/ios-keychain.env`
 
@@ -124,7 +137,8 @@ The workflow calls `validate-local-runner-secrets.sh` before Unity build steps.
 
 Android:
 
-- Injects `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASS`, and `ANDROID_KEYALIAS_PASS` into Unity batchmode.
+- Injects `ANDROID_KEYSTORE_PATH` into Unity batchmode.
+- Uses `androidKeystorePassword` and `androidAliasPassword` from `.build/build_request.json`; `ANDROID_KEYSTORE_PASS` and `ANDROID_KEYALIAS_PASS` are fallback values.
 - Uses `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH` for Google Play upload.
 
 iOS:

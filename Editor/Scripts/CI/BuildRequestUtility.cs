@@ -16,6 +16,8 @@ namespace ActionFit.BuildAutomation.Editor
         private const string EmptyAndroidPackagePlaceholder = "[Enter Android Package Name]";
         private const string EmptyIosBundlePlaceholder = "[Enter iOS Bundle ID]";
         private const string EmptyKeystoreAliasPlaceholder = "[Enter Keystore Alias]";
+        private const string EmptyKeystorePasswordPlaceholder = "[Enter KeyStore Password]";
+        private const string EmptyAliasPasswordPlaceholder = "[Enter Alias Password]";
 
         public static string AbsolutePath => Path.GetFullPath(Path.Combine(ProjectRoot, RelativePath));
 
@@ -49,8 +51,8 @@ namespace ActionFit.BuildAutomation.Editor
                 androidPackageName = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.androidPackageName, EmptyAndroidPackagePlaceholder) : "",
                 iosBundleId = UsesIos(resolvedPlatform) ? SanitizeSettingValue(settings.iosPackageName, EmptyIosBundlePlaceholder) : "",
                 iosDevelopmentTeamId = "",
-                androidKeystorePassword = "",
-                androidAliasPassword = "",
+                androidKeystorePassword = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.keystorePassword, EmptyKeystorePasswordPlaceholder) : "",
+                androidAliasPassword = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.aliasPassword, EmptyAliasPasswordPlaceholder) : "",
                 googlePlayServiceAccountJson = "",
                 appStoreConnectApiKeyId = "",
                 appStoreConnectIssuerId = "",

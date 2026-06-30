@@ -166,6 +166,7 @@ ci-secrets/cat-merge-cafe/
   profiles/
     actionfit/
       profile.env
+      android-signing.env
       android/
         upload.keystore
         google-play-service-account.json
@@ -173,6 +174,7 @@ ci-secrets/cat-merge-cafe/
         AuthKey_Actionfit.p8
     stormborn/
       profile.env
+      android-signing.env
       android/
         upload.keystore
         google-play-service-account.json
@@ -180,14 +182,23 @@ ci-secrets/cat-merge-cafe/
         AuthKey_Stormborn.p8
 ```
 
-공통 Android 비밀번호는 `shared/android-signing.env`에 넣습니다.
+공통 Android 비밀번호 fallback은 `shared/android-signing.env`에 넣습니다.
 
 ```bash
 ANDROID_KEYSTORE_PASS="..."
 ANDROID_KEYALIAS_PASS="..."
 ```
 
-이 두 비밀번호는 `Distribution Profile`과 무관하게 공통으로 사용합니다. 실험용으로 AutoBuild request의 `androidKeystorePassword`, `androidAliasPassword`가 있으면 workflow가 request 값을 우선 사용하고, 없으면 이 secrets로 fallback합니다.
+새 AutoBuild 요청은 `BuildSettingsSO.keystorePassword`, `BuildSettingsSO.aliasPassword`를 `.build/build_request.json`에 자동 저장하므로 일반적으로 이 fallback 값은 비워도 됩니다. request에 비밀번호가 없거나 수동 request를 실행할 때만 사용됩니다.
+
+프로필별로 Android 비밀번호가 다르면 `profiles/<profile>/android-signing.env`에서 덮어씁니다.
+
+```bash
+ANDROID_KEYSTORE_PASS="..."
+ANDROID_KEYALIAS_PASS="..."
+```
+
+workflow는 `shared/android-signing.env`를 먼저 읽고 `profiles/<profile>/android-signing.env`를 나중에 읽습니다. 따라서 프로필별 fallback 파일에 값이 있으면 그 값이 우선입니다. 단, Unity 빌드 단계에서는 AutoBuild request에 저장된 Android 비밀번호가 있으면 그 값이 fallback env보다 우선입니다.
 
 공통 iOS keychain 정보는 `shared/ios-keychain.env`에 넣습니다.
 
@@ -209,11 +220,11 @@ APP_STORE_CONNECT_ISSUER_ID="..."
 APP_STORE_CONNECT_API_KEY_P8_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/ios/AuthKey_Actionfit.p8"
 ```
 
-이 service account가 Actionfit/Stormborn 양쪽 Play Console 앱에 업로드 권한을 가져야 합니다. Google Play `packageName`은 AutoBuild request의 `androidPackageName` 값을 사용하며, 이 값은 BuildSetting의 `BuildSettingsSO.androidPackageName`에서 옵니다. 실험용으로 AutoBuild request의 `googlePlayServiceAccountJson`이 있으면 workflow가 request 값을 우선 사용하고, 없으면 이 secret으로 fallback합니다.
+이 service account가 Actionfit/Stormborn 양쪽 Play Console 앱에 업로드 권한을 가져야 합니다. Google Play `packageName`은 AutoBuild request의 `androidPackageName` 값을 사용하며, 이 값은 BuildSetting의 `BuildSettingsSO.androidPackageName`에서 옵니다.
 
-Android alias 이름은 로컬 시크릿에 넣지 않습니다. AutoBuild request가 BuildSetting의 `BuildSettingsSO.keyStoreAlias` 값을 `androidKeyaliasName`으로 전달하고, workflow는 로컬 시크릿 번들에서 비밀번호와 keystore 파일만 주입합니다.
+Android alias 이름은 로컬 시크릿에 넣지 않습니다. AutoBuild request가 BuildSetting의 `BuildSettingsSO.keyStoreAlias` 값을 `androidKeyaliasName`으로 전달합니다. Android signing 비밀번호도 request 값이 우선이고, 로컬 시크릿 번들은 keystore 파일과 fallback 비밀번호만 제공합니다.
 
-Android package name과 iOS bundle id도 로컬 시크릿이나 workflow env에 넣지 않습니다. AutoBuild request가 BuildSetting의 `BuildSettingsSO.androidPackageName`, `BuildSettingsSO.iosPackageName` 값을 전달하고, workflow는 이 값을 Google Play `packageName`과 TestFlight `app_identifier`로 사용합니다. 실험용 App Store Connect request override가 있으면 workflow가 request 값을 우선 사용하고, 없으면 profile별 secrets로 fallback합니다.
+Android package name과 iOS bundle id도 로컬 시크릿이나 workflow env에 넣지 않습니다. AutoBuild request가 BuildSetting의 `BuildSettingsSO.androidPackageName`, `BuildSettingsSO.iosPackageName` 값을 전달하고, workflow는 이 값을 Google Play `packageName`과 TestFlight `app_identifier`로 사용합니다.
 
 권한을 잠급니다.
 

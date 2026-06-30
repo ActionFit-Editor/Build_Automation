@@ -180,8 +180,8 @@ namespace ActionFit.BuildAutomation.Editor
             EditorGUILayout.Space(6);
             EditorGUILayout.LabelField("Runner Credentials", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "BuildCommit stores only non-secret build metadata. The self-hosted Mac runner resolves keystore, Google Play, App Store Connect, and keychain credentials from its local CI_SECRET_ROOT bundle by Distribution Profile.",
-                MessageType.Info);
+                "BuildCommit serializes Android alias, keystore password, and alias password from BuildSetting into the committed request. Keystore files, Google Play, App Store Connect, and keychain credentials stay on the self-hosted Mac runner.",
+                MessageType.Warning);
         }
 
         // Apply / Commit, Tag & Push 버튼 영역

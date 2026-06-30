@@ -10,7 +10,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 {
   "dependencies": {
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.2",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.8"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.9"
   }
 }
 ```
@@ -33,7 +33,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 
 `Platform` 선택 시 `Build Kind`와 `Upload Target`은 자동 기본값으로 맞춰집니다. Android는 `AndroidAab`와 `GooglePlayInternal`, iOS는 `iOSXcodeProject`와 `TestFlight`, Both는 `Android AAB + iOS Xcode Project`와 `GooglePlayInternalAndTestFlight`를 사용합니다.
 
-Android 요청에서는 `BuildSettingsSO.keyStoreAlias` 값을 `androidKeyaliasName`으로 함께 저장합니다. keystore password, alias password, Google Play JSON, App Store Connect API key 같은 비밀값은 request에 저장하지 않습니다.
+Android 요청에서는 `BuildSettingsSO.keyStoreAlias`, `BuildSettingsSO.keystorePassword`, `BuildSettingsSO.aliasPassword` 값을 함께 저장합니다. 즉 alias 이름과 Android signing 비밀번호는 BuildSetting에서 자동으로 BuildCommit request에 직렬화됩니다. keystore 파일, Google Play JSON, App Store Connect API key, keychain password는 request에 저장하지 않습니다.
 
 Android package name은 `BuildSettingsSO.androidPackageName`, iOS bundle id는 `BuildSettingsSO.iosPackageName` 값을 request에 함께 저장합니다. workflow는 이 request 값을 Google Play `packageName`과 TestFlight `app_identifier`로 사용하므로, profile별 package/bundle id를 workflow env에 따로 적지 않습니다.
 
@@ -51,7 +51,7 @@ Unity -batchmode -quit -projectPath . -executeMethod ActionFit.BuildAutomation.E
 
 workflow는 macOS self-hosted runner 기준입니다. runner에는 `self-hosted`, `macOS`, `unity-mobile` 라벨이 있어야 하며, 같은 Mac에서 Unity CLI로 Android/iOS를 빌드합니다. `Platform=Both` 요청은 workflow가 Android job과 iOS job으로 나눠 `.build/build_request.json`의 platform 값을 임시 변환한 뒤 `CIBuildEntry.BuildFromRequest`를 각각 호출합니다.
 
-Android signing 비밀번호와 Google Play service account, iOS team id, App Store Connect API key, keychain password는 Mac runner의 로컬 시크릿 번들에서 읽습니다. 기본 경로는 runner 사용자의 `$HOME/ci-secrets/cat-merge-cafe`이며, 필요할 때만 `CI_SECRET_ROOT`로 override합니다. 설치/검증 스크립트와 상세 가이드는 `RunnerSetup/` 아래에 있습니다.
+Android keystore 파일, Google Play service account, iOS team id, App Store Connect API key, keychain password는 Mac runner의 로컬 시크릿 번들에서 읽습니다. Android signing 비밀번호는 request 값을 우선 사용하고, request에 없을 때만 로컬 env로 fallback합니다. 기본 경로는 runner 사용자의 `$HOME/ci-secrets/cat-merge-cafe`이며, 필요할 때만 `CI_SECRET_ROOT`로 override합니다. 설치/검증 스크립트와 상세 가이드는 `RunnerSetup/` 아래에 있습니다.
 
 상세 Mac 서버 준비 절차는 [MAC_SELF_HOSTED_RUNNER_SETUP.md](MAC_SELF_HOSTED_RUNNER_SETUP.md)를 참고합니다.
 

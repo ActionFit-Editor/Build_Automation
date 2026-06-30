@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.8`
+- Current package version at generation time: `1.0.9`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -58,11 +58,11 @@ Read this file when:
 - Build tag prefix: `build/**`.
 - Storage commit message prefix: `[BuildRequest]`.
 - Distribution profile request field: `distributionProfile`. Current profiles are `Actionfit` and `Stormborn`; only the profile name is stored in request JSON.
-- Android request alias field: `androidKeyaliasName`, copied from `BuildSettingsSO.keyStoreAlias`. Signing passwords and keystore files are resolved from the Mac runner local secret bundle.
+- Android request fields `androidKeyaliasName`, `androidKeystorePassword`, and `androidAliasPassword` are copied from `BuildSettingsSO.keyStoreAlias`, `BuildSettingsSO.keystorePassword`, and `BuildSettingsSO.aliasPassword`. Android request passwords are used first; local runner env values are fallback only.
 - BuildCommit window platform changes reset default request options: Android uses `AndroidAab` and `GooglePlayInternal`; iOS uses `iOSXcodeProject` and `TestFlight`; Both uses `AndroidAabAndiOSXcodeProject` and `GooglePlayInternalAndTestFlight`.
 - App identifier request fields: `androidPackageName`, copied from `BuildSettingsSO.androidPackageName`, and `iosBundleId`, copied from `BuildSettingsSO.iosPackageName`. The workflow uses these request values for Google Play `packageName` and TestFlight `app_identifier`.
-- Secret request fields still exist in `BuildRequest` for backward compatibility, but new BuildCommit requests intentionally write them empty. Do not add UI that writes passwords, Google Play JSON, App Store Connect P8, or keychain passwords into `.build/build_request.json`.
-- Default credential source is the Mac runner local secret bundle at `$HOME/ci-secrets/cat-merge-cafe`, or `CI_SECRET_ROOT` when explicitly set, resolved by `RunnerSetup/validate-local-runner-secrets.sh`. It provides `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASS`, `ANDROID_KEYALIAS_PASS`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH`, `IOS_DEVELOPMENT_TEAM_ID`, `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_P8_PATH`, `IOS_KEYCHAIN_PASSWORD`, and optional `IOS_KEYCHAIN_PATH`.
+- Google Play JSON, App Store Connect P8, and keychain passwords must stay out of `.build/build_request.json`. Android keystore and alias passwords are intentionally serialized from BuildSetting for BuildCommit requests.
+- Default credential source is the Mac runner local secret bundle at `$HOME/ci-secrets/cat-merge-cafe`, or `CI_SECRET_ROOT` when explicitly set, resolved by `RunnerSetup/validate-local-runner-secrets.sh`. It provides `ANDROID_KEYSTORE_PATH`, optional Android password fallbacks, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH`, `IOS_DEVELOPMENT_TEAM_ID`, `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_P8_PATH`, `IOS_KEYCHAIN_PASSWORD`, and optional `IOS_KEYCHAIN_PATH`.
 - Runner setup files live under `RunnerSetup/`: `setup-local-runner-secrets.sh`, `validate-local-runner-secrets.sh`, `LOCAL_RUNNER_SECRETS_GUIDE.md`, and `AI_MAC_STUDIO_BUILD_AUTOMATION_GUIDE.md`.
 - CI entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`.
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.

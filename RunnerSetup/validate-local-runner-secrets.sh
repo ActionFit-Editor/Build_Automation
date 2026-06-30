@@ -5,6 +5,7 @@ profile="${1:-${DISTRIBUTION_PROFILE:-Actionfit}}"
 platform="${2:-${REQUEST_PLATFORM:-Both}}"
 upload_target="${3:-${UPLOAD_TARGET:-None}}"
 secret_root="${CI_SECRET_ROOT:-$HOME/ci-secrets/cat-merge-cafe}"
+request_path="${BUILD_REQUEST_PATH:-.build/build_request.json}"
 
 profile_slug="$(printf '%s' "$profile" | tr '[:upper:]' '[:lower:]')"
 case "$profile_slug" in
@@ -43,6 +44,7 @@ esac
 
 profile_env="$secret_root/profiles/$profile_slug/profile.env"
 android_env="$secret_root/shared/android-signing.env"
+profile_android_env="$secret_root/profiles/$profile_slug/android-signing.env"
 ios_keychain_env="$secret_root/shared/ios-keychain.env"
 
 require_readable_file() {
@@ -71,6 +73,18 @@ source_env_file() {
   local label="$1"
   local path="$2"
   require_readable_file "$label" "$path"
+  set -a
+  # shellcheck disable=SC1090
+  . "$path"
+  set +a
+}
+
+source_optional_env_file() {
+  local path="$1"
+  if [ ! -r "$path" ]; then
+    return
+  fi
+
   set -a
   # shellcheck disable=SC1090
   . "$path"
@@ -117,18 +131,42 @@ validate_json_file() {
   }
 }
 
+read_request_value() {
+  local field="$1"
+  if [ ! -r "$request_path" ]; then
+    return
+  fi
+
+  ruby -rjson -e 'request = JSON.parse(File.read(ARGV.fetch(0))); value = request[ARGV.fetch(1)]; print(value.nil? ? "" : value.to_s.strip)' "$request_path" "$field" 2>/dev/null || true
+}
+
 source_env_file "profile env" "$profile_env"
 
 if [ "$uses_android" -eq 1 ]; then
-  source_env_file "shared Android signing env" "$android_env"
+  source_optional_env_file "$android_env"
+  source_optional_env_file "$profile_android_env"
+  request_keystore_pass="$(read_request_value "androidKeystorePassword")"
+  request_keyalias_pass="$(read_request_value "androidAliasPassword")"
   require_readable_file "ANDROID_KEYSTORE_PATH" "${ANDROID_KEYSTORE_PATH:-}"
-  require_nonempty "ANDROID_KEYSTORE_PASS" "${ANDROID_KEYSTORE_PASS:-}"
-  require_nonempty "ANDROID_KEYALIAS_PASS" "${ANDROID_KEYALIAS_PASS:-}"
+  if [ -z "${ANDROID_KEYSTORE_PASS:-}" ] && [ -z "$request_keystore_pass" ]; then
+    echo "::error::ANDROID_KEYSTORE_PASS is empty and BuildCommit request androidKeystorePassword is empty"
+    exit 1
+  fi
+  if [ -z "${ANDROID_KEYALIAS_PASS:-}" ] && [ -z "$request_keyalias_pass" ]; then
+    echo "::error::ANDROID_KEYALIAS_PASS is empty and BuildCommit request androidAliasPassword is empty"
+    exit 1
+  fi
   mask_value "${ANDROID_KEYSTORE_PASS:-}"
   mask_value "${ANDROID_KEYALIAS_PASS:-}"
+  mask_value "$request_keystore_pass"
+  mask_value "$request_keyalias_pass"
   append_github_env "ANDROID_KEYSTORE_PATH" "${ANDROID_KEYSTORE_PATH:-}"
-  append_github_env "ANDROID_KEYSTORE_PASS" "${ANDROID_KEYSTORE_PASS:-}"
-  append_github_env "ANDROID_KEYALIAS_PASS" "${ANDROID_KEYALIAS_PASS:-}"
+  if [ -n "${ANDROID_KEYSTORE_PASS:-}" ]; then
+    append_github_env "ANDROID_KEYSTORE_PASS" "${ANDROID_KEYSTORE_PASS:-}"
+  fi
+  if [ -n "${ANDROID_KEYALIAS_PASS:-}" ]; then
+    append_github_env "ANDROID_KEYALIAS_PASS" "${ANDROID_KEYALIAS_PASS:-}"
+  fi
   append_github_output "android_keystore_path" "${ANDROID_KEYSTORE_PATH:-}"
 fi
 

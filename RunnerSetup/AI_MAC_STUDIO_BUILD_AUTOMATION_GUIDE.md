@@ -8,9 +8,9 @@ The runner must build from BuildCommit requests without GitHub Secrets for mobil
 
 - `distributionProfile`: `Actionfit` or `Stormborn`
 - `platform`: `Android`, `iOS`, or `Both`
-- build metadata such as version, bundle number, build kind, upload target, package name, bundle id, and Android alias
+- build metadata such as version, bundle number, build kind, upload target, package name, bundle id, Android alias, and Android signing passwords copied from BuildSetting
 
-The runner loads credentials from local files under `$HOME/ci-secrets/cat-merge-cafe` by default, or `CI_SECRET_ROOT` when explicitly set.
+The runner loads keystore files, upload credentials, team ids, and keychain credentials from local files under `$HOME/ci-secrets/cat-merge-cafe` by default, or `CI_SECRET_ROOT` when explicitly set. Android signing passwords from the request are preferred over local fallback env values.
 
 ## Files In This Package
 
@@ -50,7 +50,7 @@ bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-se
 
 ## Diagnosis Rules
 
-- If Android Unity signing fails, check `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASS`, `ANDROID_KEYALIAS_PASS`, and `androidKeyaliasName` from `.build/build_request.json`.
+- If Android Unity signing fails, check `ANDROID_KEYSTORE_PATH`, `androidKeyaliasName`, `androidKeystorePassword`, and `androidAliasPassword` from `.build/build_request.json`. `ANDROID_KEYSTORE_PASS` and `ANDROID_KEYALIAS_PASS` are fallback env values only.
 - If Google Play upload fails, check `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH` and the package name in `.build/build_request.json`.
 - If iOS Xcode project has no team id, verify the `Resolve local runner secrets` step runs before Unity iOS build and exports `IOS_DEVELOPMENT_TEAM_ID`.
 - If archive cannot unlock signing identity, verify `IOS_KEYCHAIN_PASSWORD`, `IOS_KEYCHAIN_PATH`, and that the runner service uses the expected macOS user.
@@ -59,6 +59,6 @@ bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-se
 ## Do Not
 
 - Do not commit files under `ci-secrets`.
-- Do not paste credential values into `.build/build_request.json`.
+- Do not paste Google Play, App Store Connect, or keychain credential values into `.build/build_request.json`. Android signing passwords are serialized there intentionally by BuildCommit.
 - Do not add GitHub Secrets for these mobile credentials unless explicitly reverting to the older fallback model.
 - Do not run untrusted pull request workflows on the self-hosted runner.

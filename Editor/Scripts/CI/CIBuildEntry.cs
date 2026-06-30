@@ -130,8 +130,8 @@ namespace ActionFit.BuildAutomation.Editor
         private static void ApplyAndroidSigning(BuildRequest request)
         {
             string keystorePath = PickEnvironmentOrRequest("ANDROID_KEYSTORE_PATH", "");
-            string keystorePass = PickEnvironmentOrRequest("ANDROID_KEYSTORE_PASS", request.androidKeystorePassword);
-            string keyaliasPass = PickEnvironmentOrRequest("ANDROID_KEYALIAS_PASS", request.androidAliasPassword);
+            string keystorePass = PickRequestOrEnvironment(request.androidKeystorePassword, "ANDROID_KEYSTORE_PASS");
+            string keyaliasPass = PickRequestOrEnvironment(request.androidAliasPassword, "ANDROID_KEYALIAS_PASS");
             string aliasName = request.androidKeyaliasName?.Trim();
             bool hasAliasName = !string.IsNullOrEmpty(aliasName);
 
@@ -163,6 +163,14 @@ namespace ActionFit.BuildAutomation.Editor
             if (!string.IsNullOrEmpty(environmentValue)) return environmentValue;
 
             return requestValue?.Trim();
+        }
+
+        private static string PickRequestOrEnvironment(string requestValue, string environmentVariableName)
+        {
+            string normalizedRequestValue = requestValue?.Trim();
+            if (!string.IsNullOrEmpty(normalizedRequestValue)) return normalizedRequestValue;
+
+            return Environment.GetEnvironmentVariable(environmentVariableName)?.Trim();
         }
     }
 }
