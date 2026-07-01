@@ -161,6 +161,7 @@ workspace/build-automation/
   shared/
     android-signing.env
     ios-keychain.env
+    github-package-read-token
   profiles/
     actionfit/
       profile.env
@@ -212,6 +213,15 @@ IOS_KEYCHAIN_PATH=""
 ```
 
 둘 다 비워두면 workflow가 run마다 임시 keychain을 만들고, profile별 `.p12`를 import한 뒤 cleanup에서 삭제합니다. 특정 persistent keychain을 써야 할 때만 두 값을 채웁니다.
+
+private GitHub UPM package 접근은 runner 사용자 계정의 `gh auth`를 우선 사용합니다.
+
+```bash
+gh auth status --hostname github.com
+gh auth setup-git --hostname github.com
+```
+
+`gh auth`를 사용할 수 없는 runner라면 `shared/github-package-read-token` 파일의 첫 non-comment line에 private ActionFit package repo read 권한이 있는 fine-grained token을 넣습니다. workflow는 Unity 실행 전에 이 credential을 준비하고 `Packages/manifest.json`의 ActionFit GitHub package 접근을 `git ls-remote`로 사전 확인합니다.
 
 회사별 `profile.env`에는 실제 파일 경로와 iOS/App Store Connect 값을 넣습니다.
 

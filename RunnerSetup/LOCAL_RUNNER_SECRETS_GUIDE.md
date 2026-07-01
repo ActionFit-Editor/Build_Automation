@@ -21,6 +21,7 @@ workspace/build-automation/
   shared/
     android-signing.env
     ios-keychain.env
+    github-package-read-token
   profiles/
     actionfit/
       profile.env
@@ -85,6 +86,15 @@ IOS_KEYCHAIN_PATH=""
 ```
 
 Leave both values blank for the normal portable setup. The workflow will create a temporary keychain for each run, import the profile-specific `.p12`, and delete the temporary keychain during cleanup. Set these only when the runner must use a specific persistent keychain.
+
+`shared/github-package-read-token`
+
+```bash
+# Optional. Prefer `gh auth setup-git` on the runner user.
+REPLACE_WITH_READ_ONLY_GITHUB_TOKEN
+```
+
+This file is used only when the runner user does not already have working `gh auth` Git credential setup. Put one read-only token on the first non-comment line. The token must be able to read private ActionFit GitHub package repositories used by `Packages/manifest.json`.
 
 `profiles/actionfit/profile.env`
 
@@ -151,7 +161,14 @@ bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-se
 
 ## Workflow Behavior
 
-The workflow calls `validate-local-runner-secrets.sh` before Unity build steps.
+The workflow calls `prepare-actionfit-private-package-access.sh` and `validate-local-runner-secrets.sh` before Unity build steps.
+
+Private package access:
+
+- Runs `gh auth setup-git --hostname github.com` when the runner user already has `gh auth`.
+- Falls back to `shared/github-package-read-token` or `ACTIONFIT_GITHUB_PACKAGE_READ_TOKEN`.
+- Rewrites `git@github.com:` and `ssh://git@github.com/` package URLs to HTTPS so the same GitHub credential path can be used.
+- Checks private package repository access with `git ls-remote` before Unity package resolution.
 
 Android:
 

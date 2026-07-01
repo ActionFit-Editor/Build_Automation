@@ -139,6 +139,11 @@ jobs:
         with:
           lfs: true
 
+      - name: Prepare private package access
+        shell: bash
+        run: |
+          bash .github/scripts/prepare-actionfit-private-package-access.sh
+
       - name: Resolve Unity editor
         id: unity
         shell: bash
@@ -271,6 +276,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: true
+
+      - name: Prepare private package access
+        shell: bash
+        run: |
+          bash .github/scripts/prepare-actionfit-private-package-access.sh
 
       - name: Resolve Unity editor
         id: unity

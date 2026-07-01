@@ -10,7 +10,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 {
   "dependencies": {
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.3",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.15"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.16"
   }
 }
 ```
@@ -23,13 +23,15 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 - 요청 파일: `.build/build_request.json`
 - CI 진입점: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`
-- Workflow script templates: `.github/scripts/resolve-unity-editor.sh`, `.github/scripts/validate-local-runner-secrets.sh`
+- Workflow script templates: `.github/scripts/resolve-unity-editor.sh`, `.github/scripts/validate-local-runner-secrets.sh`, `.github/scripts/prepare-actionfit-private-package-access.sh`
 - Workflow sync: `AutoBuild` 창의 `Update GitHub Workflow` 버튼
 - Mac runner guide: `MAC_SELF_HOSTED_RUNNER_SETUP.md`
 
 ## AutoBuild
 
 `AutoBuild` 창은 연결된 `BuildSettingsSO`의 버전과 번들 번호를 `PlayerSettings`에 적용한 뒤, `.build/build_request.json`을 생성합니다. 그 다음 `[BuildRequest] v{version}({bundleNo})` 형식의 저장용 커밋을 만들고 push한 뒤, `build/{platform}-{upload}/{version}/{bundleNo}-{shortSha}` 형식의 태그를 생성해 push합니다. `BuildSettingsSO`가 없으면 Build Setting 패키지가 `Assets/_Data/_BuildSetting/BuildSettingsSO.asset`을 자동 생성하고 프로젝트 `PlayerSettings` 기본값을 1차 초기화합니다.
+
+`Auto Sync Build Files`는 기본값이 켜짐입니다. 켜져 있으면 `Commit, Tag & Push` 실행 시 Build Automation 패키지의 workflow/template scripts를 프로젝트 루트 `.github/`로 먼저 동기화하고, 그 변경분도 같은 저장 커밋에 포함합니다.
 
 실제 GitHub Actions 빌드 요청은 저장 커밋 push가 아니라 `build/**` 태그 push로 발생합니다. 저장 커밋은 요청 JSON과 변경사항을 남기는 용도이며, 같은 버전으로 재요청할 수 있도록 커밋은 `--allow-empty`를 허용합니다.
 
@@ -51,7 +53,7 @@ Android package name은 `BuildSettingsSO.androidPackageName`, iOS bundle id는 `
 Unity -batchmode -quit -projectPath . -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest
 ```
 
-기본 GitHub Actions workflow template은 `WorkflowTemplates/buildcommit-auto-build.yml`에 있고, workflow가 Unity 실행 전에 호출하는 script 원본은 패키지의 `.github/scripts/`에 있습니다. `resolve-unity-editor.sh`는 `ProjectSettings/ProjectVersion.txt`에서 Unity 버전을 읽어 `UNITY_VERSION`, `UNITY_VERSION_WITH_REVISION`, `UNITY_EXECUTABLE`을 이후 step으로 전달하고, `validate-local-runner-secrets.sh`는 Mac runner secret bundle을 검증합니다. 프로젝트에서 사용하려면 workflow는 `.github/workflows/buildcommit-auto-build.yml`로, scripts는 `.github/scripts/`로 복사한 뒤 Unity Hub root, Xcode 경로 같은 프로젝트별 env 값을 조정합니다.
+기본 GitHub Actions workflow template은 `WorkflowTemplates/buildcommit-auto-build.yml`에 있고, workflow가 Unity 실행 전에 호출하는 script 원본은 패키지의 `.github/scripts/`에 있습니다. `prepare-actionfit-private-package-access.sh`는 runner의 `gh auth` 또는 `CI_SECRET_ROOT/shared/github-package-read-token`으로 private GitHub UPM package 접근을 준비하고, `resolve-unity-editor.sh`는 `ProjectSettings/ProjectVersion.txt`에서 Unity 버전을 읽어 `UNITY_VERSION`, `UNITY_VERSION_WITH_REVISION`, `UNITY_EXECUTABLE`을 이후 step으로 전달하고, `validate-local-runner-secrets.sh`는 Mac runner secret bundle을 검증합니다. 프로젝트에서 사용하려면 workflow는 `.github/workflows/buildcommit-auto-build.yml`로, scripts는 `.github/scripts/`로 복사한 뒤 Unity Hub root, Xcode 경로 같은 프로젝트별 env 값을 조정합니다.
 `AutoBuild` 창의 `Update GitHub Workflow` 버튼은 패키지의 workflow template과 script templates를 프로젝트 루트의 `.github/workflows/buildcommit-auto-build.yml`, `.github/scripts/`로 복사합니다. 기존 파일이 template과 다르면 확인창을 띄운 뒤 덮어씁니다.
 
 workflow는 macOS self-hosted runner 기준입니다. runner에는 `self-hosted`, `macOS`, `unity-mobile` 라벨이 있어야 하며, 같은 Mac에서 Unity CLI로 Android/iOS를 빌드합니다. `Platform=Both` 요청은 workflow가 Android job과 iOS job으로 나눠 `.build/build_request.json`의 platform 값을 임시 변환한 뒤 `CIBuildEntry.BuildFromRequest`를 각각 호출합니다.

@@ -49,6 +49,11 @@ write_if_missing "$secret_root/shared/ios-keychain.env" \
   "IOS_KEYCHAIN_PASSWORD=\"\"" \
   "IOS_KEYCHAIN_PATH=\"\""
 
+write_if_missing "$secret_root/shared/github-package-read-token" \
+  "# Optional GitHub read token for private UPM package repositories." \
+  "# Prefer gh auth setup-git on the runner user. If that is unavailable, put one fine-grained token on the first non-comment line." \
+  "# Required access: read-only Contents access to private ActionFit package repositories."
+
 write_if_missing "$secret_root/profiles/actionfit/profile.env" \
   "ANDROID_KEYSTORE_PATH=\"$secret_root/profiles/actionfit/android/upload.keystore\"" \
   "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH=\"$secret_root/profiles/actionfit/android/google-play-service-account.json\"" \
@@ -87,6 +92,7 @@ Next:
   2. Fill these env files:
      - $secret_root/shared/android-signing.env
      - $secret_root/shared/ios-keychain.env
+     - $secret_root/shared/github-package-read-token (optional, only when gh auth is unavailable)
      - $secret_root/profiles/actionfit/profile.env
      - $secret_root/profiles/actionfit/android-signing.env (optional override)
      - $secret_root/profiles/stormborn/profile.env

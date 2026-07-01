@@ -20,24 +20,19 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- AutoBuild \uCC3D\uC758 Platform \uAE30\uBCF8\uAC12\uC744 `None`\uC73C\uB85C
-    \uBC14\uAFB8\uACE0, \uD50C\uB7AB\uD3FC\uC744 \uC120\uD0DD\uD558\uC9C0 \uC54A\uC740
-    \uC0C1\uD0DC\uC5D0\uC11C\uB294 `Commit, Tag & Push`\uB97C \uC2E4\uD589\uD560
-    \uC218 \uC5C6\uB3C4\uB85D \uD588\uC2B5\uB2C8\uB2E4.\n- workflow\uAC00 `ProjectSettings/ProjectVersion.txt`\uC758
-    `m_EditorVersion`\uC744 \uC77D\uC5B4 \uD574\uB2F9 Unity \uC2E4\uD589 \uD30C\uC77C\uC744
-    \uC0AC\uC6A9\uD558\uBBC0\uB85C \uD504\uB85C\uC81D\uD2B8\uC640 \uB2E4\uB978 Unity
-    \uBC84\uC804\uC73C\uB85C \uBE4C\uB4DC\uB418\uB294 \uBB38\uC81C\uB97C \uC0AC\uC804\uC5D0
-    \uB9C9\uC2B5\uB2C8\uB2E4.\n- Unity \uC2E4\uD589 \uC804 shell \uB2E8\uACC4\uC5D0\uC11C
-    \uD544\uC694\uD55C `.github/scripts/validate-local-runner-secrets.sh`, `.github/scripts/resolve-unity-editor.sh`\uB97C
-    \uD504\uB85C\uC81D\uD2B8 \uB8E8\uD2B8\uB85C \uBCF5\uC0AC\uD574 `Packages/`\uB098
-    `Library/PackageCache`\uC5D0 \uC758\uC874\uD558\uC9C0 \uC54A\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n-
-    Android upload \uC784\uC2DC AAB \uACBD\uB85C\uC640 iOS archive \uACBD\uB85C\uC5D0\uC11C
-    \uD2B9\uC815 \uD504\uB85C\uC81D\uD2B8\uBA85\uC744 \uC81C\uAC70\uD558\uACE0, `.build/google-play-upload/upload.aab`,
-    `Builds/iOSArchive/BuildCommit.xcarchive`\uB97C \uC0AC\uC6A9\uD558\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n-
-    Google Play upload action\uC758 deprecated `track` \uC785\uB825\uC744 `tracks`\uB85C
-    \uAD50\uCCB4\uD588\uC2B5\uB2C8\uB2E4.\n- `BuildSettingsSO.iosTargetOSVersion`\uC744
-    \uD3EC\uD568\uD55C BuildSetting `1.1.3`\uC744 \uC0AC\uC6A9\uD558\uB3C4\uB85D
-    \uC758\uC874 \uBC84\uC804\uC744 \uAC31\uC2E0\uD588\uC2B5\uB2C8\uB2E4.\n- macOS
-    self-hosted runner\uC758 `CI_SECRET_ROOT` \uAE30\uBCF8 \uACBD\uB85C\uB97C `/Users/lydia/workspace/build-automation`\uC73C\uB85C
-    \uAC31\uC2E0\uD588\uC2B5\uB2C8\uB2E4."
+  _releaseNote: "- `.github/scripts/prepare-actionfit-private-package-access.sh`\uB97C
+    \uCD94\uAC00\uD574 Unity \uC2E4\uD589 \uC804\uC5D0 private GitHub UPM package
+    \uC811\uADFC \uAD8C\uD55C\uC744 \uC900\uBE44\uD569\uB2C8\uB2E4.\n- runner \uC0AC\uC6A9\uC790
+    \uACC4\uC815\uC758 `gh auth`\uB97C \uC6B0\uC120 \uC0AC\uC6A9\uD558\uACE0, \uC5C6\uC73C\uBA74
+    `CI_SECRET_ROOT/shared/github-package-read-token` \uB610\uB294 `ACTIONFIT_GITHUB_PACKAGE_READ_TOKEN`\uC73C\uB85C
+    GitHub credential helper\uB97C \uAD6C\uC131\uD569\uB2C8\uB2E4.\n- `git@github.com:`
+    \uBC0F `ssh://git@github.com/` package URL\uC744 HTTPS\uB85C rewrite\uD558\uACE0,
+    `Packages/manifest.json`\uC758 ActionFit GitHub package repo\uB97C `git ls-remote`\uB85C
+    \uC0AC\uC804 \uD655\uC778\uD569\uB2C8\uB2E4.\n- AutoBuild \uCC3D\uC5D0 \uAE30\uBCF8\uAC12
+    true\uC778 `Auto Sync Build Files` \uC635\uC158\uC744 \uCD94\uAC00\uD588\uC2B5\uB2C8\uB2E4.
+    \uCF1C\uC838 \uC788\uC73C\uBA74 `Commit, Tag & Push` \uC804\uC5D0 package workflow/scripts\uB97C
+    \uD504\uB85C\uC81D\uD2B8 `.github/`\uB85C \uC790\uB3D9 \uB3D9\uAE30\uD654\uD558\uACE0
+    \uAC19\uC740 \uC800\uC7A5 \uCEE4\uBC0B\uC5D0 \uD3EC\uD568\uD569\uB2C8\uB2E4.\n-
+    `Update GitHub Workflow`/auto sync \uB300\uC0C1\uC5D0 private package access
+    script\uB97C \uD3EC\uD568\uD588\uC2B5\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.buildsetting@1.1.3

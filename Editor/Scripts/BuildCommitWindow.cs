@@ -17,6 +17,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         private const string SOPrefsKey = BuildSettingsSO.SOPrefsKey; // BuildSettingsWindow와 동일한 키 공유
         private const string DistributionProfilePrefsKey = "BuildCommitDistributionProfile";
+        private const string AutoSyncWorkflowAssetsPrefsKey = "BuildCommitAutoSyncWorkflowAssets";
         private const string BuildTagPrefix = "build";
 
         private BuildSettingsSO _settings; // 빌드 설정 SO
@@ -25,6 +26,7 @@ namespace ActionFit.BuildAutomation.Editor
         private BuildRequestKind _requestKind = BuildRequestKind.Default; // 원격 빌드 종류
         private BuildRequestUploadTarget _uploadTarget = BuildRequestUploadTarget.None; // 업로드 대상
         private BuildRequestDistributionProfile _distributionProfile = BuildRequestDistributionProfile.Actionfit; // 배포 계정 프로필
+        private bool _autoSyncWorkflowAssets = true; // Commit 전 패키지 workflow/scripts 자동 동기화
 
         private Vector2 _logScrollPosition; // 로그 스크롤 위치
         private readonly List<string> _logs = new(); // 실행 결과 로그 목록
@@ -186,6 +188,13 @@ namespace ActionFit.BuildAutomation.Editor
         {
             EditorGUILayout.LabelField("GitHub Workflow", EditorStyles.boldLabel);
 
+            EditorGUI.BeginChangeCheck();
+            _autoSyncWorkflowAssets = EditorGUILayout.Toggle(
+                new GUIContent("Auto Sync Build Files", "Commit 전에 BuildAutomation 패키지의 workflow/scripts를 프로젝트 .github 폴더로 동기화합니다."),
+                _autoSyncWorkflowAssets);
+            if (EditorGUI.EndChangeCheck())
+                EditorPrefs.SetBool(AutoSyncWorkflowAssetsPrefsKey, _autoSyncWorkflowAssets);
+
             bool isCurrent = BuildCommitWorkflowSyncUtility.IsWorkflowCurrent();
             EditorGUILayout.HelpBox(
                 BuildCommitWorkflowSyncUtility.GetStatusMessage(),
@@ -282,6 +291,8 @@ namespace ActionFit.BuildAutomation.Editor
             int savedProfile = EditorPrefs.GetInt(DistributionProfilePrefsKey, (int)BuildRequestDistributionProfile.Actionfit);
             if (System.Enum.IsDefined(typeof(BuildRequestDistributionProfile), savedProfile))
                 _distributionProfile = (BuildRequestDistributionProfile)savedProfile;
+
+            _autoSyncWorkflowAssets = EditorPrefs.GetBool(AutoSyncWorkflowAssetsPrefsKey, true);
         }
 
         // PlayerSettings에 버전/번들ID 적용
@@ -326,6 +337,12 @@ namespace ActionFit.BuildAutomation.Editor
 
             _logs.Clear();
 
+            if (!SyncWorkflowAssetsForCommit())
+            {
+                Repaint();
+                return;
+            }
+
             ApplyPlayerSettings();
             if (!SaveBuildRequest())
             {
@@ -364,6 +381,33 @@ namespace ActionFit.BuildAutomation.Editor
             Debug.Log($"[BuildCommitWindow] Commit, tag & push complete: {commitMessage}, {buildTag}");
 
             Repaint();
+        }
+
+        private bool SyncWorkflowAssetsForCommit()
+        {
+            if (!_autoSyncWorkflowAssets)
+                return true;
+
+            if (BuildCommitWorkflowSyncUtility.IsWorkflowCurrent())
+            {
+                AddLog("[Workflow Auto Sync] Already up to date.");
+                return true;
+            }
+
+            if (BuildCommitWorkflowSyncUtility.TrySync(out string message))
+            {
+                AddLog($"[Workflow Auto Sync] {message}");
+                Debug.Log($"[BuildCommitWindow] Auto synced workflow assets: {message}");
+                return true;
+            }
+
+            AddLog($"[ERROR] {message}");
+            Debug.LogError($"[BuildCommitWindow] Auto workflow sync failed: {message}");
+            EditorUtility.DisplayDialog(
+                "Commit, Tag & Push",
+                $"BuildAutomation package workflow assets could not be synced.\n\n{message}",
+                "OK");
+            return false;
         }
 
         private void UpdateWorkflowFile()

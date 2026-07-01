@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.15`
+- Current package version at generation time: `1.0.16`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -59,6 +59,7 @@ Read this file when:
 - Storage commit message prefix: `[BuildRequest]`.
 - Distribution profile request field: `distributionProfile`. Current profiles are `Actionfit` and `Stormborn`; only the profile name is stored in request JSON.
 - BuildCommit window starts with `Platform=None`. `Commit, Tag & Push` is disabled until the user selects `Current`, `Android`, `iOS`, or `Both`. `Current` remains a selectable option and resolves to the active Unity build target when the request is created.
+- BuildCommit window has `Auto Sync Build Files`, stored in `EditorPrefs` as `BuildCommitAutoSyncWorkflowAssets`, defaulting to true. When enabled, `Commit, Tag & Push` syncs package workflow assets into project `.github/` before saving the request and running `git add .`.
 - Android request fields `androidKeystoreFileName`, `androidKeystoreBase64`, `androidKeyaliasName`, `androidKeystorePassword`, and `androidAliasPassword` are copied from `BuildSettingsSO.keyStorePath`, `BuildSettingsSO.keyStoreAlias`, `BuildSettingsSO.keystorePassword`, and `BuildSettingsSO.aliasPassword`. Android request keystore/password values are used first; local runner env values are fallback only.
 - BuildCommit window platform changes reset default request options: Android uses `AndroidAab` and `GooglePlayInternal`; iOS uses `iOSXcodeProject` and `TestFlight`; Both uses `AndroidAabAndiOSXcodeProject` and `GooglePlayInternalAndTestFlight`.
 - App identifier request fields: `androidPackageName`, copied from `BuildSettingsSO.androidPackageName`, and `iosBundleId`, copied from `BuildSettingsSO.iosPackageName`. The workflow uses these request values for Google Play `packageName` and TestFlight `app_identifier`.
@@ -66,6 +67,7 @@ Read this file when:
 - Non-request credential source is the Mac runner local secret bundle selected by workflow `CI_SECRET_ROOT`; this project sets it to `/Users/lydia/workspace/build-automation`. BuildCommit requests must not carry runner-local paths. The bundle provides optional `ANDROID_KEYSTORE_PATH` and Android password fallbacks, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH`, `IOS_DEVELOPMENT_TEAM_ID`, `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_P8_PATH`, `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`, `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD`, `IOS_APP_STORE_PROVISIONING_PROFILE_DIR`, optional `IOS_APP_STORE_PROVISIONING_PROFILE_PATH`, `IOS_PROVISIONING_PROFILE_AUTO_GENERATE`, optional `IOS_KEYCHAIN_PASSWORD`, and optional `IOS_KEYCHAIN_PATH`. iOS export uses manual App Store signing from these local files.
 - Workflow Unity resolution calls the project-root `.github/scripts/resolve-unity-editor.sh`. The script reads `ProjectSettings/ProjectVersion.txt`, exports `UNITY_VERSION`, `UNITY_VERSION_WITH_REVISION`, and `UNITY_EXECUTABLE`, and fails early if that editor is not installed under `UNITY_HUB_EDITOR_ROOT`.
 - Workflow secret validation calls the project-root `.github/scripts/validate-local-runner-secrets.sh`. The package keeps source copies under `.github/scripts/`, and the AutoBuild workflow sync button copies them into the consuming project together with the workflow yml. Do not make pre-Unity shell steps depend on `Packages/` or `Library/PackageCache`.
+- Workflow private package access preparation calls the project-root `.github/scripts/prepare-actionfit-private-package-access.sh` before Unity starts. It configures GitHub HTTPS access from runner `gh auth` or from `CI_SECRET_ROOT/shared/github-package-read-token`, rewrites GitHub SSH package URLs to HTTPS, and preflights ActionFit GitHub package repositories listed in `Packages/manifest.json`.
 - Workflow artifact paths must not hardcode a consuming project name. Android Google Play upload copies the discovered AAB to `.build/google-play-upload/upload.aab`, and iOS archive uses `Builds/iOSArchive/BuildCommit.xcarchive`.
 - Google Play upload action input uses `tracks`, not deprecated `track`.
 - iOS archive signing passes a single `CODE_SIGN_IDENTITY` value. Do not add `CODE_SIGN_IDENTITY[sdk=iphoneos*]` to the xcodebuild command; Xcode can misparse that command-line key and look for a certificate named `iphoneos*]=Apple Distribution...`.
@@ -74,7 +76,7 @@ Read this file when:
 - Runner setup files live under `RunnerSetup/`: `setup-local-runner-secrets.sh`, `validate-local-runner-secrets.sh`, `LOCAL_RUNNER_SECRETS_GUIDE.md`, and `AI_MAC_STUDIO_BUILD_AUTOMATION_GUIDE.md`.
 - CI entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`.
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.
-- AutoBuild window workflow sync button copies `WorkflowTemplates/buildcommit-auto-build.yml` to `.github/workflows/buildcommit-auto-build.yml` and package `.github/scripts/*.sh` workflow scripts to project `.github/scripts/` after confirmation when any target differs.
+- AutoBuild window workflow sync copies `WorkflowTemplates/buildcommit-auto-build.yml` to `.github/workflows/buildcommit-auto-build.yml` and package `.github/scripts/*.sh` workflow scripts to project `.github/scripts/`. Manual sync asks for confirmation; BuildCommit auto sync runs without confirmation when `Auto Sync Build Files` is enabled.
 - Build Automation depends on `com.actionfit.buildsetting@1.1.3` or newer.
 - The storage commit alone should not trigger CI. The pushed `build/**` tag is the actual CI request.
 - `Platform=Both` is split by the workflow into Android and iOS jobs before calling `CIBuildEntry`.

@@ -12,20 +12,23 @@ namespace ActionFit.BuildAutomation.Editor
         internal const string WorkflowRelativePath = ".github/workflows/buildcommit-auto-build.yml";
         internal const string ValidateSecretsScriptRelativePath = ".github/scripts/validate-local-runner-secrets.sh";
         internal const string ResolveUnityScriptRelativePath = ".github/scripts/resolve-unity-editor.sh";
+        internal const string PreparePrivatePackageAccessScriptRelativePath = ".github/scripts/prepare-actionfit-private-package-access.sh";
 
         private const string PackageName = "com.actionfit.buildautomation";
         private static readonly string[] PackageAssetRelativePaths =
         {
             TemplateRelativePath,
             ValidateSecretsScriptRelativePath,
-            ResolveUnityScriptRelativePath
+            ResolveUnityScriptRelativePath,
+            PreparePrivatePackageAccessScriptRelativePath
         };
 
         private static readonly string[] ProjectAssetRelativePaths =
         {
             WorkflowRelativePath,
             ValidateSecretsScriptRelativePath,
-            ResolveUnityScriptRelativePath
+            ResolveUnityScriptRelativePath,
+            PreparePrivatePackageAccessScriptRelativePath
         };
 
         internal static bool IsWorkflowCurrent()
@@ -87,7 +90,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static string GetWorkflowAssetSummary()
         {
-            return $"{WorkflowRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityScriptRelativePath}";
+            return $"{WorkflowRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}";
         }
 
         private static bool PackageFileMatchesProjectFile(string packageRelativePath, string projectRelativePath)
