@@ -162,6 +162,7 @@ workspace/build-automation/
     android-signing.env
     ios-keychain.env
     github-package-read-token
+    slack-webhook-url
   profiles/
     actionfit/
       profile.env
@@ -222,6 +223,8 @@ gh auth setup-git --hostname github.com
 ```
 
 `gh auth`를 사용할 수 없는 runner라면 `shared/github-package-read-token` 파일의 첫 non-comment line에 private ActionFit package repo read 권한이 있는 fine-grained token을 넣습니다. workflow는 Unity 실행 전에 이 credential을 준비하고 `Packages/manifest.json`의 ActionFit GitHub package 접근을 `git ls-remote`로 사전 확인합니다.
+
+Slack 빌드 결과 알림을 사용하려면 `shared/slack-webhook-url` 파일의 첫 non-comment line에 Slack Incoming Webhook URL을 넣습니다. 이 파일이 없거나 비어 있으면 Android/iOS job 마지막의 알림 step은 조용히 skip됩니다.
 
 회사별 `profile.env`에는 실제 파일 경로와 iOS/App Store Connect 값을 넣습니다.
 

@@ -22,6 +22,7 @@ workspace/build-automation/
     android-signing.env
     ios-keychain.env
     github-package-read-token
+    slack-webhook-url
   profiles/
     actionfit/
       profile.env
@@ -96,6 +97,15 @@ REPLACE_WITH_READ_ONLY_GITHUB_TOKEN
 
 This file is used only when the runner user does not already have working `gh auth` Git credential setup. Put one read-only token on the first non-comment line. The token must be able to read private ActionFit GitHub package repositories used by `Packages/manifest.json`.
 
+`shared/slack-webhook-url`
+
+```bash
+# Optional. Slack Incoming Webhook URL for build result notifications.
+https://hooks.slack.com/services/...
+```
+
+This file is optional. When present, the workflow sends Android/iOS BuildCommit success and failure notifications to Slack. The message includes the project name, platform, `v{buildVersion}({bundleNo})`, result, upload target, distribution profile, ref, commit, and GitHub Actions run URL. Leave the file commented or empty to skip Slack notifications.
+
 `profiles/actionfit/profile.env`
 
 ```bash
@@ -169,6 +179,13 @@ Private package access:
 - Falls back to `shared/github-package-read-token` or `ACTIONFIT_GITHUB_PACKAGE_READ_TOKEN`.
 - Rewrites `git@github.com:` and `ssh://git@github.com/` package URLs to HTTPS so the same GitHub credential path can be used.
 - Checks private package repository access with `git ls-remote` before Unity package resolution.
+
+Slack notification:
+
+- Runs `notify-slack-build-result.sh` at the end of each Android/iOS build job with `if: always()`.
+- Reads `shared/slack-webhook-url` or `SLACK_BUILD_WEBHOOK_URL`.
+- Sends both success and failure results.
+- Skips without failing the build when the webhook file is missing, empty, invalid, or Slack POST fails.
 
 Android:
 

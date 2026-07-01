@@ -13,6 +13,7 @@ namespace ActionFit.BuildAutomation.Editor
         internal const string ValidateSecretsScriptRelativePath = ".github/scripts/validate-local-runner-secrets.sh";
         internal const string ResolveUnityScriptRelativePath = ".github/scripts/resolve-unity-editor.sh";
         internal const string PreparePrivatePackageAccessScriptRelativePath = ".github/scripts/prepare-actionfit-private-package-access.sh";
+        internal const string NotifySlackScriptRelativePath = ".github/scripts/notify-slack-build-result.sh";
 
         private const string PackageName = "com.actionfit.buildautomation";
         private static readonly string[] PackageAssetRelativePaths =
@@ -20,7 +21,8 @@ namespace ActionFit.BuildAutomation.Editor
             TemplateRelativePath,
             ValidateSecretsScriptRelativePath,
             ResolveUnityScriptRelativePath,
-            PreparePrivatePackageAccessScriptRelativePath
+            PreparePrivatePackageAccessScriptRelativePath,
+            NotifySlackScriptRelativePath
         };
 
         private static readonly string[] ProjectAssetRelativePaths =
@@ -28,7 +30,8 @@ namespace ActionFit.BuildAutomation.Editor
             WorkflowRelativePath,
             ValidateSecretsScriptRelativePath,
             ResolveUnityScriptRelativePath,
-            PreparePrivatePackageAccessScriptRelativePath
+            PreparePrivatePackageAccessScriptRelativePath,
+            NotifySlackScriptRelativePath
         };
 
         internal static bool IsWorkflowCurrent()
@@ -90,7 +93,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static string GetWorkflowAssetSummary()
         {
-            return $"{WorkflowRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}";
+            return $"{WorkflowRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {NotifySlackScriptRelativePath}";
         }
 
         private static bool PackageFileMatchesProjectFile(string packageRelativePath, string projectRelativePath)

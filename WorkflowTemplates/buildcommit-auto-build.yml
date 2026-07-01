@@ -35,6 +35,8 @@ jobs:
       distribution_profile: ${{ steps.detect.outputs.distribution_profile }}
       android_package_name: ${{ steps.detect.outputs.android_package_name }}
       ios_bundle_id: ${{ steps.detect.outputs.ios_bundle_id }}
+      build_version: ${{ steps.detect.outputs.build_version }}
+      bundle_no: ${{ steps.detect.outputs.bundle_no }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,6 +73,8 @@ jobs:
           distribution_profile = "Actionfit"
           android_package_name = ""
           ios_bundle_id = ""
+          build_version = ""
+          bundle_no = ""
 
           if should_build && File.exist?(request_path)
             request = JSON.parse(File.read(request_path))
@@ -102,6 +106,8 @@ jobs:
             distribution_profile = "Actionfit" if distribution_profile.empty?
             android_package_name = request["androidPackageName"].to_s.strip
             ios_bundle_id = request["iosBundleId"].to_s.strip
+            build_version = request["buildVersion"].to_s.strip
+            bundle_no = request["bundleNo"].to_s.strip
             should_build = false if platform == "None"
           else
             should_build = false
@@ -115,6 +121,8 @@ jobs:
             output.puts("distribution_profile=#{distribution_profile}")
             output.puts("android_package_name=#{android_package_name}")
             output.puts("ios_bundle_id=#{ios_bundle_id}")
+            output.puts("build_version=#{build_version}")
+            output.puts("bundle_no=#{bundle_no}")
           end
 
           puts "should_build=#{should_build}"
@@ -126,6 +134,8 @@ jobs:
           puts "distribution_profile=#{distribution_profile}"
           puts "android_package_name=#{android_package_name}"
           puts "ios_bundle_id=#{ios_bundle_id}"
+          puts "build_version=#{build_version}"
+          puts "bundle_no=#{bundle_no}"
           RUBY
 
   android-build:
@@ -275,6 +285,28 @@ jobs:
             Logs/**
             *.log
           if-no-files-found: warn
+
+      - name: Notify Slack Android result
+        if: always()
+        shell: bash
+        env:
+          BUILD_JOB_STATUS: ${{ job.status }}
+          BUILD_PLATFORM: Android
+          BUILD_PROJECT_NAME: ${{ github.event.repository.name }}
+          BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
+          BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
+          BUILD_UPLOAD_TARGET: ${{ needs.detect.outputs.upload_target }}
+          BUILD_DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
+          BUILD_REF_NAME: ${{ github.ref_name }}
+          BUILD_SHORT_SHA: ${{ github.sha }}
+          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ ! -f .github/scripts/notify-slack-build-result.sh ]; then
+            echo "::warning::Slack notification script not found; skipping."
+            exit 0
+          fi
+
+          bash .github/scripts/notify-slack-build-result.sh
 
   ios-build:
     name: iOS Build & Deploy
@@ -868,3 +900,25 @@ jobs:
             Builds/iOSExport/**
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Notify Slack iOS result
+        if: always()
+        shell: bash
+        env:
+          BUILD_JOB_STATUS: ${{ job.status }}
+          BUILD_PLATFORM: iOS
+          BUILD_PROJECT_NAME: ${{ github.event.repository.name }}
+          BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
+          BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
+          BUILD_UPLOAD_TARGET: ${{ needs.detect.outputs.upload_target }}
+          BUILD_DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
+          BUILD_REF_NAME: ${{ github.ref_name }}
+          BUILD_SHORT_SHA: ${{ github.sha }}
+          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ ! -f .github/scripts/notify-slack-build-result.sh ]; then
+            echo "::warning::Slack notification script not found; skipping."
+            exit 0
+          fi
+
+          bash .github/scripts/notify-slack-build-result.sh

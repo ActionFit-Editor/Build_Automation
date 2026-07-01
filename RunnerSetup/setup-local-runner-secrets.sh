@@ -54,6 +54,11 @@ write_if_missing "$secret_root/shared/github-package-read-token" \
   "# Prefer gh auth setup-git on the runner user. If that is unavailable, put one fine-grained token on the first non-comment line." \
   "# Required access: read-only Contents access to private ActionFit package repositories."
 
+write_if_missing "$secret_root/shared/slack-webhook-url" \
+  "# Optional Slack Incoming Webhook URL for BuildCommit success/failure notifications." \
+  "# Put one https://hooks.slack.com/services/... URL on the first non-comment line." \
+  "# Leave this file commented or empty to skip Slack notifications."
+
 write_if_missing "$secret_root/profiles/actionfit/profile.env" \
   "ANDROID_KEYSTORE_PATH=\"$secret_root/profiles/actionfit/android/upload.keystore\"" \
   "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH=\"$secret_root/profiles/actionfit/android/google-play-service-account.json\"" \
@@ -93,6 +98,7 @@ Next:
      - $secret_root/shared/android-signing.env
      - $secret_root/shared/ios-keychain.env
      - $secret_root/shared/github-package-read-token (optional, only when gh auth is unavailable)
+     - $secret_root/shared/slack-webhook-url (optional, for Slack build notifications)
      - $secret_root/profiles/actionfit/profile.env
      - $secret_root/profiles/actionfit/android-signing.env (optional override)
      - $secret_root/profiles/stormborn/profile.env
