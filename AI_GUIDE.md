@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.16`
+- Current package version at generation time: `1.0.17`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -69,6 +69,7 @@ Read this file when:
 - Workflow secret validation calls the project-root `.github/scripts/validate-local-runner-secrets.sh`. The package keeps source copies under `.github/scripts/`, and the AutoBuild workflow sync button copies them into the consuming project together with the workflow yml. Do not make pre-Unity shell steps depend on `Packages/` or `Library/PackageCache`.
 - Workflow private package access preparation calls the project-root `.github/scripts/prepare-actionfit-private-package-access.sh` before Unity starts. It configures GitHub HTTPS access from runner `gh auth` or from `CI_SECRET_ROOT/shared/github-package-read-token`, rewrites GitHub SSH package URLs to HTTPS, and preflights ActionFit GitHub package repositories listed in `Packages/manifest.json`.
 - Workflow artifact paths must not hardcode a consuming project name. Android Google Play upload copies the discovered AAB to `.build/google-play-upload/upload.aab`, and iOS archive uses `Builds/iOSArchive/BuildCommit.xcarchive`.
+- Android artifact upload is intentionally slim: upload AAB files from `.build/google-play-upload/*.aab` and `Builds/**/*.aab` with `compression-level: 0`, and upload logs as a separate artifact. Do not upload `Builds/**`, because Unity/Gradle intermediate output can contain hundreds of files and stall artifact upload.
 - Google Play upload action input uses `tracks`, not deprecated `track`.
 - iOS archive signing passes a single `CODE_SIGN_IDENTITY` value. Do not add `CODE_SIGN_IDENTITY[sdk=iphoneos*]` to the xcodebuild command; Xcode can misparse that command-line key and look for a certificate named `iphoneos*]=Apple Distribution...`.
 - The Android and iOS workflows restore the Unity `Library` cache with `actions/cache/restore` only. Do not use the combined `actions/cache` save step in mobile deploy jobs, because cache post-save can hold or fail an otherwise successful upload.

@@ -20,19 +20,17 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- `.github/scripts/prepare-actionfit-private-package-access.sh`\uB97C
-    \uCD94\uAC00\uD574 Unity \uC2E4\uD589 \uC804\uC5D0 private GitHub UPM package
-    \uC811\uADFC \uAD8C\uD55C\uC744 \uC900\uBE44\uD569\uB2C8\uB2E4.\n- runner \uC0AC\uC6A9\uC790
-    \uACC4\uC815\uC758 `gh auth`\uB97C \uC6B0\uC120 \uC0AC\uC6A9\uD558\uACE0, \uC5C6\uC73C\uBA74
-    `CI_SECRET_ROOT/shared/github-package-read-token` \uB610\uB294 `ACTIONFIT_GITHUB_PACKAGE_READ_TOKEN`\uC73C\uB85C
-    GitHub credential helper\uB97C \uAD6C\uC131\uD569\uB2C8\uB2E4.\n- `git@github.com:`
-    \uBC0F `ssh://git@github.com/` package URL\uC744 HTTPS\uB85C rewrite\uD558\uACE0,
-    `Packages/manifest.json`\uC758 ActionFit GitHub package repo\uB97C `git ls-remote`\uB85C
-    \uC0AC\uC804 \uD655\uC778\uD569\uB2C8\uB2E4.\n- AutoBuild \uCC3D\uC5D0 \uAE30\uBCF8\uAC12
-    true\uC778 `Auto Sync Build Files` \uC635\uC158\uC744 \uCD94\uAC00\uD588\uC2B5\uB2C8\uB2E4.
-    \uCF1C\uC838 \uC788\uC73C\uBA74 `Commit, Tag & Push` \uC804\uC5D0 package workflow/scripts\uB97C
-    \uD504\uB85C\uC81D\uD2B8 `.github/`\uB85C \uC790\uB3D9 \uB3D9\uAE30\uD654\uD558\uACE0
-    \uAC19\uC740 \uC800\uC7A5 \uCEE4\uBC0B\uC5D0 \uD3EC\uD568\uD569\uB2C8\uB2E4.\n-
-    `Update GitHub Workflow`/auto sync \uB300\uC0C1\uC5D0 private package access
-    script\uB97C \uD3EC\uD568\uD588\uC2B5\uB2C8\uB2E4."
+  _releaseNote: "- Android BuildCommit artifact \uC5C5\uB85C\uB4DC\uC5D0\uC11C `Builds/**`
+    \uC804\uCCB4 \uC5C5\uB85C\uB4DC\uB97C \uC81C\uAC70\uD588\uC2B5\uB2C8\uB2E4. Unity/Gradle
+    \uC911\uAC04 \uC0B0\uCD9C\uBB3C \uC218\uBC31 \uAC1C\uAC00 artifact\uB85C \uC62C\uB77C\uAC00\uBA70
+    \uBA48\uCD94\uB294 \uBB38\uC81C\uB97C \uC904\uC785\uB2C8\uB2E4.\n- Android AAB
+    artifact\uB294 `.build/google-play-upload/*.aab`\uC640 `Builds/**/*.aab`\uB9CC
+    \uB300\uC0C1\uC73C\uB85C \uBD84\uB9AC\uD588\uC2B5\uB2C8\uB2E4. AAB \uC5C5\uB85C\uB4DC\uC5D0\uB294
+    `compression-level: 0`\uC744 \uC801\uC6A9\uD574 \uC555\uCD95 \uC2DC\uAC04\uB3C4
+    \uC904\uC785\uB2C8\uB2E4.\n- Android \uB85C\uADF8\uB294 `Android-BuildCommit-Logs`
+    artifact\uB85C \uB530\uB85C \uC5C5\uB85C\uB4DC\uD569\uB2C8\uB2E4. \uBE4C\uB4DC
+    \uC2E4\uD328 \uC2DC\uC5D0\uB3C4 \uB85C\uADF8\uB97C \uD655\uC778\uD558\uBA74\uC11C
+    AAB \uC0B0\uCD9C\uBB3C \uC5C5\uB85C\uB4DC \uBC94\uC704\uB294 \uC791\uAC8C \uC720\uC9C0\uD569\uB2C8\uB2E4.\n-
+    \uD328\uD0A4\uC9C0 workflow template\uACFC \uD504\uB85C\uC81D\uD2B8 `.github/workflows/buildcommit-auto-build.yml`\uC744
+    \uAC19\uC740 \uB0B4\uC6A9\uC73C\uB85C \uB9DE\uCDC4\uC2B5\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.buildsetting@1.1.3

@@ -255,13 +255,23 @@ jobs:
           tracks: internal
           status: completed
 
-      - name: Upload build artifact
+      - name: Upload Android AAB artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Android-BuildCommit-Build
+          name: Android-BuildCommit-AAB
           path: |
-            Builds/**
+            .build/google-play-upload/*.aab
+            Builds/**/*.aab
+          if-no-files-found: warn
+          compression-level: 0
+
+      - name: Upload Android logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-BuildCommit-Logs
+          path: |
             Logs/**
             *.log
           if-no-files-found: warn
