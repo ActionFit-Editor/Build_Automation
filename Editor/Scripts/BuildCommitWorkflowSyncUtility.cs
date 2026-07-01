@@ -10,15 +10,33 @@ namespace ActionFit.BuildAutomation.Editor
     {
         internal const string TemplateRelativePath = "WorkflowTemplates/buildcommit-auto-build.yml";
         internal const string WorkflowRelativePath = ".github/workflows/buildcommit-auto-build.yml";
-        internal const string ScriptTemplateRelativePath = ".github/scripts/validate-local-runner-secrets.sh";
-        internal const string ScriptRelativePath = ".github/scripts/validate-local-runner-secrets.sh";
+        internal const string ValidateSecretsScriptRelativePath = ".github/scripts/validate-local-runner-secrets.sh";
+        internal const string ResolveUnityScriptRelativePath = ".github/scripts/resolve-unity-editor.sh";
 
         private const string PackageName = "com.actionfit.buildautomation";
+        private static readonly string[] PackageAssetRelativePaths =
+        {
+            TemplateRelativePath,
+            ValidateSecretsScriptRelativePath,
+            ResolveUnityScriptRelativePath
+        };
+
+        private static readonly string[] ProjectAssetRelativePaths =
+        {
+            WorkflowRelativePath,
+            ValidateSecretsScriptRelativePath,
+            ResolveUnityScriptRelativePath
+        };
 
         internal static bool IsWorkflowCurrent()
         {
-            return PackageFileMatchesProjectFile(TemplateRelativePath, WorkflowRelativePath) &&
-                   PackageFileMatchesProjectFile(ScriptTemplateRelativePath, ScriptRelativePath);
+            for (int i = 0; i < PackageAssetRelativePaths.Length; i++)
+            {
+                if (!PackageFileMatchesProjectFile(PackageAssetRelativePaths[i], ProjectAssetRelativePaths[i]))
+                    return false;
+            }
+
+            return true;
         }
 
         internal static bool WorkflowExists()
@@ -28,41 +46,48 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static string GetStatusMessage()
         {
-            string templatePath = GetPackagePath(TemplateRelativePath);
-            string scriptTemplatePath = GetPackagePath(ScriptTemplateRelativePath);
-            string workflowPath = GetProjectPath(WorkflowRelativePath);
-            string scriptPath = GetProjectPath(ScriptRelativePath);
+            for (int i = 0; i < PackageAssetRelativePaths.Length; i++)
+            {
+                string packagePath = GetPackagePath(PackageAssetRelativePaths[i]);
+                if (string.IsNullOrEmpty(packagePath) || !File.Exists(packagePath))
+                    return $"Template missing: {PackageAssetRelativePaths[i]}";
+            }
 
-            if (string.IsNullOrEmpty(templatePath) || !File.Exists(templatePath))
-                return $"Template missing: {TemplateRelativePath}";
-
-            if (string.IsNullOrEmpty(scriptTemplatePath) || !File.Exists(scriptTemplatePath))
-                return $"Template missing: {ScriptTemplateRelativePath}";
-
-            if (!File.Exists(workflowPath) || !File.Exists(scriptPath))
-                return $"Workflow assets missing: {WorkflowRelativePath}, {ScriptRelativePath}";
+            for (int i = 0; i < ProjectAssetRelativePaths.Length; i++)
+            {
+                string projectPath = GetProjectPath(ProjectAssetRelativePaths[i]);
+                if (!File.Exists(projectPath))
+                    return $"Workflow asset missing: {ProjectAssetRelativePaths[i]}";
+            }
 
             return IsWorkflowCurrent()
-                ? $"Workflow assets are up to date: {WorkflowRelativePath}, {ScriptRelativePath}"
-                : $"Workflow assets differ from package templates: {WorkflowRelativePath}, {ScriptRelativePath}";
+                ? $"Workflow assets are up to date: {GetWorkflowAssetSummary()}"
+                : $"Workflow assets differ from package templates: {GetWorkflowAssetSummary()}";
         }
 
         internal static bool TrySync(out string message)
         {
-            if (!TrySyncPackageFile(TemplateRelativePath, WorkflowRelativePath, out string workflowMessage))
+            message = "";
+
+            for (int i = 0; i < PackageAssetRelativePaths.Length; i++)
             {
-                message = workflowMessage;
-                return false;
+                if (!TrySyncPackageFile(PackageAssetRelativePaths[i], ProjectAssetRelativePaths[i], out string assetMessage))
+                {
+                    message = assetMessage;
+                    return false;
+                }
+
+                if (!string.IsNullOrEmpty(message))
+                    message += "; ";
+                message += assetMessage;
             }
 
-            if (!TrySyncPackageFile(ScriptTemplateRelativePath, ScriptRelativePath, out string scriptMessage))
-            {
-                message = scriptMessage;
-                return false;
-            }
-
-            message = $"{workflowMessage}; {scriptMessage}";
             return true;
+        }
+
+        internal static string GetWorkflowAssetSummary()
+        {
+            return $"{WorkflowRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityScriptRelativePath}";
         }
 
         private static bool PackageFileMatchesProjectFile(string packageRelativePath, string projectRelativePath)

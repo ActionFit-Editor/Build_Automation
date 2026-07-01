@@ -373,7 +373,7 @@ namespace ActionFit.BuildAutomation.Editor
                 AddLog("[Workflow] Already up to date.");
                 EditorUtility.DisplayDialog(
                     "GitHub Workflow",
-                    $"{BuildCommitWorkflowSyncUtility.WorkflowRelativePath} and {BuildCommitWorkflowSyncUtility.ScriptRelativePath} are already up to date.",
+                    $"{BuildCommitWorkflowSyncUtility.GetWorkflowAssetSummary()} are already up to date.",
                     "OK");
                 Repaint();
                 return;
@@ -382,7 +382,7 @@ namespace ActionFit.BuildAutomation.Editor
             string action = BuildCommitWorkflowSyncUtility.WorkflowExists() ? "Overwrite" : "Create";
             if (!EditorUtility.DisplayDialog(
                     "Update GitHub Workflow",
-                    $"Copy the package workflow assets to:\n{BuildCommitWorkflowSyncUtility.WorkflowRelativePath}\n{BuildCommitWorkflowSyncUtility.ScriptRelativePath}\n\n{BuildCommitWorkflowSyncUtility.GetStatusMessage()}",
+                    $"Copy the package workflow assets to:\n{BuildCommitWorkflowSyncUtility.GetWorkflowAssetSummary()}\n\n{BuildCommitWorkflowSyncUtility.GetStatusMessage()}",
                     action,
                     "Cancel"))
                 return;

@@ -15,8 +15,7 @@ concurrency:
 
 # 프로젝트별 설정 — 다른 프로젝트로 재사용할 때 이 env 블록만 교체하면 된다.
 env:
-  UNITY_VERSION: "6000.2.6f2"
-  UNITY_EXECUTABLE: "/Applications/Unity/Hub/Editor/6000.2.6f2/Unity.app/Contents/MacOS/Unity"
+  UNITY_HUB_EDITOR_ROOT: "/Applications/Unity/Hub/Editor"
   DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer"
   CI_SECRET_ROOT: "/Users/actionfit/ci-secrets/build-automation"
   IOS_DISTRIBUTION_SIGNING_IDENTITY: "Apple Distribution"
@@ -140,13 +139,19 @@ jobs:
         with:
           lfs: true
 
+      - name: Resolve Unity editor
+        id: unity
+        shell: bash
+        run: |
+          bash .github/scripts/resolve-unity-editor.sh
+
       - name: Restore Unity Library cache
         uses: actions/cache/restore@v4
         with:
           path: Library
-          key: Library-macOS-Android-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
+          key: Library-macOS-Android-${{ steps.unity.outputs.unity_version }}-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
           restore-keys: |
-            Library-macOS-Android-
+            Library-macOS-Android-${{ steps.unity.outputs.unity_version }}-
 
       - name: Prepare Android BuildCommit request
         shell: bash
@@ -166,14 +171,6 @@ jobs:
           File.write(path, JSON.pretty_generate(request))
           puts "Prepared Android BuildCommit request: platform=#{request["platform"]}, buildKind=#{request["buildKind"]}"
           RUBY
-
-      - name: Check Unity executable
-        shell: bash
-        run: |
-          test -x "$UNITY_EXECUTABLE" || {
-            echo "::error::Unity executable not found: $UNITY_EXECUTABLE"
-            exit 1
-          }
 
       - name: Resolve local runner secrets
         id: local_secrets
@@ -275,13 +272,19 @@ jobs:
         with:
           lfs: true
 
+      - name: Resolve Unity editor
+        id: unity
+        shell: bash
+        run: |
+          bash .github/scripts/resolve-unity-editor.sh
+
       - name: Restore Unity Library cache
         uses: actions/cache/restore@v4
         with:
           path: Library
-          key: Library-macOS-iOS-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
+          key: Library-macOS-iOS-${{ steps.unity.outputs.unity_version }}-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
           restore-keys: |
-            Library-macOS-iOS-
+            Library-macOS-iOS-${{ steps.unity.outputs.unity_version }}-
 
       - name: Prepare iOS BuildCommit request
         shell: bash
@@ -297,14 +300,6 @@ jobs:
           File.write(path, JSON.pretty_generate(request))
           puts "Prepared iOS BuildCommit request: platform=#{request["platform"]}, buildKind=#{request["buildKind"]}"
           RUBY
-
-      - name: Check Unity executable
-        shell: bash
-        run: |
-          test -x "$UNITY_EXECUTABLE" || {
-            echo "::error::Unity executable not found: $UNITY_EXECUTABLE"
-            exit 1
-          }
 
       - name: Check Xcode tools
         shell: bash
