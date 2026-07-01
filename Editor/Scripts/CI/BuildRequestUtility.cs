@@ -38,6 +38,11 @@ namespace ActionFit.BuildAutomation.Editor
             }
 
             BuildRequestPlatform resolvedPlatform = ResolvePlatform(platform);
+            if (resolvedPlatform == BuildRequestPlatform.None)
+            {
+                Debug.LogError("[BuildRequestUtility] BuildRequest platform is not selected");
+                return null;
+            }
 
             return new BuildRequest
             {

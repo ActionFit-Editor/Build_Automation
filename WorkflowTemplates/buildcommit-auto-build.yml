@@ -77,6 +77,7 @@ jobs:
             request = JSON.parse(File.read(request_path))
             should_build = request["triggerSource"] == "BuildCommit"
             platform = {
+              "-1" => "None",
               "0" => "Current",
               "1" => "Android",
               "2" => "iOS",
@@ -102,6 +103,7 @@ jobs:
             distribution_profile = "Actionfit" if distribution_profile.empty?
             android_package_name = request["androidPackageName"].to_s.strip
             ios_bundle_id = request["iosBundleId"].to_s.strip
+            should_build = false if platform == "None"
           else
             should_build = false
           end
@@ -182,7 +184,8 @@ jobs:
           IOS_BUNDLE_ID_FROM_REQUEST: ${{ needs.detect.outputs.ios_bundle_id }}
         run: |
           set -euo pipefail
-          bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-secrets.sh \
+
+          bash .github/scripts/validate-local-runner-secrets.sh \
             "$DISTRIBUTION_PROFILE" \
             Android \
             "$UPLOAD_TARGET"
@@ -321,7 +324,8 @@ jobs:
           UPLOAD_TARGET: ${{ needs.detect.outputs.upload_target }}
         run: |
           set -euo pipefail
-          bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-secrets.sh \
+
+          bash .github/scripts/validate-local-runner-secrets.sh \
             "$DISTRIBUTION_PROFILE" \
             iOS \
             "$UPLOAD_TARGET"

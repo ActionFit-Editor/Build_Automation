@@ -6,6 +6,7 @@ namespace ActionFit.BuildAutomation.Editor
 {
     public enum BuildRequestPlatform
     {
+        None = -1,
         Current = 0,
         Android = 1,
         iOS = 2,
@@ -43,7 +44,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         public int schemaVersion = 8;
         public string triggerSource = BuildCommitTriggerSource;
-        public BuildRequestPlatform platform = BuildRequestPlatform.Current;
+        public BuildRequestPlatform platform = BuildRequestPlatform.None;
         public BuildRequestKind buildKind = BuildRequestKind.Default;
         public BuildRequestUploadTarget uploadTarget = BuildRequestUploadTarget.None;
         public BuildRequestDistributionProfile distributionProfile = BuildRequestDistributionProfile.Actionfit;

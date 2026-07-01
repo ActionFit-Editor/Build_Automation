@@ -21,7 +21,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         private BuildSettingsSO _settings; // 빌드 설정 SO
         private SerializedObject _serializedSettings; // SO 직렬화 래퍼
-        private BuildRequestPlatform _requestPlatform = BuildRequestPlatform.Current; // 원격 빌드 플랫폼
+        private BuildRequestPlatform _requestPlatform = BuildRequestPlatform.None; // 원격 빌드 플랫폼
         private BuildRequestKind _requestKind = BuildRequestKind.Default; // 원격 빌드 종류
         private BuildRequestUploadTarget _uploadTarget = BuildRequestUploadTarget.None; // 업로드 대상
         private BuildRequestDistributionProfile _distributionProfile = BuildRequestDistributionProfile.Actionfit; // 배포 계정 프로필
@@ -139,8 +139,11 @@ namespace ActionFit.BuildAutomation.Editor
             if (EditorGUI.EndChangeCheck())
                 ApplyDefaultRequestOptionsForPlatform(ResolvePlatform(_requestPlatform));
 
-            _requestKind = (BuildRequestKind)EditorGUILayout.EnumPopup("Build Kind", _requestKind);
-            _uploadTarget = (BuildRequestUploadTarget)EditorGUILayout.EnumPopup("Upload Target", _uploadTarget);
+            using (new EditorGUI.DisabledScope(!CanCreateBuildCommitRequest()))
+            {
+                _requestKind = (BuildRequestKind)EditorGUILayout.EnumPopup("Build Kind", _requestKind);
+                _uploadTarget = (BuildRequestUploadTarget)EditorGUILayout.EnumPopup("Upload Target", _uploadTarget);
+            }
 
             EditorGUI.BeginChangeCheck();
             _distributionProfile = (BuildRequestDistributionProfile)EditorGUILayout.EnumPopup("Distribution Profile", _distributionProfile);
@@ -156,6 +159,13 @@ namespace ActionFit.BuildAutomation.Editor
             GUI.enabled = true;
 
             BuildRequestPlatform resolvedPlatform = ResolvePlatform(_requestPlatform);
+            if (!CanCreateBuildCommitRequest())
+            {
+                EditorGUILayout.HelpBox(
+                    "Platform을 선택해야 BuildCommit request를 커밋할 수 있습니다.",
+                    MessageType.Warning);
+            }
+
             if (resolvedPlatform == BuildRequestPlatform.Android || resolvedPlatform == BuildRequestPlatform.Both)
             {
                 string androidAlias = BuildRequestUtility.GetAndroidKeyaliasName(_settings);
@@ -212,9 +222,12 @@ namespace ActionFit.BuildAutomation.Editor
             }
 
             GUI.backgroundColor = new Color(0.4f, 0.8f, 0.4f);
-            if (GUILayout.Button("Commit, Tag & Push", GUILayout.Height(30)))
+            using (new EditorGUI.DisabledScope(!CanCreateBuildCommitRequest()))
             {
-                ExecuteCommitTagAndPush();
+                if (GUILayout.Button("Commit, Tag & Push", GUILayout.Height(30)))
+                {
+                    ExecuteCommitTagAndPush();
+                }
             }
             GUI.backgroundColor = Color.white;
 
@@ -289,6 +302,17 @@ namespace ActionFit.BuildAutomation.Editor
 
             ApplySerializedIfModified();
 
+            if (!CanCreateBuildCommitRequest())
+            {
+                AddLog("[ERROR] Platform is not selected.");
+                EditorUtility.DisplayDialog(
+                    "Commit, Tag & Push",
+                    "Platform을 선택해야 BuildCommit request를 커밋할 수 있습니다.",
+                    "OK");
+                Repaint();
+                return;
+            }
+
             string version = _settings.buildVersion;
             string bundleNo = _settings.bundleNo;
             string commitMessage = CreateCommitMessage(version, bundleNo);
@@ -349,7 +373,7 @@ namespace ActionFit.BuildAutomation.Editor
                 AddLog("[Workflow] Already up to date.");
                 EditorUtility.DisplayDialog(
                     "GitHub Workflow",
-                    $"{BuildCommitWorkflowSyncUtility.WorkflowRelativePath} is already up to date.",
+                    $"{BuildCommitWorkflowSyncUtility.WorkflowRelativePath} and {BuildCommitWorkflowSyncUtility.ScriptRelativePath} are already up to date.",
                     "OK");
                 Repaint();
                 return;
@@ -358,7 +382,7 @@ namespace ActionFit.BuildAutomation.Editor
             string action = BuildCommitWorkflowSyncUtility.WorkflowExists() ? "Overwrite" : "Create";
             if (!EditorUtility.DisplayDialog(
                     "Update GitHub Workflow",
-                    $"Copy the package workflow template to:\n{BuildCommitWorkflowSyncUtility.WorkflowRelativePath}\n\n{BuildCommitWorkflowSyncUtility.GetStatusMessage()}",
+                    $"Copy the package workflow assets to:\n{BuildCommitWorkflowSyncUtility.WorkflowRelativePath}\n{BuildCommitWorkflowSyncUtility.ScriptRelativePath}\n\n{BuildCommitWorkflowSyncUtility.GetStatusMessage()}",
                     action,
                     "Cancel"))
                 return;
@@ -398,6 +422,8 @@ namespace ActionFit.BuildAutomation.Editor
             BuildRequestPlatform resolvedPlatform = ResolvePlatform(platform);
             switch (resolvedPlatform)
             {
+                case BuildRequestPlatform.None:
+                    return "none";
                 case BuildRequestPlatform.Android:
                     return "aos";
                 case BuildRequestPlatform.iOS:
@@ -407,6 +433,11 @@ namespace ActionFit.BuildAutomation.Editor
                 default:
                     return "current";
             }
+        }
+
+        private bool CanCreateBuildCommitRequest()
+        {
+            return _requestPlatform != BuildRequestPlatform.None;
         }
 
         private BuildRequestPlatform ResolvePlatform(BuildRequestPlatform platform)
@@ -508,6 +539,12 @@ namespace ActionFit.BuildAutomation.Editor
         // BuildCommit 커밋에 포함할 원격 빌드 요청 파일 생성
         private bool SaveBuildRequest()
         {
+            if (!CanCreateBuildCommitRequest())
+            {
+                AddLog("[ERROR] Platform is not selected.");
+                return false;
+            }
+
             var request = BuildRequestUtility.Create(
                 _settings,
                 _requestPlatform,

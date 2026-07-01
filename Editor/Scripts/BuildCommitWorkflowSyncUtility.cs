@@ -10,18 +10,15 @@ namespace ActionFit.BuildAutomation.Editor
     {
         internal const string TemplateRelativePath = "WorkflowTemplates/buildcommit-auto-build.yml";
         internal const string WorkflowRelativePath = ".github/workflows/buildcommit-auto-build.yml";
+        internal const string ScriptTemplateRelativePath = ".github/scripts/validate-local-runner-secrets.sh";
+        internal const string ScriptRelativePath = ".github/scripts/validate-local-runner-secrets.sh";
 
         private const string PackageName = "com.actionfit.buildautomation";
 
         internal static bool IsWorkflowCurrent()
         {
-            string templatePath = GetTemplatePath();
-            string workflowPath = GetWorkflowPath();
-
-            return !string.IsNullOrEmpty(templatePath) &&
-                   File.Exists(templatePath) &&
-                   File.Exists(workflowPath) &&
-                   FilesMatch(templatePath, workflowPath);
+            return PackageFileMatchesProjectFile(TemplateRelativePath, WorkflowRelativePath) &&
+                   PackageFileMatchesProjectFile(ScriptTemplateRelativePath, ScriptRelativePath);
         }
 
         internal static bool WorkflowExists()
@@ -31,56 +28,95 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static string GetStatusMessage()
         {
-            string templatePath = GetTemplatePath();
-            string workflowPath = GetWorkflowPath();
+            string templatePath = GetPackagePath(TemplateRelativePath);
+            string scriptTemplatePath = GetPackagePath(ScriptTemplateRelativePath);
+            string workflowPath = GetProjectPath(WorkflowRelativePath);
+            string scriptPath = GetProjectPath(ScriptRelativePath);
 
             if (string.IsNullOrEmpty(templatePath) || !File.Exists(templatePath))
                 return $"Template missing: {TemplateRelativePath}";
 
-            if (!File.Exists(workflowPath))
-                return $"Workflow missing: {WorkflowRelativePath}";
+            if (string.IsNullOrEmpty(scriptTemplatePath) || !File.Exists(scriptTemplatePath))
+                return $"Template missing: {ScriptTemplateRelativePath}";
 
-            return FilesMatch(templatePath, workflowPath)
-                ? $"Workflow is up to date: {WorkflowRelativePath}"
-                : $"Workflow differs from package template: {WorkflowRelativePath}";
+            if (!File.Exists(workflowPath) || !File.Exists(scriptPath))
+                return $"Workflow assets missing: {WorkflowRelativePath}, {ScriptRelativePath}";
+
+            return IsWorkflowCurrent()
+                ? $"Workflow assets are up to date: {WorkflowRelativePath}, {ScriptRelativePath}"
+                : $"Workflow assets differ from package templates: {WorkflowRelativePath}, {ScriptRelativePath}";
         }
 
         internal static bool TrySync(out string message)
         {
-            string templatePath = GetTemplatePath();
-            if (string.IsNullOrEmpty(templatePath) || !File.Exists(templatePath))
+            if (!TrySyncPackageFile(TemplateRelativePath, WorkflowRelativePath, out string workflowMessage))
             {
-                message = $"Template not found: {TemplateRelativePath}";
+                message = workflowMessage;
                 return false;
             }
 
-            string workflowPath = GetWorkflowPath();
-            string workflowDirectory = Path.GetDirectoryName(workflowPath);
-            if (!string.IsNullOrEmpty(workflowDirectory))
-                Directory.CreateDirectory(workflowDirectory);
-
-            if (File.Exists(workflowPath) && FilesMatch(templatePath, workflowPath))
+            if (!TrySyncPackageFile(ScriptTemplateRelativePath, ScriptRelativePath, out string scriptMessage))
             {
-                message = $"Already up to date: {WorkflowRelativePath}";
-                return true;
+                message = scriptMessage;
+                return false;
             }
 
-            File.Copy(templatePath, workflowPath, true);
-            message = $"Updated {WorkflowRelativePath} from {TemplateRelativePath}";
+            message = $"{workflowMessage}; {scriptMessage}";
             return true;
         }
 
-        private static string GetTemplatePath()
+        private static bool PackageFileMatchesProjectFile(string packageRelativePath, string projectRelativePath)
+        {
+            string packagePath = GetPackagePath(packageRelativePath);
+            string projectPath = GetProjectPath(projectRelativePath);
+
+            return !string.IsNullOrEmpty(packagePath) &&
+                   File.Exists(packagePath) &&
+                   File.Exists(projectPath) &&
+                   FilesMatch(packagePath, projectPath);
+        }
+
+        private static bool TrySyncPackageFile(string packageRelativePath, string projectRelativePath, out string message)
+        {
+            string packagePath = GetPackagePath(packageRelativePath);
+            if (string.IsNullOrEmpty(packagePath) || !File.Exists(packagePath))
+            {
+                message = $"Template not found: {packageRelativePath}";
+                return false;
+            }
+
+            string projectPath = GetProjectPath(projectRelativePath);
+            string projectDirectory = Path.GetDirectoryName(projectPath);
+            if (!string.IsNullOrEmpty(projectDirectory))
+                Directory.CreateDirectory(projectDirectory);
+
+            if (File.Exists(projectPath) && FilesMatch(packagePath, projectPath))
+            {
+                message = $"Already up to date: {projectRelativePath}";
+                return true;
+            }
+
+            File.Copy(packagePath, projectPath, true);
+            message = $"Updated {projectRelativePath} from {packageRelativePath}";
+            return true;
+        }
+
+        private static string GetPackagePath(string relativePath)
         {
             string packageRoot = GetPackageRoot();
             return string.IsNullOrEmpty(packageRoot)
                 ? null
-                : CombineRootPath(packageRoot, TemplateRelativePath);
+                : CombineRootPath(packageRoot, relativePath);
         }
 
         private static string GetWorkflowPath()
         {
-            return CombineRootPath(GetProjectRoot(), WorkflowRelativePath);
+            return GetProjectPath(WorkflowRelativePath);
+        }
+
+        private static string GetProjectPath(string relativePath)
+        {
+            return CombineRootPath(GetProjectRoot(), relativePath);
         }
 
         private static string GetPackageRoot()
