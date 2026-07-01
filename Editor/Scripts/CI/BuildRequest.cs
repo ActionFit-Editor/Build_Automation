@@ -42,7 +42,7 @@ namespace ActionFit.BuildAutomation.Editor
     {
         public const string BuildCommitTriggerSource = "BuildCommit";
 
-        public int schemaVersion = 9;
+        public int schemaVersion = 10;
         public string triggerSource = BuildCommitTriggerSource;
         public BuildRequestPlatform platform = BuildRequestPlatform.None;
         public BuildRequestKind buildKind = BuildRequestKind.Default;
@@ -63,7 +63,7 @@ namespace ActionFit.BuildAutomation.Editor
         public string appStoreConnectIssuerId;
         public string appStoreConnectApiKeyP8;
         public string androidKeyaliasName;
-        public string slackMentions;
+        public string[] slackMentions = Array.Empty<string>();
         public string sourceBranch;
         public string sourceCommit;
         public string createdAtUtc;

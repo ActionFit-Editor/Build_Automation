@@ -226,7 +226,7 @@ gh auth setup-git --hostname github.com
 
 Slack 빌드 결과 알림을 사용하려면 `shared/slack-webhook-url` 파일의 첫 non-comment line에 Slack Incoming Webhook URL을 넣습니다. 이 파일이 없거나 비어 있으면 Android/iOS job 마지막의 알림 step은 조용히 skip됩니다.
 
-Slack 사람 태그는 AutoBuild 창의 `Slack Mentions` 입력값이 `.build/build_request.json`의 `slackMentions`로 직렬화되어 workflow에 전달됩니다. 표시 이름 `@송제우`가 아니라 `U12345678` 또는 `<@U12345678>` 형식을 사용합니다. 여러 명은 공백이나 콤마로 구분할 수 있습니다.
+Slack 사람 태그는 AutoBuild 창의 `Slack Mentions` 행 목록에서 설정합니다. 각 행은 `Member ID`와 `Memo`를 가지며, `Member ID`만 `.build/build_request.json`의 `slackMentions` JSON 배열로 직렬화되어 workflow에 전달됩니다. `Memo`는 EditorPrefs에만 저장되어 AutoBuild 창에서 식별용으로 보입니다. 표시 이름 `@송제우`가 아니라 `U12345678` 또는 `<@U12345678>` 형식을 사용합니다.
 
 회사별 `profile.env`에는 실제 파일 경로와 iOS/App Store Connect 값을 넣습니다.
 

@@ -27,7 +27,7 @@ namespace ActionFit.BuildAutomation.Editor
         private BuildRequestKind _requestKind = BuildRequestKind.Default; // 원격 빌드 종류
         private BuildRequestUploadTarget _uploadTarget = BuildRequestUploadTarget.None; // 업로드 대상
         private BuildRequestDistributionProfile _distributionProfile = BuildRequestDistributionProfile.Actionfit; // 배포 계정 프로필
-        private string _slackMentions = ""; // Slack member IDs serialized into BuildCommit request
+        private readonly List<SlackMentionEntry> _slackMentions = new(); // Member IDs serialized into request; memo stays local.
         private bool _autoSyncWorkflowAssets = true; // Commit 전 패키지 workflow/scripts 자동 동기화
 
         private Vector2 _logScrollPosition; // 로그 스크롤 위치
@@ -154,12 +154,7 @@ namespace ActionFit.BuildAutomation.Editor
             if (EditorGUI.EndChangeCheck())
                 EditorPrefs.SetInt(DistributionProfilePrefsKey, (int)_distributionProfile);
 
-            EditorGUI.BeginChangeCheck();
-            _slackMentions = EditorGUILayout.TextField(
-                new GUIContent("Slack Mentions", "Slack member IDs for build notifications. Use U12345678 or <@U12345678>; separate multiple users with spaces or commas."),
-                _slackMentions);
-            if (EditorGUI.EndChangeCheck())
-                EditorPrefs.SetString(SlackMentionsPrefsKey, _slackMentions ?? "");
+            DrawSlackMentions();
 
             string version = _serializedSettings.FindProperty("buildVersion").stringValue;
             string bundleNo = _serializedSettings.FindProperty("bundleNo").stringValue;
@@ -213,6 +208,63 @@ namespace ActionFit.BuildAutomation.Editor
             {
                 UpdateWorkflowFile();
             }
+        }
+
+        private void DrawSlackMentions()
+        {
+            EditorGUILayout.Space(4);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField(
+                    new GUIContent("Slack Mentions", "Add one Slack member per row. Only Member ID values are serialized into the BuildCommit request. Memo is saved locally in this editor window."),
+                    EditorStyles.boldLabel);
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("+", GUILayout.Width(28)))
+                {
+                    _slackMentions.Add(new SlackMentionEntry());
+                    SaveSlackMentions();
+                }
+            }
+
+            if (_slackMentions.Count == 0)
+            {
+                EditorGUILayout.HelpBox("Optional. Add Slack member IDs to mention in build result notifications.", MessageType.None);
+                return;
+            }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("Member ID", EditorStyles.miniBoldLabel, GUILayout.Width(170));
+                EditorGUILayout.LabelField("Memo", EditorStyles.miniBoldLabel);
+                GUILayout.Space(32);
+            }
+
+            bool changed = false;
+            int removeIndex = -1;
+            for (int i = 0; i < _slackMentions.Count; i++)
+            {
+                var entry = _slackMentions[i];
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUI.BeginChangeCheck();
+                    entry.MemberId = EditorGUILayout.TextField(entry.MemberId ?? "", GUILayout.Width(170));
+                    entry.Memo = EditorGUILayout.TextField(entry.Memo ?? "");
+                    if (EditorGUI.EndChangeCheck())
+                        changed = true;
+
+                    if (GUILayout.Button("-", GUILayout.Width(28)))
+                        removeIndex = i;
+                }
+            }
+
+            if (removeIndex >= 0)
+            {
+                _slackMentions.RemoveAt(removeIndex);
+                changed = true;
+            }
+
+            if (changed)
+                SaveSlackMentions();
         }
 
         private void DrawLocalRunnerSecretNotice(BuildRequestPlatform resolvedPlatform)
@@ -301,8 +353,78 @@ namespace ActionFit.BuildAutomation.Editor
             if (System.Enum.IsDefined(typeof(BuildRequestDistributionProfile), savedProfile))
                 _distributionProfile = (BuildRequestDistributionProfile)savedProfile;
 
-            _slackMentions = EditorPrefs.GetString(SlackMentionsPrefsKey, "");
+            LoadSlackMentions();
             _autoSyncWorkflowAssets = EditorPrefs.GetBool(AutoSyncWorkflowAssetsPrefsKey, true);
+        }
+
+        private void LoadSlackMentions()
+        {
+            _slackMentions.Clear();
+
+            string saved = EditorPrefs.GetString(SlackMentionsPrefsKey, "");
+            if (string.IsNullOrWhiteSpace(saved)) return;
+
+            string trimmed = saved.TrimStart();
+            if (trimmed.StartsWith("{"))
+            {
+                try
+                {
+                    var prefs = JsonUtility.FromJson<SlackMentionPrefs>(saved);
+                    if (prefs?.Entries != null)
+                    {
+                        foreach (var entry in prefs.Entries)
+                        {
+                            if (entry == null) continue;
+                            _slackMentions.Add(new SlackMentionEntry
+                            {
+                                MemberId = entry.MemberId ?? "",
+                                Memo = entry.Memo ?? ""
+                            });
+                        }
+                    }
+                    return;
+                }
+                catch
+                {
+                    _slackMentions.Clear();
+                }
+            }
+
+            foreach (string token in SplitSlackMentionText(saved))
+                _slackMentions.Add(new SlackMentionEntry { MemberId = token });
+            SaveSlackMentions();
+        }
+
+        private void SaveSlackMentions()
+        {
+            var prefs = new SlackMentionPrefs
+            {
+                Entries = _slackMentions.ToArray()
+            };
+            EditorPrefs.SetString(SlackMentionsPrefsKey, JsonUtility.ToJson(prefs));
+        }
+
+        private string[] GetSlackMentionMemberIds()
+        {
+            var result = new List<string>();
+            foreach (var entry in _slackMentions)
+            {
+                string memberId = entry?.MemberId?.Trim();
+                if (string.IsNullOrEmpty(memberId) || result.Contains(memberId)) continue;
+                result.Add(memberId);
+            }
+
+            return result.ToArray();
+        }
+
+        private static string[] SplitSlackMentionText(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return new string[0];
+            return value
+                .Replace(",", " ")
+                .Replace("\r", " ")
+                .Replace("\n", " ")
+                .Split(new[] { ' ', '\t' }, System.StringSplitOptions.RemoveEmptyEntries);
         }
 
         // PlayerSettings에 버전/번들ID 적용
@@ -605,7 +727,7 @@ namespace ActionFit.BuildAutomation.Editor
                 _requestKind,
                 _uploadTarget,
                 _distributionProfile,
-                _slackMentions);
+                GetSlackMentionMemberIds());
             if (request == null) return false;
 
             bool saved = BuildRequestUtility.Save(request);
@@ -669,6 +791,19 @@ namespace ActionFit.BuildAutomation.Editor
             _serializedSettings.ApplyModifiedProperties();
             EditorUtility.SetDirty(_settings);
             AssetDatabase.SaveAssets();
+        }
+
+        [System.Serializable]
+        private sealed class SlackMentionPrefs
+        {
+            public SlackMentionEntry[] Entries = new SlackMentionEntry[0];
+        }
+
+        [System.Serializable]
+        private sealed class SlackMentionEntry
+        {
+            public string MemberId = "";
+            public string Memo = "";
         }
 
         #endregion

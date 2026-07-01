@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using ActionFit.BuildSetting.Editor;
 using UnityEditor;
@@ -30,7 +31,7 @@ namespace ActionFit.BuildAutomation.Editor
             BuildRequestKind buildKind,
             BuildRequestUploadTarget uploadTarget,
             BuildRequestDistributionProfile distributionProfile,
-            string slackMentions = "")
+            string[] slackMentions = null)
         {
             if (settings == null)
             {
@@ -165,15 +166,19 @@ namespace ActionFit.BuildAutomation.Editor
             return result == placeholder ? "" : result;
         }
 
-        private static string NormalizeSlackMentions(string value)
+        private static string[] NormalizeSlackMentions(string[] values)
         {
-            if (string.IsNullOrWhiteSpace(value)) return "";
+            if (values == null || values.Length == 0) return Array.Empty<string>();
 
-            return string.Join(" ", value
-                .Replace(",", " ")
-                .Replace("\r", " ")
-                .Replace("\n", " ")
-                .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries));
+            var mentions = new List<string>();
+            foreach (string value in values)
+            {
+                string mention = value?.Trim();
+                if (string.IsNullOrEmpty(mention) || mentions.Contains(mention)) continue;
+                mentions.Add(mention);
+            }
+
+            return mentions.ToArray();
         }
 
         public static bool Save(BuildRequest request)

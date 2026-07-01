@@ -110,7 +110,13 @@ jobs:
             ios_bundle_id = request["iosBundleId"].to_s.strip
             build_version = request["buildVersion"].to_s.strip
             bundle_no = request["bundleNo"].to_s.strip
-            slack_mentions = request["slackMentions"].to_s.strip.gsub(/[,\s]+/, " ")
+            raw_slack_mentions = request["slackMentions"]
+            slack_mentions = case raw_slack_mentions
+                             when Array
+                               raw_slack_mentions.map(&:to_s).join(" ")
+                             else
+                               raw_slack_mentions.to_s
+                             end.strip.gsub(/[,\s]+/, " ")
             should_build = false if platform == "None"
           else
             should_build = false

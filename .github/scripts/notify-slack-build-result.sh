@@ -130,9 +130,7 @@ mentions = raw_mentions
   .join(" ")
 
 lines = [
-  "[#{status_symbol}] #{project_name} #{platform} BuildCommit #{status_label} - #{version_label}",
-  "Platform: #{platform}",
-  "Result: #{status_label}"
+  "[#{status_symbol}] #{project_name} #{platform} BuildCommit #{status_label} - #{version_label}"
 ]
 
 lines.unshift(mentions) unless mentions.empty?

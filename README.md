@@ -10,7 +10,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 {
   "dependencies": {
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.3",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.19"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.20"
   }
 }
 ```
@@ -68,8 +68,15 @@ Android package name은 `BuildSettingsSO.androidPackageName`, iOS bundle id는 `
 7. `Build Kind`, `Upload Target`, `Distribution Profile`을 확인합니다. Platform 선택 시 기본값이 자동 세팅됩니다.
 8. `Auto Sync Build Files`는 기본 ON입니다. ON이면 `Commit, Tag & Push` 실행 시 `.github/workflows`와 `.github/scripts`가 자동 동기화됩니다.
 9. Slack 알림이 필요하면 Mac runner 로컬 시크릿 번들에 `shared/slack-webhook-url`을 설정합니다.
-10. 사람 태그가 필요하면 AutoBuild 창의 `Slack Mentions`에 Slack member ID를 입력합니다. 예: `U12345678`, `<@U23456789>`. 여러 명은 공백 또는 콤마로 구분합니다. 표시 이름 `@송제우`는 실제 멘션 알림으로 동작하지 않을 수 있습니다.
-11. `Commit, Tag & Push` 버튼을 실행합니다. `Slack Mentions` 값은 `.build/build_request.json`의 `slackMentions`로 직렬화되어 해당 BuildCommit 요청에 저장됩니다.
+10. 사람 태그가 필요하면 AutoBuild 창의 `Slack Mentions`에서 `+` 버튼으로 행을 추가하고 `Member ID`와 `Memo`를 입력합니다. `Member ID` 예: `U12345678`, `<@U23456789>`. 표시 이름 `@송제우`는 실제 멘션 알림으로 동작하지 않을 수 있습니다.
+11. `Commit, Tag & Push` 버튼을 실행합니다. `Slack Mentions`의 `Member ID` 값만 `.build/build_request.json`에 JSON 배열 `slackMentions`로 직렬화되어 해당 BuildCommit 요청에 저장됩니다. `Memo`는 EditorPrefs에만 저장되어 AutoBuild 창에서 식별용으로만 보입니다.
+
+```json
+"slackMentions": [
+  "U12345678",
+  "<@U23456789>"
+]
+```
 
 ## CI Build
 
@@ -79,7 +86,7 @@ Android package name은 `BuildSettingsSO.androidPackageName`, iOS bundle id는 `
 Unity -batchmode -quit -projectPath . -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest
 ```
 
-기본 GitHub Actions workflow template은 `WorkflowTemplates/buildcommit-auto-build.yml`에 있고, workflow가 호출하는 script 원본은 패키지의 `.github/scripts/`에 있습니다. `prepare-actionfit-private-package-access.sh`는 runner의 `gh auth` 또는 `CI_SECRET_ROOT/shared/github-package-read-token`으로 private GitHub UPM package 접근을 준비하고, `resolve-unity-editor.sh`는 `ProjectSettings/ProjectVersion.txt`에서 Unity 버전을 읽어 `UNITY_VERSION`, `UNITY_VERSION_WITH_REVISION`, `UNITY_EXECUTABLE`을 이후 step으로 전달하고, `validate-local-runner-secrets.sh`는 Mac runner secret bundle을 검증합니다. `notify-slack-build-result.sh`는 Android/iOS job 마지막에 실행되어 `CI_SECRET_ROOT/shared/slack-webhook-url`이 있을 때 짧은 빌드 결과를 Slack으로 보냅니다. BuildCommit request의 `slackMentions` 값이 있으면 여러 Slack member ID를 메시지 첫 줄에 붙입니다. 프로젝트에서 사용하려면 workflow는 `.github/workflows/buildcommit-auto-build.yml`로, scripts는 `.github/scripts/`로 복사한 뒤 Unity Hub root, Xcode 경로 같은 프로젝트별 env 값을 조정합니다.
+기본 GitHub Actions workflow template은 `WorkflowTemplates/buildcommit-auto-build.yml`에 있고, workflow가 호출하는 script 원본은 패키지의 `.github/scripts/`에 있습니다. `prepare-actionfit-private-package-access.sh`는 runner의 `gh auth` 또는 `CI_SECRET_ROOT/shared/github-package-read-token`으로 private GitHub UPM package 접근을 준비하고, `resolve-unity-editor.sh`는 `ProjectSettings/ProjectVersion.txt`에서 Unity 버전을 읽어 `UNITY_VERSION`, `UNITY_VERSION_WITH_REVISION`, `UNITY_EXECUTABLE`을 이후 step으로 전달하고, `validate-local-runner-secrets.sh`는 Mac runner secret bundle을 검증합니다. `notify-slack-build-result.sh`는 Android/iOS job 마지막에 실행되어 `CI_SECRET_ROOT/shared/slack-webhook-url`이 있을 때 짧은 빌드 결과를 Slack으로 보냅니다. BuildCommit request의 `slackMentions` 배열이 있으면 여러 Slack member ID를 메시지 첫 줄에 붙입니다. 프로젝트에서 사용하려면 workflow는 `.github/workflows/buildcommit-auto-build.yml`로, scripts는 `.github/scripts/`로 복사한 뒤 Unity Hub root, Xcode 경로 같은 프로젝트별 env 값을 조정합니다.
 `AutoBuild` 창의 `Update GitHub Workflow` 버튼은 패키지의 workflow template과 script templates를 프로젝트 루트의 `.github/workflows/buildcommit-auto-build.yml`, `.github/scripts/`로 복사합니다. 기존 파일이 template과 다르면 확인창을 띄운 뒤 덮어씁니다.
 
 workflow는 macOS self-hosted runner 기준입니다. runner에는 `self-hosted`, `macOS`, `unity-mobile` 라벨이 있어야 하며, 같은 Mac에서 Unity CLI로 Android/iOS를 빌드합니다. `Platform=Both` 요청은 workflow가 Android job과 iOS job으로 나눠 `.build/build_request.json`의 platform 값을 임시 변환한 뒤 `CIBuildEntry.BuildFromRequest`를 각각 호출합니다.
