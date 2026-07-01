@@ -131,17 +131,18 @@ workflow는 runner에 미리 설치된 login keychain 상태를 전제로 하지
 - App Store Connect API key `.p8`
 
 이 프로젝트의 기본 Actionfit Team ID는 `49W7A8489P`입니다. workflow는 BuildCommit의 `Distribution Profile`에 따라 로컬 시크릿 번들의 `profiles/<profile>/profile.env`에서 `IOS_DEVELOPMENT_TEAM_ID`를 읽고, 이 값을 `xcodebuild`의 `DEVELOPMENT_TEAM`으로 넘깁니다.
+`.p12`도 같은 Team ID의 Apple Distribution identity여야 합니다. 예를 들어 Actionfit 빌드는 `Apple Distribution: ACTIONFIT Ltd. (49W7A8489P)` identity와 private key가 들어 있는 `.p12`를 사용해야 합니다.
 
 App Store Connect API key는 TestFlight upload에 사용됩니다. signing/export는 로컬 `.p12`와 `.mobileprovision`으로 처리하므로 Mac Studio로 이전할 때도 같은 로컬 시크릿 번들을 옮기면 됩니다.
 
 ## 6. 로컬 시크릿 번들 준비
 
-self-hosted runner는 회사 credential을 GitHub Secrets가 아니라 Mac 로컬 파일에서 읽습니다. 기본 경로는 runner를 실행하는 macOS 사용자의 `$HOME/ci-secrets/cat-merge-cafe`입니다. 다른 경로를 써야 할 때만 workflow env나 runner service env에 `CI_SECRET_ROOT`를 지정합니다.
+self-hosted runner는 회사 credential을 GitHub Secrets가 아니라 Mac 로컬 파일에서 읽습니다. 기준 경로는 `.github/workflows/buildcommit-auto-build.yml`의 `CI_SECRET_ROOT`이고, 현재 yml 값은 `/Users/actionfit/ci-secrets/build-automation`입니다. BuildCommit request에는 runner 로컬 경로를 넣지 않습니다.
 
 기본값:
 
 ```bash
-$HOME/ci-secrets/cat-merge-cafe
+$HOME/ci-secrets/build-automation
 ```
 
 runner를 실행하는 macOS 사용자 계정에서 템플릿을 생성합니다.
@@ -149,13 +150,13 @@ runner를 실행하는 macOS 사용자 계정에서 템플릿을 생성합니다
 ```bash
 cd /path/to/Cat_Merge_Cafe
 bash Packages/com.actionfit.buildautomation/RunnerSetup/setup-local-runner-secrets.sh \
-  "$HOME/ci-secrets/cat-merge-cafe"
+  "$HOME/ci-secrets/build-automation"
 ```
 
 생성되는 구조:
 
 ```text
-ci-secrets/cat-merge-cafe/
+ci-secrets/build-automation/
   shared/
     android-signing.env
     ios-keychain.env
@@ -169,7 +170,8 @@ ci-secrets/cat-merge-cafe/
       ios/
         AuthKey_Actionfit.p8
         AppleDistribution_Actionfit.p12
-        AppStore_Actionfit.mobileprovision
+        profiles/
+          com.actionfit.catmerge.ios.mobileprovision
     stormborn/
       profile.env
       android-signing.env
@@ -179,7 +181,8 @@ ci-secrets/cat-merge-cafe/
       ios/
         AuthKey_Stormborn.p8
         AppleDistribution_Stormborn.p12
-        AppStore_Stormborn.mobileprovision
+        profiles/
+          com.stormborn.example.ios.mobileprovision
 ```
 
 공통 Android 비밀번호 fallback은 `shared/android-signing.env`에 넣습니다.
@@ -212,29 +215,30 @@ IOS_KEYCHAIN_PATH=""
 회사별 `profile.env`에는 실제 파일 경로와 iOS/App Store Connect 값을 넣습니다.
 
 ```bash
-ANDROID_KEYSTORE_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/android/upload.keystore"
-GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/android/google-play-service-account.json"
+ANDROID_KEYSTORE_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/android/upload.keystore"
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/android/google-play-service-account.json"
 IOS_DEVELOPMENT_TEAM_ID="49W7A8489P"
 APP_STORE_CONNECT_API_KEY_ID="..."
 APP_STORE_CONNECT_ISSUER_ID="..."
-APP_STORE_CONNECT_API_KEY_P8_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/ios/AuthKey_Actionfit.p8"
-IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
+APP_STORE_CONNECT_API_KEY_P8_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/AuthKey_Actionfit.p8"
+IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
 IOS_DISTRIBUTION_CERTIFICATE_PASSWORD="..."
-IOS_APP_STORE_PROVISIONING_PROFILE_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/ios/AppStore_Actionfit.mobileprovision"
+IOS_APP_STORE_PROVISIONING_PROFILE_DIR="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/profiles"
+IOS_PROVISIONING_PROFILE_AUTO_GENERATE="true"
 ```
 
 이 service account가 Actionfit/Stormborn 양쪽 Play Console 앱에 업로드 권한을 가져야 합니다. Google Play `packageName`은 AutoBuild request의 `androidPackageName` 값을 사용하며, 이 값은 BuildSetting의 `BuildSettingsSO.androidPackageName`에서 옵니다.
 
 Android keystore 파일, alias 이름, signing 비밀번호는 새 AutoBuild request가 BuildSetting의 `BuildSettingsSO.keyStorePath`, `BuildSettingsSO.keyStoreAlias`, `BuildSettingsSO.keystorePassword`, `BuildSettingsSO.aliasPassword` 값에서 전달합니다. keystore 파일은 `androidKeystoreBase64`로 직렬화됩니다. 로컬 시크릿 번들의 `ANDROID_KEYSTORE_PATH`와 Android 비밀번호 env는 request에 값이 없는 수동/legacy 요청용 fallback입니다.
 
-Android package name과 iOS bundle id도 로컬 시크릿이나 workflow env에 넣지 않습니다. AutoBuild request가 BuildSetting의 `BuildSettingsSO.androidPackageName`, `BuildSettingsSO.iosPackageName` 값을 전달하고, workflow는 이 값을 Google Play `packageName`과 TestFlight `app_identifier`로 사용합니다.
+Android package name과 iOS bundle id도 로컬 시크릿이나 workflow env에 넣지 않습니다. AutoBuild request가 BuildSetting의 `BuildSettingsSO.androidPackageName`, `BuildSettingsSO.iosPackageName` 값을 전달하고, workflow는 이 값을 Google Play `packageName`, TestFlight `app_identifier`, 그리고 `ios/profiles/<iosBundleId>.mobileprovision` 선택에 사용합니다.
 
 권한을 잠급니다.
 
 ```bash
-chmod -R go-rwx "$HOME/ci-secrets/cat-merge-cafe"
-find "$HOME/ci-secrets/cat-merge-cafe" -type d -exec chmod 700 {} \;
-find "$HOME/ci-secrets/cat-merge-cafe" -type f -exec chmod 600 {} \;
+chmod -R go-rwx "$HOME/ci-secrets/build-automation"
+find "$HOME/ci-secrets/build-automation" -type d -exec chmod 700 {} \;
+find "$HOME/ci-secrets/build-automation" -type f -exec chmod 600 {} \;
 ```
 
 검증 명령:
@@ -349,7 +353,8 @@ Apple Silicon Mac에서는 `/opt/homebrew/bin/fastlane`, Intel Mac에서는 `/us
 
 - `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`가 실제 `.p12` 파일을 가리키는지
 - `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD`가 `.p12` export 비밀번호와 맞는지
-- `IOS_APP_STORE_PROVISIONING_PROFILE_PATH`가 request의 iOS bundle id용 App Store profile인지
+- `.p12` 안의 Apple Distribution identity가 `IOS_DEVELOPMENT_TEAM_ID`와 같은 팀인지
+- `IOS_APP_STORE_PROVISIONING_PROFILE_DIR/<iosBundleId>.mobileprovision` 파일이 있거나 `IOS_PROVISIONING_PROFILE_AUTO_GENERATE=true`인지
 - `.mobileprovision` 안에 위 `.p12`의 Apple Distribution 인증서가 포함되어 있는지
 
 ### Google Play upload 실패

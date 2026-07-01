@@ -6,18 +6,18 @@ The BuildCommit request contains distribution profile, platform, build kind, upl
 
 ## Directory Layout
 
-Default root:
+Workflow root:
 
 ```bash
-$HOME/ci-secrets/cat-merge-cafe
+$HOME/ci-secrets/build-automation
 ```
 
-The setup and validation scripts use the runner user's `$HOME` by default. Set `CI_SECRET_ROOT` only when the Mac Studio must store this bundle somewhere else.
+The workflow declares this path in `.github/workflows/buildcommit-auto-build.yml` as `CI_SECRET_ROOT` using the absolute runner path `/Users/actionfit/ci-secrets/build-automation`. BuildCommit requests do not carry runner-local paths. The setup and validation scripts keep the same path as their local fallback so manual terminal checks match CI.
 
 Expected files:
 
 ```bash
-ci-secrets/cat-merge-cafe/
+ci-secrets/build-automation/
   shared/
     android-signing.env
     ios-keychain.env
@@ -31,7 +31,8 @@ ci-secrets/cat-merge-cafe/
       ios/
         AuthKey_Actionfit.p8
         AppleDistribution_Actionfit.p12
-        AppStore_Actionfit.mobileprovision
+        profiles/
+          com.actionfit.catmerge.ios.mobileprovision
     stormborn/
       profile.env
       android-signing.env
@@ -41,7 +42,8 @@ ci-secrets/cat-merge-cafe/
       ios/
         AuthKey_Stormborn.p8
         AppleDistribution_Stormborn.p12
-        AppStore_Stormborn.mobileprovision
+        profiles/
+          com.stormborn.example.ios.mobileprovision
 ```
 
 ## Create Template Files
@@ -50,7 +52,7 @@ Run this from the repository root on the Mac runner:
 
 ```bash
 bash Packages/com.actionfit.buildautomation/RunnerSetup/setup-local-runner-secrets.sh \
-  "$HOME/ci-secrets/cat-merge-cafe"
+  "$HOME/ci-secrets/build-automation"
 ```
 
 Then copy the real secret files into the generated folders and fill the `.env` files.
@@ -87,30 +89,39 @@ Leave both values blank for the normal portable setup. The workflow will create 
 `profiles/actionfit/profile.env`
 
 ```bash
-ANDROID_KEYSTORE_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/android/upload.keystore"
-GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/android/google-play-service-account.json"
+ANDROID_KEYSTORE_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/android/upload.keystore"
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/android/google-play-service-account.json"
 IOS_DEVELOPMENT_TEAM_ID="49W7A8489P"
 APP_STORE_CONNECT_API_KEY_ID="..."
 APP_STORE_CONNECT_ISSUER_ID="..."
-APP_STORE_CONNECT_API_KEY_P8_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/ios/AuthKey_Actionfit.p8"
-IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
+APP_STORE_CONNECT_API_KEY_P8_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/AuthKey_Actionfit.p8"
+IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
 IOS_DISTRIBUTION_CERTIFICATE_PASSWORD="..."
-IOS_APP_STORE_PROVISIONING_PROFILE_PATH="$HOME/ci-secrets/cat-merge-cafe/profiles/actionfit/ios/AppStore_Actionfit.mobileprovision"
+IOS_APP_STORE_PROVISIONING_PROFILE_DIR="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/profiles"
+IOS_PROVISIONING_PROFILE_AUTO_GENERATE="true"
 ```
 
 `profiles/stormborn/profile.env` uses the same keys with Stormborn values.
 
 `ANDROID_KEYSTORE_PATH` is a fallback for manual or legacy requests where `.build/build_request.json` does not contain `androidKeystoreBase64`. New BuildCommit requests restore the Android keystore file from request base64 first.
 
-The App Store provisioning profile must be for the same bundle id as the BuildCommit request and must include the Apple Distribution certificate stored in `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`.
+The workflow resolves the App Store provisioning profile from the BuildCommit request bundle id. For `iosBundleId=com.actionfit.catmerge.ios`, the default local file is:
+
+```bash
+$HOME/ci-secrets/build-automation/profiles/actionfit/ios/profiles/com.actionfit.catmerge.ios.mobileprovision
+```
+
+The App Store provisioning profile must be for the same bundle id as the BuildCommit request and must include the Apple Distribution certificate stored in `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`. If the file is missing and `IOS_PROVISIONING_PROFILE_AUTO_GENERATE=true`, the workflow attempts `fastlane sigh` generation/download before archive/export.
+
+The `.p12` must contain the Apple Distribution identity and private key for the same team as `IOS_DEVELOPMENT_TEAM_ID`. The validation script imports the `.p12` into a temporary keychain and fails before the Unity build if the team does not match.
 
 ## Permissions
 
 The setup script applies these permissions:
 
 ```bash
-find "$HOME/ci-secrets/cat-merge-cafe" -type d -exec chmod 700 {} \;
-find "$HOME/ci-secrets/cat-merge-cafe" -type f -exec chmod 600 {} \;
+find "$HOME/ci-secrets/build-automation" -type d -exec chmod 700 {} \;
+find "$HOME/ci-secrets/build-automation" -type f -exec chmod 600 {} \;
 ```
 
 Only the macOS user running the GitHub Actions runner should be able to read these files.
@@ -154,7 +165,9 @@ iOS:
 - Injects `IOS_DEVELOPMENT_TEAM_ID` before Unity generates the Xcode project.
 - Uses `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, and `APP_STORE_CONNECT_API_KEY_P8_PATH` for TestFlight upload.
 - Creates a temporary keychain by default, imports `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`, and grants codesign access.
-- Validates that `IOS_APP_STORE_PROVISIONING_PROFILE_PATH` matches `IOS_DEVELOPMENT_TEAM_ID`, the request bundle id, and the imported Apple Distribution certificate.
+- Resolves the App Store provisioning profile from `IOS_APP_STORE_PROVISIONING_PROFILE_DIR/<iosBundleId>.mobileprovision`; `IOS_APP_STORE_PROVISIONING_PROFILE_PATH` is still supported as an explicit override.
+- If the resolved profile is missing and `IOS_PROVISIONING_PROFILE_AUTO_GENERATE=true`, runs `fastlane sigh` to create/download it.
+- Validates that the resolved provisioning profile matches `IOS_DEVELOPMENT_TEAM_ID`, the request bundle id, and the imported Apple Distribution certificate.
 - Exports the `.ipa` with manual App Store signing, using the installed profile name in `ExportOptions.plist`.
 
 ## Security Rule

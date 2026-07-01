@@ -10,7 +10,7 @@ The runner must build from BuildCommit requests without GitHub Secrets for mobil
 - `platform`: `Android`, `iOS`, or `Both`
 - build metadata such as version, bundle number, build kind, upload target, package name, bundle id, Android keystore bytes, Android alias, and Android signing passwords copied from BuildSetting
 
-The runner restores Android keystore bytes from the request first. Upload credentials, team ids, Apple Distribution `.p12` files, App Store provisioning profiles, optional keychain settings, and optional Android fallback files come from local files under `$HOME/ci-secrets/cat-merge-cafe` by default, or `CI_SECRET_ROOT` when explicitly set.
+The runner restores Android keystore bytes from the request first. Upload credentials, team ids, Apple Distribution `.p12` files, App Store provisioning profiles, optional keychain settings, and optional Android fallback files come from the local bundle selected by workflow `CI_SECRET_ROOT`. This project sets it to `/Users/actionfit/ci-secrets/build-automation`.
 
 ## Files In This Package
 
@@ -20,13 +20,13 @@ The runner restores Android keystore bytes from the request first. Upload creden
 - `RunnerSetup/LOCAL_RUNNER_SECRETS_GUIDE.md`: human-facing setup guide.
 - `MAC_SELF_HOSTED_RUNNER_SETUP.md`: full Mac runner setup guide.
 
-## Default Secret Root
+## Workflow Secret Root
 
 ```bash
-$HOME/ci-secrets/cat-merge-cafe
+$HOME/ci-secrets/build-automation
 ```
 
-Set `CI_SECRET_ROOT` in `.github/workflows/buildcommit-auto-build.yml` or in the runner service environment only when the bundle must live outside the runner user's home directory.
+Set `CI_SECRET_ROOT` in `.github/workflows/buildcommit-auto-build.yml`. Do not add this path to BuildCommit request JSON.
 
 ## Setup Steps
 
@@ -35,7 +35,7 @@ Set `CI_SECRET_ROOT` in `.github/workflows/buildcommit-auto-build.yml` or in the
 
 ```bash
 bash Packages/com.actionfit.buildautomation/RunnerSetup/setup-local-runner-secrets.sh \
-  "$HOME/ci-secrets/cat-merge-cafe"
+  "$HOME/ci-secrets/build-automation"
 ```
 
 3. Place real secret files and fill the `.env` files described in `LOCAL_RUNNER_SECRETS_GUIDE.md`.
@@ -53,7 +53,7 @@ bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-se
 - If Android Unity signing fails, check `androidKeystoreBase64`, `androidKeystoreFileName`, `androidKeyaliasName`, `androidKeystorePassword`, and `androidAliasPassword` from `.build/build_request.json`. `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASS`, and `ANDROID_KEYALIAS_PASS` are fallback env values only.
 - If Google Play upload fails, check `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH` and the package name in `.build/build_request.json`.
 - If iOS Xcode project has no team id, verify the `Resolve local runner secrets` step runs before Unity iOS build and exports `IOS_DEVELOPMENT_TEAM_ID`.
-- If iOS signing fails before archive/export, verify `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`, `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD`, `IOS_APP_STORE_PROVISIONING_PROFILE_PATH`, and that the `.mobileprovision` includes the `.p12` Apple Distribution certificate.
+- If iOS signing fails before archive/export, verify `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`, `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD`, `IOS_APP_STORE_PROVISIONING_PROFILE_DIR`, and that `ios/profiles/<iosBundleId>.mobileprovision` includes the `.p12` Apple Distribution certificate. If the file is missing, check `IOS_PROVISIONING_PROFILE_AUTO_GENERATE` and the `fastlane sigh` log.
 - If archive/export tries cloud-managed signing, verify `ExportOptions.plist` uses manual signing and that `xcodebuild -exportArchive` is not using `-allowProvisioningUpdates`.
 - If TestFlight upload fails, check `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_P8_PATH`, and the request `iosBundleId`.
 

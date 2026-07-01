@@ -18,6 +18,7 @@ env:
   UNITY_VERSION: "6000.2.6f2"
   UNITY_EXECUTABLE: "/Applications/Unity/Hub/Editor/6000.2.6f2/Unity.app/Contents/MacOS/Unity"
   DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer"
+  CI_SECRET_ROOT: "/Users/actionfit/ci-secrets/build-automation"
   IOS_DISTRIBUTION_SIGNING_IDENTITY: "Apple Distribution"
   IOS_XCODE_BUILD_PATH: Builds/iOS
   IOS_ARCHIVE_PATH: Builds/iOSArchive/Cat_Merge_Cafe.xcarchive
@@ -137,8 +138,8 @@ jobs:
         with:
           lfs: true
 
-      - name: Cache Unity Library
-        uses: actions/cache@v4
+      - name: Restore Unity Library cache
+        uses: actions/cache/restore@v4
         with:
           path: Library
           key: Library-macOS-Android-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
@@ -178,6 +179,7 @@ jobs:
         env:
           DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
           UPLOAD_TARGET: ${{ needs.detect.outputs.upload_target }}
+          IOS_BUNDLE_ID_FROM_REQUEST: ${{ needs.detect.outputs.ios_bundle_id }}
         run: |
           set -euo pipefail
           bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-secrets.sh \
@@ -270,8 +272,8 @@ jobs:
         with:
           lfs: true
 
-      - name: Cache Unity Library
-        uses: actions/cache@v4
+      - name: Restore Unity Library cache
+        uses: actions/cache/restore@v4
         with:
           path: Library
           key: Library-macOS-iOS-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
@@ -510,15 +512,22 @@ jobs:
             exit 1
           fi
 
-          if [ -z "${IOS_APP_STORE_PROVISIONING_PROFILE_PATH:-}" ] || [ ! -r "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH" ]; then
-            echo "::error::IOS_APP_STORE_PROVISIONING_PROFILE_PATH is not readable: ${IOS_APP_STORE_PROVISIONING_PROFILE_PATH:-}"
-            exit 1
-          fi
-
           if [ -z "${IOS_DISTRIBUTION_CERTIFICATE_PASSWORD:-}" ]; then
             echo "::error::IOS_DISTRIBUTION_CERTIFICATE_PASSWORD is required in the local runner secret bundle"
             exit 1
           fi
+
+          previous_default_keychain_file="$RUNNER_TEMP/ios-previous-default-keychain.txt"
+          previous_keychains_file="$RUNNER_TEMP/ios-previous-keychains.txt"
+          security default-keychain -d user | sed -E 's/^ *"?//; s/"?$//' > "$previous_default_keychain_file" || true
+          security list-keychains -d user | sed -E 's/^ *"?//; s/"?$//' > "$previous_keychains_file" || true
+
+          {
+            echo "IOS_KEYCHAIN_PATH=$keychain_path"
+            echo "IOS_SIGNING_KEYCHAIN_IS_TEMP=$keychain_is_temp"
+            echo "IOS_PREVIOUS_DEFAULT_KEYCHAIN_FILE=$previous_default_keychain_file"
+            echo "IOS_PREVIOUS_KEYCHAINS_FILE=$previous_keychains_file"
+          } >> "$GITHUB_ENV"
 
           echo "::add-mask::$keychain_password"
           echo "::add-mask::$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD"
@@ -530,8 +539,17 @@ jobs:
             security create-keychain -p "$keychain_password" "$keychain_path"
           fi
 
+          previous_keychains=()
+          if [ -r "$previous_keychains_file" ]; then
+            while IFS= read -r previous_keychain; do
+              if [ -n "$previous_keychain" ] && [ "$previous_keychain" != "$keychain_path" ]; then
+                previous_keychains+=("$previous_keychain")
+              fi
+            done < "$previous_keychains_file"
+          fi
+
           security default-keychain -d user -s "$keychain_path"
-          security list-keychains -d user -s "$keychain_path"
+          security list-keychains -d user -s "$keychain_path" "${previous_keychains[@]}"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
 
@@ -557,6 +575,39 @@ jobs:
 
           identity_sha="$(printf '%s\n' "$identity_line" | awk '{print $2}')"
           identity_name="$(printf '%s\n' "$identity_line" | sed -E 's/^.*"([^"]+)".*$/\1/')"
+
+          if [ -z "${IOS_APP_STORE_PROVISIONING_PROFILE_PATH:-}" ]; then
+            echo "::error::IOS_APP_STORE_PROVISIONING_PROFILE_PATH was not resolved from the local runner secret bundle"
+            exit 1
+          fi
+
+          if [ ! -r "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH" ]; then
+            if [ "${IOS_PROVISIONING_PROFILE_AUTO_GENERATE:-true}" != "true" ]; then
+              echo "::error::IOS_APP_STORE_PROVISIONING_PROFILE_PATH is not readable and auto generation is disabled: $IOS_APP_STORE_PROVISIONING_PROFILE_PATH"
+              exit 1
+            fi
+
+            profile_output_dir="$(dirname "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH")"
+            profile_output_file="$(basename "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH")"
+            portal_profile_name="${IOS_APP_STORE_PROVISIONING_PROFILE_NAME:-AppStore_${IOS_BUNDLE_ID}}"
+            mkdir -p "$profile_output_dir"
+
+            echo "::warning::App Store provisioning profile is missing. Attempting fastlane sigh generation: $IOS_APP_STORE_PROVISIONING_PROFILE_PATH"
+            "$FASTLANE_CMD" sigh \
+              --api_key_path "${{ steps.asc_key.outputs.api_key_json_path }}" \
+              --app_identifier "$IOS_BUNDLE_ID" \
+              --team_id "$IOS_DEVELOPMENT_TEAM_ID" \
+              --provisioning_name "$portal_profile_name" \
+              --output_path "$profile_output_dir" \
+              --filename "$profile_output_file" \
+              --skip_install true \
+              --platform ios
+          fi
+
+          if [ ! -r "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH" ]; then
+            echo "::error::App Store provisioning profile is still not readable after local lookup/generation: $IOS_APP_STORE_PROVISIONING_PROFILE_PATH"
+            exit 1
+          fi
 
           profile_plist="$RUNNER_TEMP/ios-app-store-profile.plist"
           security cms -D -i "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH" > "$profile_plist"
@@ -585,7 +636,7 @@ jobs:
             matched = false
             certs.elements.each("data") do |node|
               der = Base64.decode64(node.text.to_s)
-              sha = OpenSSL::X509::Certificate.new(der).digest(OpenSSL::Digest::SHA1.new).to_s.delete(":").upcase
+              sha = OpenSSL::Digest::SHA1.hexdigest(OpenSSL::X509::Certificate.new(der).to_der).upcase
               matched ||= sha == expected_sha
             end
             exit(matched ? 0 : 1)
@@ -600,8 +651,6 @@ jobs:
           cp "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH" "$installed_profile_path"
 
           {
-            echo "IOS_KEYCHAIN_PATH=$keychain_path"
-            echo "IOS_SIGNING_KEYCHAIN_IS_TEMP=$keychain_is_temp"
             echo "IOS_DISTRIBUTION_SIGNING_IDENTITY_SHA=$identity_sha"
             echo "IOS_DISTRIBUTION_SIGNING_IDENTITY_NAME=$identity_name"
             echo "IOS_APP_STORE_PROFILE_UUID=$profile_uuid"
@@ -636,8 +685,6 @@ jobs:
           archive_once() {
             local attempt="$1"
             echo "xcodebuild archive attempt ${attempt}/2" | tee -a Logs/xcode-archive.log
-            # Do not force CODE_SIGN_IDENTITY here. Automatic signing lets Xcode choose
-            # valid identities per target, while exportArchive handles App Store signing.
             xcodebuild "${xcode_container[@]}" \
               -scheme Unity-iPhone \
               -configuration Release \
@@ -645,7 +692,10 @@ jobs:
               -destination "generic/platform=iOS" \
               -archivePath "$IOS_ARCHIVE_PATH" \
               DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM_ID" \
-              CODE_SIGN_STYLE=Automatic \
+              CODE_SIGN_STYLE=Manual \
+              CODE_SIGN_IDENTITY="$IOS_DISTRIBUTION_SIGNING_IDENTITY_NAME" \
+              PROVISIONING_PROFILE_APP="$IOS_APP_STORE_PROFILE_UUID" \
+              PROVISIONING_PROFILE_SPECIFIER_APP="$IOS_APP_STORE_PROFILE_NAME" \
               OTHER_CODE_SIGN_FLAGS="--keychain $IOS_KEYCHAIN_PATH" \
               archive 2>&1 | tee -a Logs/xcode-archive.log
           }
@@ -735,20 +785,67 @@ jobs:
             rm -f "$IOS_APP_STORE_PROVISIONING_PROFILE_INSTALLED_PATH"
           fi
           if [ "${IOS_SIGNING_KEYCHAIN_IS_TEMP:-false}" = "true" ] && [ -n "${IOS_KEYCHAIN_PATH:-}" ]; then
-            security default-keychain -d user -s "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 || true
-            security list-keychains -d user -s "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 || true
+            restored_keychains=()
+            if [ -n "${IOS_PREVIOUS_KEYCHAINS_FILE:-}" ] && [ -r "$IOS_PREVIOUS_KEYCHAINS_FILE" ]; then
+              while IFS= read -r previous_keychain; do
+                if [ -n "$previous_keychain" ] && [ -e "$previous_keychain" ]; then
+                  restored_keychains+=("$previous_keychain")
+                fi
+              done < "$IOS_PREVIOUS_KEYCHAINS_FILE"
+            fi
+
+            if [ "${#restored_keychains[@]}" -eq 0 ]; then
+              for fallback_keychain in \
+                "$HOME/Library/Keychains/login.keychain-db" \
+                "$HOME/Library/Keychains/login_renamed_1.keychain-db"; do
+                if [ -e "$fallback_keychain" ]; then
+                  restored_keychains+=("$fallback_keychain")
+                  break
+                fi
+              done
+            fi
+
+            if [ "${#restored_keychains[@]}" -gt 0 ]; then
+              security list-keychains -d user -s "${restored_keychains[@]}" >/dev/null 2>&1 || true
+            fi
+
+            if [ -n "${IOS_PREVIOUS_DEFAULT_KEYCHAIN_FILE:-}" ] && [ -r "$IOS_PREVIOUS_DEFAULT_KEYCHAIN_FILE" ]; then
+              previous_default_keychain="$(sed -n '1p' "$IOS_PREVIOUS_DEFAULT_KEYCHAIN_FILE")"
+              if [ -n "$previous_default_keychain" ] && [ -e "$previous_default_keychain" ]; then
+                security default-keychain -d user -s "$previous_default_keychain" >/dev/null 2>&1 || true
+              elif [ "${#restored_keychains[@]}" -gt 0 ]; then
+                security default-keychain -d user -s "${restored_keychains[0]}" >/dev/null 2>&1 || true
+              fi
+            elif [ "${#restored_keychains[@]}" -gt 0 ]; then
+              security default-keychain -d user -s "${restored_keychains[0]}" >/dev/null 2>&1 || true
+            fi
+
             security delete-keychain "$IOS_KEYCHAIN_PATH" >/dev/null 2>&1 || true
           fi
 
-      - name: Upload build artifact
-        if: always()
+      - name: Upload iOS app artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: iOS-BuildCommit-Build
+          name: iOS-BuildCommit-App
           path: |
-            Builds/iOS/**
-            Builds/iOSArchive/**
-            Builds/iOSExport/**
+            Builds/iOSExport/**/*.ipa
+            Builds/iOSExport/*.plist
             Logs/**
             *.log
+            ExportOptions.plist
           if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload iOS diagnostic artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOS-BuildCommit-Diagnostics
+          path: |
+            Logs/**
+            *.log
+            ExportOptions.plist
+            Builds/iOSExport/**
+          if-no-files-found: warn
+          retention-days: 7

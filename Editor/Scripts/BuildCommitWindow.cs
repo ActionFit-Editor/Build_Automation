@@ -72,6 +72,8 @@ namespace ActionFit.BuildAutomation.Editor
             EditorGUILayout.Space(10);
             DrawBuildRequestOptions();
             EditorGUILayout.Space(10);
+            DrawWorkflowSync();
+            EditorGUILayout.Space(10);
             DrawButtons();
             EditorGUILayout.Space(8);
             DrawLog();
@@ -168,6 +170,21 @@ namespace ActionFit.BuildAutomation.Editor
             EditorGUILayout.HelpBox(
                 $"{BuildRequestUtility.RelativePath} will be committed as storage. GitHub Actions will build when the build tag is pushed.",
                 MessageType.Info);
+        }
+
+        private void DrawWorkflowSync()
+        {
+            EditorGUILayout.LabelField("GitHub Workflow", EditorStyles.boldLabel);
+
+            bool isCurrent = BuildCommitWorkflowSyncUtility.IsWorkflowCurrent();
+            EditorGUILayout.HelpBox(
+                BuildCommitWorkflowSyncUtility.GetStatusMessage(),
+                isCurrent ? MessageType.Info : MessageType.Warning);
+
+            if (GUILayout.Button("Update GitHub Workflow", GUILayout.Height(26)))
+            {
+                UpdateWorkflowFile();
+            }
         }
 
         private void DrawLocalRunnerSecretNotice(BuildRequestPlatform resolvedPlatform)
@@ -321,6 +338,41 @@ namespace ActionFit.BuildAutomation.Editor
 
             AddLog("Done.");
             Debug.Log($"[BuildCommitWindow] Commit, tag & push complete: {commitMessage}, {buildTag}");
+
+            Repaint();
+        }
+
+        private void UpdateWorkflowFile()
+        {
+            if (BuildCommitWorkflowSyncUtility.IsWorkflowCurrent())
+            {
+                AddLog("[Workflow] Already up to date.");
+                EditorUtility.DisplayDialog(
+                    "GitHub Workflow",
+                    $"{BuildCommitWorkflowSyncUtility.WorkflowRelativePath} is already up to date.",
+                    "OK");
+                Repaint();
+                return;
+            }
+
+            string action = BuildCommitWorkflowSyncUtility.WorkflowExists() ? "Overwrite" : "Create";
+            if (!EditorUtility.DisplayDialog(
+                    "Update GitHub Workflow",
+                    $"Copy the package workflow template to:\n{BuildCommitWorkflowSyncUtility.WorkflowRelativePath}\n\n{BuildCommitWorkflowSyncUtility.GetStatusMessage()}",
+                    action,
+                    "Cancel"))
+                return;
+
+            if (BuildCommitWorkflowSyncUtility.TrySync(out string message))
+            {
+                AddLog($"[Workflow] {message}");
+                Debug.Log($"[BuildCommitWindow] {message}");
+            }
+            else
+            {
+                AddLog($"[ERROR] {message}");
+                Debug.LogError($"[BuildCommitWindow] {message}");
+            }
 
             Repaint();
         }

@@ -125,8 +125,7 @@ namespace ActionFit.BuildAutomation.Editor
         }
 
 #if UNITY_ANDROID
-        // CI에서는 self-hosted runner 로컬 secret env를 우선 사용한다.
-        // legacy request 값은 과거 BuildCommit request 호환용 fallback이다.
+        // BuildCommit request signing values are preferred; local runner env values are fallback.
         private static void ApplyAndroidSigning(BuildRequest request)
         {
             string keystorePath = ResolveAndroidKeystorePath(request);

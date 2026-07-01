@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.10`
+- Current package version at generation time: `1.0.12`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -62,10 +62,14 @@ Read this file when:
 - BuildCommit window platform changes reset default request options: Android uses `AndroidAab` and `GooglePlayInternal`; iOS uses `iOSXcodeProject` and `TestFlight`; Both uses `AndroidAabAndiOSXcodeProject` and `GooglePlayInternalAndTestFlight`.
 - App identifier request fields: `androidPackageName`, copied from `BuildSettingsSO.androidPackageName`, and `iosBundleId`, copied from `BuildSettingsSO.iosPackageName`. The workflow uses these request values for Google Play `packageName` and TestFlight `app_identifier`.
 - Google Play JSON, App Store Connect P8, Apple Distribution `.p12`, App Store provisioning profiles, and optional keychain passwords must stay out of `.build/build_request.json`. Android keystore file bytes and signing passwords are intentionally serialized from BuildSetting for BuildCommit request testing.
-- Default non-request credential source is the Mac runner local secret bundle at `$HOME/ci-secrets/cat-merge-cafe`, or `CI_SECRET_ROOT` when explicitly set, resolved by `RunnerSetup/validate-local-runner-secrets.sh`. It provides optional `ANDROID_KEYSTORE_PATH` and Android password fallbacks, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH`, `IOS_DEVELOPMENT_TEAM_ID`, `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_P8_PATH`, `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`, `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD`, `IOS_APP_STORE_PROVISIONING_PROFILE_PATH`, optional `IOS_KEYCHAIN_PASSWORD`, and optional `IOS_KEYCHAIN_PATH`. iOS export uses manual App Store signing from these local files.
+- Non-request credential source is the Mac runner local secret bundle selected by workflow `CI_SECRET_ROOT`; this project sets it to `/Users/actionfit/ci-secrets/build-automation`. BuildCommit requests must not carry runner-local paths. The bundle provides optional `ANDROID_KEYSTORE_PATH` and Android password fallbacks, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH`, `IOS_DEVELOPMENT_TEAM_ID`, `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_P8_PATH`, `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`, `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD`, `IOS_APP_STORE_PROVISIONING_PROFILE_DIR`, optional `IOS_APP_STORE_PROVISIONING_PROFILE_PATH`, `IOS_PROVISIONING_PROFILE_AUTO_GENERATE`, optional `IOS_KEYCHAIN_PASSWORD`, and optional `IOS_KEYCHAIN_PATH`. iOS export uses manual App Store signing from these local files.
+- iOS archive signing passes a single `CODE_SIGN_IDENTITY` value. Do not add `CODE_SIGN_IDENTITY[sdk=iphoneos*]` to the xcodebuild command; Xcode can misparse that command-line key and look for a certificate named `iphoneos*]=Apple Distribution...`.
+- The Android and iOS workflows restore the Unity `Library` cache with `actions/cache/restore` only. Do not use the combined `actions/cache` save step in mobile deploy jobs, because cache post-save can hold or fail an otherwise successful upload.
+- iOS artifact upload is intentionally slim: successful runs upload only IPA/plist files and logs, while failed runs upload diagnostic logs and export output. Do not upload `Builds/iOS/**` or the full `.xcarchive` by default; those directories can exceed 1 GB and make an otherwise successful TestFlight run fail during artifact upload.
 - Runner setup files live under `RunnerSetup/`: `setup-local-runner-secrets.sh`, `validate-local-runner-secrets.sh`, `LOCAL_RUNNER_SECRETS_GUIDE.md`, and `AI_MAC_STUDIO_BUILD_AUTOMATION_GUIDE.md`.
 - CI entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`.
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.
+- AutoBuild window workflow sync button copies `WorkflowTemplates/buildcommit-auto-build.yml` to the project root `.github/workflows/buildcommit-auto-build.yml` after confirmation when the target file differs.
 - Build Automation depends on `com.actionfit.buildsetting@1.1.2` or newer.
 - The storage commit alone should not trigger CI. The pushed `build/**` tag is the actual CI request.
 - `Platform=Both` is split by the workflow into Android and iOS jobs before calling `CIBuildEntry`.
