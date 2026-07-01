@@ -42,7 +42,7 @@ bash Packages/com.actionfit.buildautomation/RunnerSetup/setup-local-runner-secre
 
 3. Place real secret files and fill the `.env` files described in `LOCAL_RUNNER_SECRETS_GUIDE.md`.
 4. Run `gh auth setup-git --hostname github.com` as the runner user, or put a read-only package token at `$HOME/workspace/build-automation/shared/github-package-read-token`.
-5. Optional: put the Slack Incoming Webhook URL at `$HOME/workspace/build-automation/shared/slack-webhook-url` to enable BuildCommit success/failure notifications.
+5. Optional: put the Slack Incoming Webhook URL at `$HOME/workspace/build-automation/shared/slack-webhook-url` to enable BuildCommit success/failure notifications. Slack member mentions are not stored in this local bundle; AutoBuild serializes them into `.build/build_request.json` as `slackMentions`.
 5. Validate before running GitHub Actions:
 
 ```bash
@@ -56,7 +56,7 @@ bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-se
 
 - If Android Unity signing fails, check `androidKeystoreBase64`, `androidKeystoreFileName`, `androidKeyaliasName`, `androidKeystorePassword`, and `androidAliasPassword` from `.build/build_request.json`. `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASS`, and `ANDROID_KEYALIAS_PASS` are fallback env values only.
 - If Unity package resolution fails for private GitHub packages, check the `Prepare private package access` step, `gh auth status --hostname github.com`, and `shared/github-package-read-token`.
-- If Slack notifications do not arrive, check the final `Notify Slack ... result` step and `shared/slack-webhook-url`. Missing or invalid webhook files are treated as notification skip, not build failure.
+- If Slack notifications do not arrive, check the final `Notify Slack ... result` step and `shared/slack-webhook-url`. Missing or invalid webhook files are treated as notification skip, not build failure. If notifications arrive without mentions, check `.build/build_request.json` `slackMentions` and use Slack member IDs such as `U12345678`, not display names.
 - If Google Play upload fails, check `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH` and the package name in `.build/build_request.json`.
 - If iOS Xcode project has no team id, verify the `Resolve local runner secrets` step runs before Unity iOS build and exports `IOS_DEVELOPMENT_TEAM_ID`.
 - If iOS signing fails before archive/export, verify `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`, `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD`, `IOS_APP_STORE_PROVISIONING_PROFILE_DIR`, and that `ios/profiles/<iosBundleId>.mobileprovision` includes the `.p12` Apple Distribution certificate. If the file is missing, check `IOS_PROVISIONING_PROFILE_AUTO_GENERATE` and the `fastlane sigh` log.

@@ -17,6 +17,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         private const string SOPrefsKey = BuildSettingsSO.SOPrefsKey; // BuildSettingsWindow와 동일한 키 공유
         private const string DistributionProfilePrefsKey = "BuildCommitDistributionProfile";
+        private const string SlackMentionsPrefsKey = "BuildCommitSlackMentions";
         private const string AutoSyncWorkflowAssetsPrefsKey = "BuildCommitAutoSyncWorkflowAssets";
         private const string BuildTagPrefix = "build";
 
@@ -26,6 +27,7 @@ namespace ActionFit.BuildAutomation.Editor
         private BuildRequestKind _requestKind = BuildRequestKind.Default; // 원격 빌드 종류
         private BuildRequestUploadTarget _uploadTarget = BuildRequestUploadTarget.None; // 업로드 대상
         private BuildRequestDistributionProfile _distributionProfile = BuildRequestDistributionProfile.Actionfit; // 배포 계정 프로필
+        private string _slackMentions = ""; // Slack member IDs serialized into BuildCommit request
         private bool _autoSyncWorkflowAssets = true; // Commit 전 패키지 workflow/scripts 자동 동기화
 
         private Vector2 _logScrollPosition; // 로그 스크롤 위치
@@ -151,6 +153,13 @@ namespace ActionFit.BuildAutomation.Editor
             _distributionProfile = (BuildRequestDistributionProfile)EditorGUILayout.EnumPopup("Distribution Profile", _distributionProfile);
             if (EditorGUI.EndChangeCheck())
                 EditorPrefs.SetInt(DistributionProfilePrefsKey, (int)_distributionProfile);
+
+            EditorGUI.BeginChangeCheck();
+            _slackMentions = EditorGUILayout.TextField(
+                new GUIContent("Slack Mentions", "Slack member IDs for build notifications. Use U12345678 or <@U12345678>; separate multiple users with spaces or commas."),
+                _slackMentions);
+            if (EditorGUI.EndChangeCheck())
+                EditorPrefs.SetString(SlackMentionsPrefsKey, _slackMentions ?? "");
 
             string version = _serializedSettings.FindProperty("buildVersion").stringValue;
             string bundleNo = _serializedSettings.FindProperty("bundleNo").stringValue;
@@ -292,6 +301,7 @@ namespace ActionFit.BuildAutomation.Editor
             if (System.Enum.IsDefined(typeof(BuildRequestDistributionProfile), savedProfile))
                 _distributionProfile = (BuildRequestDistributionProfile)savedProfile;
 
+            _slackMentions = EditorPrefs.GetString(SlackMentionsPrefsKey, "");
             _autoSyncWorkflowAssets = EditorPrefs.GetBool(AutoSyncWorkflowAssetsPrefsKey, true);
         }
 
@@ -594,7 +604,8 @@ namespace ActionFit.BuildAutomation.Editor
                 _requestPlatform,
                 _requestKind,
                 _uploadTarget,
-                _distributionProfile);
+                _distributionProfile,
+                _slackMentions);
             if (request == null) return false;
 
             bool saved = BuildRequestUtility.Save(request);

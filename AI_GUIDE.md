@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.18`
+- Current package version at generation time: `1.0.19`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -68,7 +68,7 @@ Read this file when:
 - Workflow Unity resolution calls the project-root `.github/scripts/resolve-unity-editor.sh`. The script reads `ProjectSettings/ProjectVersion.txt`, exports `UNITY_VERSION`, `UNITY_VERSION_WITH_REVISION`, and `UNITY_EXECUTABLE`, and fails early if that editor is not installed under `UNITY_HUB_EDITOR_ROOT`.
 - Workflow secret validation calls the project-root `.github/scripts/validate-local-runner-secrets.sh`. The package keeps source copies under `.github/scripts/`, and the AutoBuild workflow sync button copies them into the consuming project together with the workflow yml. Do not make pre-Unity shell steps depend on `Packages/` or `Library/PackageCache`.
 - Workflow private package access preparation calls the project-root `.github/scripts/prepare-actionfit-private-package-access.sh` before Unity starts. It configures GitHub HTTPS access from runner `gh auth` or from `CI_SECRET_ROOT/shared/github-package-read-token`, rewrites GitHub SSH package URLs to HTTPS, and preflights ActionFit GitHub package repositories listed in `Packages/manifest.json`.
-- Workflow Slack notification calls the project-root `.github/scripts/notify-slack-build-result.sh` at the end of Android and iOS jobs with `if: always()`. The script reads `CI_SECRET_ROOT/shared/slack-webhook-url` or `SLACK_BUILD_WEBHOOK_URL`, skips when missing, and sends project name, platform, `v{buildVersion}({bundleNo})`, success/failure status, upload target, profile, ref, commit, and run URL.
+- Workflow Slack notification calls the project-root `.github/scripts/notify-slack-build-result.sh` at the end of Android and iOS jobs with `if: always()`. The script reads `CI_SECRET_ROOT/shared/slack-webhook-url` or `SLACK_BUILD_WEBHOOK_URL`, skips when missing, and sends a short result message with project name, platform, `v{buildVersion}({bundleNo})`, status, profile, commit, and run URL. Optional mentions come from BuildCommit request `slackMentions`, serialized by the AutoBuild window and passed to the script as `SLACK_BUILD_MENTIONS`; use Slack member IDs such as `U12345678` or `<@U12345678>`, and multiple users can be separated by spaces or commas.
 - Workflow artifact paths must not hardcode a consuming project name. Android Google Play upload copies the discovered AAB to `.build/google-play-upload/upload.aab`, and iOS archive uses `Builds/iOSArchive/BuildCommit.xcarchive`.
 - Android artifact upload is intentionally slim: upload AAB files from `.build/google-play-upload/*.aab` and `Builds/**/*.aab` with `compression-level: 0`, and upload logs as a separate artifact. Do not upload `Builds/**`, because Unity/Gradle intermediate output can contain hundreds of files and stall artifact upload.
 - Google Play upload action input uses `tracks`, not deprecated `track`.

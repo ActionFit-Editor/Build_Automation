@@ -20,19 +20,18 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- Android/iOS BuildCommit job \uB9C8\uC9C0\uB9C9\uC5D0 Slack \uBE4C\uB4DC
-    \uACB0\uACFC \uC54C\uB9BC\uC744 \uCD94\uAC00\uD588\uC2B5\uB2C8\uB2E4. \uC131\uACF5/\uC2E4\uD328
-    \uC0C1\uD0DC\uB97C \uBAA8\uB450 \uC804\uC1A1\uD558\uBA70, \uC54C\uB9BC \uC2E4\uD328\uB294
-    \uBE4C\uB4DC \uACB0\uACFC\uB97C \uC2E4\uD328\uB85C \uBC14\uAFB8\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.\n-
-    \uC54C\uB9BC \uBA54\uC2DC\uC9C0\uC5D0\uB294 \uD504\uB85C\uC81D\uD2B8\uBA85, Android/iOS
-    \uD50C\uB7AB\uD3FC, `v{buildVersion}({bundleNo})` \uD615\uC2DD\uC758 \uBC84\uC804,
-    \uC5C5\uB85C\uB4DC \uB300\uC0C1, \uBC30\uD3EC \uD504\uB85C\uD544, GitHub run
-    \uB9C1\uD06C\uAC00 \uD3EC\uD568\uB429\uB2C8\uB2E4.\n- Slack webhook\uC740 GitHub
-    Secret\uC774 \uC544\uB2C8\uB77C Mac runner \uB85C\uCEEC \uD30C\uC77C `CI_SECRET_ROOT/shared/slack-webhook-url`\uC5D0\uC11C
-    \uC77D\uC2B5\uB2C8\uB2E4. \uD30C\uC77C\uC774 \uC5C6\uAC70\uB098 \uBE44\uC5B4
-    \uC788\uC73C\uBA74 \uC54C\uB9BC\uB9CC \uAC74\uB108\uB701\uB2C8\uB2E4.\n- `Update
-    GitHub Workflow`/auto sync \uB300\uC0C1\uC5D0 `notify-slack-build-result.sh`\uB97C
-    \uD3EC\uD568\uD574 \uB2E4\uB978 \uD504\uB85C\uC81D\uD2B8\uB3C4 workflow sync\uB9CC\uC73C\uB85C
-    \uAC19\uC740 \uC54C\uB9BC \uAD6C\uC870\uB97C \uBC1B\uC744 \uC218 \uC788\uAC8C
-    \uD588\uC2B5\uB2C8\uB2E4."
+  _releaseNote: "- `com.actionfit.buildautomation` 1.0.19\uB97C dependency \uBCF4\uC815\uC6A9
+    \uC0C8 \uBC30\uD3EC \uBC84\uC804\uC73C\uB85C \uC900\uBE44\uD588\uC2B5\uB2C8\uB2E4.\n-
+    `package.json`\uC758 `com.actionfit.buildsetting@1.1.3` \uC758\uC874\uC131\uC744
+    \uC720\uC9C0\uD574 Build Automation\uC774 Build Setting API\uB97C \uC804\uC81C\uB85C
+    \uB3D9\uC791\uD55C\uB2E4\uB294 \uC810\uC744 \uBA85\uD655\uD788 \uD588\uC2B5\uB2C8\uB2E4.\n-
+    AutoBuild \uCC3D\uC5D0 `Slack Mentions` \uC785\uB825\uC744 \uCD94\uAC00\uD558\uACE0
+    `.build/build_request.json`\uC758 `slackMentions`\uB85C \uC9C1\uB82C\uD654\uD574
+    BuildCommit \uC694\uCCAD\uBCC4 Slack \uBA58\uC158 \uB300\uC0C1\uC744 \uC9C0\uC815\uD560
+    \uC218 \uC788\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n- Slack \uC54C\uB9BC \uBCF8\uBB38\uC5D0\uC11C
+    \uBCC4\uB3C4 `Project`, `Version`, `Upload`, `Ref` \uC904\uC744 \uC81C\uAC70\uD558\uACE0
+    summary, platform, result, profile, commit, run URL \uC911\uC2EC\uC73C\uB85C
+    \uC904\uC600\uC2B5\uB2C8\uB2E4.\n- Caution: 1.0.19\uB97C publish\uD55C \uB4A4
+    Google Sheet/WebApp catalog\uC758 latest row\uB3C4 1.0.19\uB85C \uAC31\uC2E0\uB418\uC5B4\uC57C
+    \uB2E4\uB978 \uD504\uB85C\uC81D\uD2B8 \uC124\uCE58\uAC00 \uC815\uC0C1\uD654\uB429\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.buildsetting@1.1.3

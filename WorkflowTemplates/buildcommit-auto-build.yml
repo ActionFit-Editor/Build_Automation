@@ -37,6 +37,7 @@ jobs:
       ios_bundle_id: ${{ steps.detect.outputs.ios_bundle_id }}
       build_version: ${{ steps.detect.outputs.build_version }}
       bundle_no: ${{ steps.detect.outputs.bundle_no }}
+      slack_mentions: ${{ steps.detect.outputs.slack_mentions }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,6 +76,7 @@ jobs:
           ios_bundle_id = ""
           build_version = ""
           bundle_no = ""
+          slack_mentions = ""
 
           if should_build && File.exist?(request_path)
             request = JSON.parse(File.read(request_path))
@@ -108,6 +110,7 @@ jobs:
             ios_bundle_id = request["iosBundleId"].to_s.strip
             build_version = request["buildVersion"].to_s.strip
             bundle_no = request["bundleNo"].to_s.strip
+            slack_mentions = request["slackMentions"].to_s.strip.gsub(/[,\s]+/, " ")
             should_build = false if platform == "None"
           else
             should_build = false
@@ -123,6 +126,7 @@ jobs:
             output.puts("ios_bundle_id=#{ios_bundle_id}")
             output.puts("build_version=#{build_version}")
             output.puts("bundle_no=#{bundle_no}")
+            output.puts("slack_mentions=#{slack_mentions}")
           end
 
           puts "should_build=#{should_build}"
@@ -295,9 +299,8 @@ jobs:
           BUILD_PROJECT_NAME: ${{ github.event.repository.name }}
           BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
           BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
-          BUILD_UPLOAD_TARGET: ${{ needs.detect.outputs.upload_target }}
           BUILD_DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
-          BUILD_REF_NAME: ${{ github.ref_name }}
+          SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
           BUILD_SHORT_SHA: ${{ github.sha }}
           BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -910,9 +913,8 @@ jobs:
           BUILD_PROJECT_NAME: ${{ github.event.repository.name }}
           BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
           BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
-          BUILD_UPLOAD_TARGET: ${{ needs.detect.outputs.upload_target }}
           BUILD_DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
-          BUILD_REF_NAME: ${{ github.ref_name }}
+          SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
           BUILD_SHORT_SHA: ${{ github.sha }}
           BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |

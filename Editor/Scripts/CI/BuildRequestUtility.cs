@@ -29,7 +29,8 @@ namespace ActionFit.BuildAutomation.Editor
             BuildRequestPlatform platform,
             BuildRequestKind buildKind,
             BuildRequestUploadTarget uploadTarget,
-            BuildRequestDistributionProfile distributionProfile)
+            BuildRequestDistributionProfile distributionProfile,
+            string slackMentions = "")
         {
             if (settings == null)
             {
@@ -66,6 +67,7 @@ namespace ActionFit.BuildAutomation.Editor
                 appStoreConnectIssuerId = "",
                 appStoreConnectApiKeyP8 = "",
                 androidKeyaliasName = UsesAndroid(resolvedPlatform) ? GetAndroidKeyaliasName(settings) : "",
+                slackMentions = NormalizeSlackMentions(slackMentions),
                 sourceBranch = RunGitCommand("rev-parse --abbrev-ref HEAD"),
                 sourceCommit = RunGitCommand("rev-parse HEAD"),
                 createdAtUtc = DateTime.UtcNow.ToString("o")
@@ -161,6 +163,17 @@ namespace ActionFit.BuildAutomation.Editor
 
             string result = value.Trim();
             return result == placeholder ? "" : result;
+        }
+
+        private static string NormalizeSlackMentions(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "";
+
+            return string.Join(" ", value
+                .Replace(",", " ")
+                .Replace("\r", " ")
+                .Replace("\n", " ")
+                .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries));
         }
 
         public static bool Save(BuildRequest request)

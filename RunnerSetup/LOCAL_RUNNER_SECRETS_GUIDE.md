@@ -104,7 +104,7 @@ This file is used only when the runner user does not already have working `gh au
 https://hooks.slack.com/services/...
 ```
 
-This file is optional. When present, the workflow sends Android/iOS BuildCommit success and failure notifications to Slack. The message includes the project name, platform, `v{buildVersion}({bundleNo})`, result, upload target, distribution profile, ref, commit, and GitHub Actions run URL. Leave the file commented or empty to skip Slack notifications.
+This file is optional. When present, the workflow sends Android/iOS BuildCommit success and failure notifications to Slack. The message includes one summary line plus platform, result, distribution profile, commit, and GitHub Actions run URL. Leave the file commented or empty to skip Slack notifications.
 
 `profiles/actionfit/profile.env`
 
@@ -184,6 +184,8 @@ Slack notification:
 
 - Runs `notify-slack-build-result.sh` at the end of each Android/iOS build job with `if: always()`.
 - Reads `shared/slack-webhook-url` or `SLACK_BUILD_WEBHOOK_URL`.
+- Reads optional BuildCommit request `slackMentions` through `SLACK_BUILD_MENTIONS` and prepends multiple Slack member mentions to the notification.
+- Sends a short message with project/platform/version result, profile, commit, and GitHub Actions run URL. It intentionally omits separate `Project`, `Version`, `Upload`, and `Ref` lines.
 - Sends both success and failure results.
 - Skips without failing the build when the webhook file is missing, empty, invalid, or Slack POST fails.
 

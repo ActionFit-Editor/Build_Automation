@@ -4,6 +4,7 @@ set -euo pipefail
 secret_root="${CI_SECRET_ROOT:-$HOME/workspace/build-automation}"
 webhook_file="${SLACK_WEBHOOK_URL_FILE:-$secret_root/shared/slack-webhook-url}"
 webhook_url="${SLACK_BUILD_WEBHOOK_URL:-${SLACK_WEBHOOK_URL:-}}"
+mentions="${SLACK_BUILD_MENTIONS:-${SLACK_MENTIONS:-}}"
 
 read_first_value() {
   local path="$1"
@@ -46,10 +47,8 @@ if [ -z "$project_name" ]; then
 fi
 version="${BUILD_VERSION:-}"
 bundle_no="${BUILD_BUNDLE_NO:-}"
-upload_target="${BUILD_UPLOAD_TARGET:-}"
 distribution_profile="${BUILD_DISTRIBUTION_PROFILE:-}"
 run_url="${BUILD_RUN_URL:-${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-}}"
-ref_name="${BUILD_REF_NAME:-${GITHUB_REF_NAME:-}}"
 short_sha="${BUILD_SHORT_SHA:-${GITHUB_SHA:-}}"
 
 if [ -n "$short_sha" ]; then
@@ -99,34 +98,45 @@ payload="$(
   STATUS_LABEL="$status_label" \
   STATUS_SYMBOL="$status_symbol" \
   VERSION_LABEL="$version_label" \
-  UPLOAD_TARGET="$upload_target" \
   DISTRIBUTION_PROFILE="$distribution_profile" \
-  REF_NAME="$ref_name" \
   SHORT_SHA="$short_sha" \
   RUN_URL="$run_url" \
+  SLACK_MENTIONS="$mentions" \
   ruby -rjson <<'RUBY'
 project_name = ENV.fetch("PROJECT_NAME", "")
 platform = ENV.fetch("PLATFORM", "")
 status_label = ENV.fetch("STATUS_LABEL", "")
 status_symbol = ENV.fetch("STATUS_SYMBOL", "")
 version_label = ENV.fetch("VERSION_LABEL", "")
-upload_target = ENV.fetch("UPLOAD_TARGET", "")
 distribution_profile = ENV.fetch("DISTRIBUTION_PROFILE", "")
-ref_name = ENV.fetch("REF_NAME", "")
 short_sha = ENV.fetch("SHORT_SHA", "")
 run_url = ENV.fetch("RUN_URL", "")
+raw_mentions = ENV.fetch("SLACK_MENTIONS", "")
+
+mentions = raw_mentions
+  .split(/[,\s]+/)
+  .map(&:strip)
+  .reject(&:empty?)
+  .map do |token|
+    if token.match?(/\A<(@|!)[^>]+>\z/)
+      token
+    elsif token.match?(/\A[UW][A-Z0-9]+\z/)
+      "<@#{token}>"
+    else
+      token
+    end
+  end
+  .uniq
+  .join(" ")
 
 lines = [
   "[#{status_symbol}] #{project_name} #{platform} BuildCommit #{status_label} - #{version_label}",
-  "Project: #{project_name}",
-  "Version: #{version_label}",
   "Platform: #{platform}",
   "Result: #{status_label}"
 ]
 
-lines << "Upload: #{upload_target}" unless upload_target.empty?
+lines.unshift(mentions) unless mentions.empty?
 lines << "Profile: #{distribution_profile}" unless distribution_profile.empty?
-lines << "Ref: #{ref_name}" unless ref_name.empty?
 lines << "Commit: #{short_sha}" unless short_sha.empty?
 lines << "Run: #{run_url}" unless run_url.empty?
 
