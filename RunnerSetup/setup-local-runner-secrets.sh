@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-secret_root="${1:-${CI_SECRET_ROOT:-$HOME/ci-secrets/build-automation}}"
+secret_root="${1:-${CI_SECRET_ROOT:-$HOME/workspace/build-automation}}"
 
 mkdir -p \
   "$secret_root/shared" \

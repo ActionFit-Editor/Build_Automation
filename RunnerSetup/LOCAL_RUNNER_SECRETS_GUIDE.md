@@ -9,15 +9,15 @@ The BuildCommit request contains distribution profile, platform, build kind, upl
 Workflow root:
 
 ```bash
-$HOME/ci-secrets/build-automation
+$HOME/workspace/build-automation
 ```
 
-The workflow declares this path in `.github/workflows/buildcommit-auto-build.yml` as `CI_SECRET_ROOT` using the absolute runner path `/Users/actionfit/ci-secrets/build-automation`. BuildCommit requests do not carry runner-local paths. The setup and validation scripts keep the same path as their local fallback so manual terminal checks match CI.
+The workflow declares this path in `.github/workflows/buildcommit-auto-build.yml` as `CI_SECRET_ROOT` using the absolute runner path `/Users/lydia/workspace/build-automation`. BuildCommit requests do not carry runner-local paths. The setup and validation scripts keep the same path as their local fallback so manual terminal checks match CI.
 
 Expected files:
 
 ```bash
-ci-secrets/build-automation/
+workspace/build-automation/
   shared/
     android-signing.env
     ios-keychain.env
@@ -52,7 +52,7 @@ Run this from the repository root on the Mac runner:
 
 ```bash
 bash Packages/com.actionfit.buildautomation/RunnerSetup/setup-local-runner-secrets.sh \
-  "$HOME/ci-secrets/build-automation"
+  "$HOME/workspace/build-automation"
 ```
 
 Then copy the real secret files into the generated folders and fill the `.env` files.
@@ -89,15 +89,15 @@ Leave both values blank for the normal portable setup. The workflow will create 
 `profiles/actionfit/profile.env`
 
 ```bash
-ANDROID_KEYSTORE_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/android/upload.keystore"
-GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/android/google-play-service-account.json"
+ANDROID_KEYSTORE_PATH="$HOME/workspace/build-automation/profiles/actionfit/android/upload.keystore"
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="$HOME/workspace/build-automation/profiles/actionfit/android/google-play-service-account.json"
 IOS_DEVELOPMENT_TEAM_ID="49W7A8489P"
 APP_STORE_CONNECT_API_KEY_ID="..."
 APP_STORE_CONNECT_ISSUER_ID="..."
-APP_STORE_CONNECT_API_KEY_P8_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/AuthKey_Actionfit.p8"
-IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
+APP_STORE_CONNECT_API_KEY_P8_PATH="$HOME/workspace/build-automation/profiles/actionfit/ios/AuthKey_Actionfit.p8"
+IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="$HOME/workspace/build-automation/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
 IOS_DISTRIBUTION_CERTIFICATE_PASSWORD="..."
-IOS_APP_STORE_PROVISIONING_PROFILE_DIR="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/profiles"
+IOS_APP_STORE_PROVISIONING_PROFILE_DIR="$HOME/workspace/build-automation/profiles/actionfit/ios/profiles"
 IOS_PROVISIONING_PROFILE_AUTO_GENERATE="true"
 ```
 
@@ -108,7 +108,7 @@ IOS_PROVISIONING_PROFILE_AUTO_GENERATE="true"
 The workflow resolves the App Store provisioning profile from the BuildCommit request bundle id. For `iosBundleId=com.actionfit.catmerge.ios`, the default local file is:
 
 ```bash
-$HOME/ci-secrets/build-automation/profiles/actionfit/ios/profiles/com.actionfit.catmerge.ios.mobileprovision
+$HOME/workspace/build-automation/profiles/actionfit/ios/profiles/com.actionfit.catmerge.ios.mobileprovision
 ```
 
 The App Store provisioning profile must be for the same bundle id as the BuildCommit request and must include the Apple Distribution certificate stored in `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`. If the file is missing and `IOS_PROVISIONING_PROFILE_AUTO_GENERATE=true`, the workflow attempts `fastlane sigh` generation/download before archive/export.
@@ -120,8 +120,8 @@ The `.p12` must contain the Apple Distribution identity and private key for the 
 The setup script applies these permissions:
 
 ```bash
-find "$HOME/ci-secrets/build-automation" -type d -exec chmod 700 {} \;
-find "$HOME/ci-secrets/build-automation" -type f -exec chmod 600 {} \;
+find "$HOME/workspace/build-automation" -type d -exec chmod 700 {} \;
+find "$HOME/workspace/build-automation" -type f -exec chmod 600 {} \;
 ```
 
 Only the macOS user running the GitHub Actions runner should be able to read these files.

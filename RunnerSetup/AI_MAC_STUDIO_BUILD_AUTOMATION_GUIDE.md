@@ -10,7 +10,7 @@ The runner must build from BuildCommit requests without GitHub Secrets for mobil
 - `platform`: `Android`, `iOS`, or `Both`
 - build metadata such as version, bundle number, build kind, upload target, package name, bundle id, Android keystore bytes, Android alias, and Android signing passwords copied from BuildSetting
 
-The runner restores Android keystore bytes from the request first. Upload credentials, team ids, Apple Distribution `.p12` files, App Store provisioning profiles, optional keychain settings, and optional Android fallback files come from the local bundle selected by workflow `CI_SECRET_ROOT`. This project sets it to `/Users/actionfit/ci-secrets/build-automation`.
+The runner restores Android keystore bytes from the request first. Upload credentials, team ids, Apple Distribution `.p12` files, App Store provisioning profiles, optional keychain settings, and optional Android fallback files come from the local bundle selected by workflow `CI_SECRET_ROOT`. This project sets it to `/Users/lydia/workspace/build-automation`.
 
 ## Files In This Package
 
@@ -23,7 +23,7 @@ The runner restores Android keystore bytes from the request first. Upload creden
 ## Workflow Secret Root
 
 ```bash
-$HOME/ci-secrets/build-automation
+$HOME/workspace/build-automation
 ```
 
 Set `CI_SECRET_ROOT` in `.github/workflows/buildcommit-auto-build.yml`. Do not add this path to BuildCommit request JSON.
@@ -35,7 +35,7 @@ Set `CI_SECRET_ROOT` in `.github/workflows/buildcommit-auto-build.yml`. Do not a
 
 ```bash
 bash Packages/com.actionfit.buildautomation/RunnerSetup/setup-local-runner-secrets.sh \
-  "$HOME/ci-secrets/build-automation"
+  "$HOME/workspace/build-automation"
 ```
 
 3. Place real secret files and fill the `.env` files described in `LOCAL_RUNNER_SECRETS_GUIDE.md`.

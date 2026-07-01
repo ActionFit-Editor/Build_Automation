@@ -17,10 +17,10 @@ concurrency:
 env:
   UNITY_HUB_EDITOR_ROOT: "/Applications/Unity/Hub/Editor"
   DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer"
-  CI_SECRET_ROOT: "/Users/actionfit/ci-secrets/build-automation"
+  CI_SECRET_ROOT: "/Users/lydia/workspace/build-automation"
   IOS_DISTRIBUTION_SIGNING_IDENTITY: "Apple Distribution"
   IOS_XCODE_BUILD_PATH: Builds/iOS
-  IOS_ARCHIVE_PATH: Builds/iOSArchive/Cat_Merge_Cafe.xcarchive
+  IOS_ARCHIVE_PATH: Builds/iOSArchive/BuildCommit.xcarchive
   IOS_EXPORT_PATH: Builds/iOSExport
 
 jobs:
@@ -212,7 +212,7 @@ jobs:
             echo "::error::No .aab found under Builds/. Google Play upload requires an AAB build (buildKind must not be AndroidApk)."
             exit 1
           fi
-          upload_path=".build/google-play-upload/Cat_Merge_Cafe.aab"
+          upload_path=".build/google-play-upload/upload.aab"
           mkdir -p "$(dirname "$upload_path")"
           cp "$aab_path" "$upload_path"
           echo "path=$upload_path" >> "$GITHUB_OUTPUT"
@@ -247,7 +247,7 @@ jobs:
           serviceAccountJson: ${{ steps.google_play_config.outputs.service_account_json_path }}
           packageName: ${{ needs.detect.outputs.android_package_name }}
           releaseFiles: ${{ steps.aab.outputs.path }}
-          track: internal
+          tracks: internal
           status: completed
 
       - name: Upload build artifact

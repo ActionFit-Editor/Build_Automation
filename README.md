@@ -9,8 +9,8 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 ```json
 {
   "dependencies": {
-    "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.2",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.14"
+    "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.3",
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.15"
   }
 }
 ```
@@ -56,13 +56,13 @@ Unity -batchmode -quit -projectPath . -executeMethod ActionFit.BuildAutomation.E
 
 workflow는 macOS self-hosted runner 기준입니다. runner에는 `self-hosted`, `macOS`, `unity-mobile` 라벨이 있어야 하며, 같은 Mac에서 Unity CLI로 Android/iOS를 빌드합니다. `Platform=Both` 요청은 workflow가 Android job과 iOS job으로 나눠 `.build/build_request.json`의 platform 값을 임시 변환한 뒤 `CIBuildEntry.BuildFromRequest`를 각각 호출합니다.
 
-Google Play service account, iOS team id, App Store Connect API key, keychain password는 Mac runner의 로컬 시크릿 번들에서 읽습니다. Android keystore 파일과 signing 비밀번호는 request 값을 우선 사용하고, request에 없을 때만 로컬 env로 fallback합니다. 로컬 시크릿 번들 경로는 workflow yml의 `CI_SECRET_ROOT`가 기준이며 현재 yml 값은 `/Users/actionfit/ci-secrets/build-automation`입니다. workflow는 Unity/PackageCache가 준비되기 전에 Unity editor 경로 확인과 secret 검증을 실행하므로 패키지 경로가 아니라 프로젝트 루트 `.github/scripts/` 아래의 scripts를 호출합니다. Unity editor는 workflow yml의 고정 버전이 아니라 `ProjectSettings/ProjectVersion.txt`의 `m_EditorVersion`으로 결정되며, `UNITY_HUB_EDITOR_ROOT` 아래에 해당 버전이 없으면 빌드 전에 실패합니다. iOS App Store profiles are selected by request bundle id from `ios/profiles/<bundle-id>.mobileprovision`, with optional `fastlane sigh` generation. iOS archive signing은 `xcodebuild`에 단일 `CODE_SIGN_IDENTITY`만 전달해 Xcode가 `CODE_SIGN_IDENTITY[sdk=iphoneos*]` 값을 인증서 이름으로 오해하지 않게 합니다. Android/iOS workflow는 Unity `Library` cache를 restore-only로 사용해 Google Play/TestFlight 업로드 성공 후 cache 저장 후처리가 전체 Run을 붙잡지 않게 합니다. iOS artifact는 성공 시 IPA/plist와 로그만, 실패 시 diagnostic 로그와 export 결과만 업로드해 `Builds/iOS/**`와 `.xcarchive` 전체 업로드로 인한 1GB급 artifact 실패를 피합니다. 설치/검증 스크립트와 상세 가이드는 `RunnerSetup/` 아래에 있습니다.
+Google Play service account, iOS team id, App Store Connect API key, keychain password는 Mac runner의 로컬 시크릿 번들에서 읽습니다. Android keystore 파일과 signing 비밀번호는 request 값을 우선 사용하고, request에 없을 때만 로컬 env로 fallback합니다. 로컬 시크릿 번들 경로는 workflow yml의 `CI_SECRET_ROOT`가 기준이며 현재 yml 값은 `/Users/lydia/workspace/build-automation`입니다. workflow는 Unity/PackageCache가 준비되기 전에 Unity editor 경로 확인과 secret 검증을 실행하므로 패키지 경로가 아니라 프로젝트 루트 `.github/scripts/` 아래의 scripts를 호출합니다. Unity editor는 workflow yml의 고정 버전이 아니라 `ProjectSettings/ProjectVersion.txt`의 `m_EditorVersion`으로 결정되며, `UNITY_HUB_EDITOR_ROOT` 아래에 해당 버전이 없으면 빌드 전에 실패합니다. Android Google Play upload는 프로젝트명을 하드코딩하지 않고 발견된 AAB를 `.build/google-play-upload/upload.aab`로 복사해 업로드하며, iOS archive 기본 경로도 `Builds/iOSArchive/BuildCommit.xcarchive`를 사용합니다. Google Play action은 deprecated `track` 대신 `tracks` 입력을 사용합니다. iOS App Store profiles are selected by request bundle id from `ios/profiles/<bundle-id>.mobileprovision`, with optional `fastlane sigh` generation. iOS archive signing은 `xcodebuild`에 단일 `CODE_SIGN_IDENTITY`만 전달해 Xcode가 `CODE_SIGN_IDENTITY[sdk=iphoneos*]` 값을 인증서 이름으로 오해하지 않게 합니다. Android/iOS workflow는 Unity `Library` cache를 restore-only로 사용해 Google Play/TestFlight 업로드 성공 후 cache 저장 후처리가 전체 Run을 붙잡지 않게 합니다. iOS artifact는 성공 시 IPA/plist와 로그만, 실패 시 diagnostic 로그와 export 결과만 업로드해 `Builds/iOS/**`와 `.xcarchive` 전체 업로드로 인한 1GB급 artifact 실패를 피합니다. 설치/검증 스크립트와 상세 가이드는 `RunnerSetup/` 아래에 있습니다.
 
 상세 Mac 서버 준비 절차는 [MAC_SELF_HOSTED_RUNNER_SETUP.md](MAC_SELF_HOSTED_RUNNER_SETUP.md)를 참고합니다.
 
 ## 의존성
 
-- `com.actionfit.buildsetting@1.1.2` 이상
+- `com.actionfit.buildsetting@1.1.3` 이상
 - Unity `6000.2`
 - Android/iOS 빌드용 Unity modules
 - GitHub Actions self-hosted macOS runner

@@ -4,7 +4,7 @@ set -euo pipefail
 profile="${1:-${DISTRIBUTION_PROFILE:-Actionfit}}"
 platform="${2:-${REQUEST_PLATFORM:-Both}}"
 upload_target="${3:-${UPLOAD_TARGET:-None}}"
-secret_root="${CI_SECRET_ROOT:-$HOME/ci-secrets/build-automation}"
+secret_root="${CI_SECRET_ROOT:-$HOME/workspace/build-automation}"
 request_path="${BUILD_REQUEST_PATH:-.build/build_request.json}"
 
 profile_slug="$(printf '%s' "$profile" | tr '[:upper:]' '[:lower:]')"
