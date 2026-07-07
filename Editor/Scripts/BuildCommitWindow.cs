@@ -16,19 +16,20 @@ namespace ActionFit.BuildAutomation.Editor
     {
         #region Fields
 
-        private const string SOPrefsKey = BuildSettingsSO.SOPrefsKey; // BuildSettingsWindow와 동일한 키 공유
+        private const string BuildSettingsPrefsKey = BuildSettingsSO.SOPrefsKey; // BuildSettingsWindow와 동일한 키 공유
         private const string DistributionProfilePrefsKey = "BuildCommitDistributionProfile";
-        private const string SlackMentionsPrefsKey = "BuildCommitSlackMentions";
+        private const string LegacySlackMentionsPrefsKey = "BuildCommitSlackMentions";
         private const string AutoSyncWorkflowAssetsPrefsKey = "BuildCommitAutoSyncWorkflowAssets";
         private const string BuildTagPrefix = "build";
 
         private BuildSettingsSO _settings; // 빌드 설정 SO
         private SerializedObject _serializedSettings; // SO 직렬화 래퍼
+        private BuildAutomationSettingsSO _automationSettings; // 자동 빌드 공유 설정 SO
+        private SerializedObject _serializedAutomationSettings; // 자동 빌드 SO 직렬화 래퍼
         private BuildRequestPlatform _requestPlatform = BuildRequestPlatform.None; // 원격 빌드 플랫폼
         private BuildRequestKind _requestKind = BuildRequestKind.Default; // 원격 빌드 종류
         private BuildRequestUploadTarget _uploadTarget = BuildRequestUploadTarget.None; // 업로드 대상
         private BuildRequestDistributionProfile _distributionProfile = BuildRequestDistributionProfile.Actionfit; // 배포 계정 프로필
-        private readonly List<SlackMentionEntry> _slackMentions = new(); // Member IDs serialized into request; memo stays local.
         private bool _autoSyncWorkflowAssets = true; // Commit 전 패키지 workflow/scripts 자동 동기화
 
         private Vector2 _logScrollPosition; // 로그 스크롤 위치
@@ -62,7 +63,7 @@ namespace ActionFit.BuildAutomation.Editor
             DrawSOField();
             EditorGUILayout.Space(8);
 
-            if (_settings == null)
+            if (_settings == null || _automationSettings == null)
                 LoadSO();
 
             if (_settings == null)
@@ -71,7 +72,14 @@ namespace ActionFit.BuildAutomation.Editor
                 return;
             }
 
+            if (_automationSettings == null)
+            {
+                EditorGUILayout.HelpBox("BuildAutomationSettingsSO를 연결해주세요.", MessageType.Warning);
+                return;
+            }
+
             _serializedSettings?.Update();
+            _serializedAutomationSettings?.Update();
 
             DrawVersionInput();
             EditorGUILayout.Space(10);
@@ -103,11 +111,32 @@ namespace ActionFit.BuildAutomation.Editor
                 if (_settings != null)
                 {
                     _serializedSettings = new SerializedObject(_settings);
-                    EditorPrefs.SetString(SOPrefsKey, AssetDatabase.GetAssetPath(_settings));
+                    EditorPrefs.SetString(BuildSettingsPrefsKey, AssetDatabase.GetAssetPath(_settings));
                 }
                 else
                 {
                     _serializedSettings = null;
+                }
+            }
+
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PrefixLabel("Automation Settings");
+
+            EditorGUI.BeginChangeCheck();
+            _automationSettings = (BuildAutomationSettingsSO)EditorGUILayout.ObjectField(_automationSettings, typeof(BuildAutomationSettingsSO), false);
+            if (EditorGUI.EndChangeCheck())
+            {
+                if (_automationSettings != null)
+                {
+                    _serializedAutomationSettings = new SerializedObject(_automationSettings);
+                    EditorPrefs.SetString(BuildAutomationSettingsSO.SOPrefsKey, AssetDatabase.GetAssetPath(_automationSettings));
+                    MigrateSlackMentionsFromEditorPrefs();
+                }
+                else
+                {
+                    _serializedAutomationSettings = null;
                 }
             }
 
@@ -213,45 +242,58 @@ namespace ActionFit.BuildAutomation.Editor
 
         private void DrawSlackMentions()
         {
+            SerializedProperty mentionsProp = _serializedAutomationSettings.FindProperty("buildCommitSlackMentions");
+            if (mentionsProp == null)
+            {
+                EditorGUILayout.HelpBox("BuildAutomationSettingsSO does not expose buildCommitSlackMentions. Update com.actionfit.buildautomation.", MessageType.Warning);
+                return;
+            }
+
             EditorGUILayout.Space(4);
             using (new EditorGUILayout.HorizontalScope())
             {
                 EditorGUILayout.LabelField(
-                    new GUIContent("Slack Mentions", "Add one Slack member per row. Only Member ID values are serialized into the BuildCommit request. Memo is saved locally in this editor window."),
+                    new GUIContent("Slack Mentions", "Shared in BuildAutomationSettingsSO. Checked rows are serialized into the BuildCommit request; Memo is only for identifying entries in this window."),
                     EditorStyles.boldLabel);
                 GUILayout.FlexibleSpace();
                 if (GUILayout.Button("+", GUILayout.Width(28)))
                 {
-                    _slackMentions.Add(new SlackMentionEntry());
-                    SaveSlackMentions();
+                    int index = mentionsProp.arraySize;
+                    mentionsProp.InsertArrayElementAtIndex(index);
+                    SerializedProperty entryProp = mentionsProp.GetArrayElementAtIndex(index);
+                    entryProp.FindPropertyRelative("enabled").boolValue = true;
+                    entryProp.FindPropertyRelative("memberId").stringValue = "";
+                    entryProp.FindPropertyRelative("memo").stringValue = "";
                 }
             }
 
-            if (_slackMentions.Count == 0)
+            if (mentionsProp.arraySize == 0)
             {
-                EditorGUILayout.HelpBox("Optional. Add Slack member IDs to mention in build result notifications.", MessageType.None);
+                EditorGUILayout.HelpBox("Optional. Add Slack member IDs to mention in build result notifications. Entries are saved in BuildAutomationSettingsSO and shared with the project.", MessageType.None);
                 return;
             }
 
             using (new EditorGUILayout.HorizontalScope())
             {
+                EditorGUILayout.LabelField(new GUIContent("Mention", "Checked rows are sent as Slack mentions."), EditorStyles.miniBoldLabel, GUILayout.Width(60));
                 EditorGUILayout.LabelField("Member ID", EditorStyles.miniBoldLabel, GUILayout.Width(170));
                 EditorGUILayout.LabelField("Memo", EditorStyles.miniBoldLabel);
                 GUILayout.Space(32);
             }
 
-            bool changed = false;
             int removeIndex = -1;
-            for (int i = 0; i < _slackMentions.Count; i++)
+            for (int i = 0; i < mentionsProp.arraySize; i++)
             {
-                var entry = _slackMentions[i];
+                SerializedProperty entryProp = mentionsProp.GetArrayElementAtIndex(i);
+                SerializedProperty enabledProp = entryProp.FindPropertyRelative("enabled");
+                SerializedProperty memberIdProp = entryProp.FindPropertyRelative("memberId");
+                SerializedProperty memoProp = entryProp.FindPropertyRelative("memo");
+
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    EditorGUI.BeginChangeCheck();
-                    entry.MemberId = EditorGUILayout.TextField(entry.MemberId ?? "", GUILayout.Width(170));
-                    entry.Memo = EditorGUILayout.TextField(entry.Memo ?? "");
-                    if (EditorGUI.EndChangeCheck())
-                        changed = true;
+                    enabledProp.boolValue = EditorGUILayout.Toggle(enabledProp.boolValue, GUILayout.Width(60));
+                    memberIdProp.stringValue = EditorGUILayout.TextField(memberIdProp.stringValue ?? "", GUILayout.Width(170));
+                    memoProp.stringValue = EditorGUILayout.TextField(memoProp.stringValue ?? "");
 
                     if (GUILayout.Button("-", GUILayout.Width(28)))
                         removeIndex = i;
@@ -259,13 +301,7 @@ namespace ActionFit.BuildAutomation.Editor
             }
 
             if (removeIndex >= 0)
-            {
-                _slackMentions.RemoveAt(removeIndex);
-                changed = true;
-            }
-
-            if (changed)
-                SaveSlackMentions();
+                mentionsProp.DeleteArrayElementAtIndex(removeIndex);
         }
 
         private void DrawLocalRunnerSecretNotice(BuildRequestPlatform resolvedPlatform)
@@ -340,7 +376,7 @@ namespace ActionFit.BuildAutomation.Editor
         // BuildSettingsSO 자동 로드 (BuildSettingsWindow와 동일한 SO 공유)
         private void LoadSO()
         {
-            string savedPath = EditorPrefs.GetString(SOPrefsKey, "");
+            string savedPath = EditorPrefs.GetString(BuildSettingsPrefsKey, "");
             if (!string.IsNullOrEmpty(savedPath))
                 _settings = AssetDatabase.LoadAssetAtPath<BuildSettingsSO>(savedPath);
 
@@ -350,67 +386,102 @@ namespace ActionFit.BuildAutomation.Editor
             if (_settings != null)
                 _serializedSettings = new SerializedObject(_settings);
 
+            _automationSettings = BuildAutomationSettingsSO.FindOrCreateSettingsAsset();
+            if (_automationSettings != null)
+            {
+                _serializedAutomationSettings = new SerializedObject(_automationSettings);
+                MigrateSlackMentionsFromEditorPrefs();
+            }
+
             int savedProfile = EditorPrefs.GetInt(DistributionProfilePrefsKey, (int)BuildRequestDistributionProfile.Actionfit);
             if (System.Enum.IsDefined(typeof(BuildRequestDistributionProfile), savedProfile))
                 _distributionProfile = (BuildRequestDistributionProfile)savedProfile;
 
-            LoadSlackMentions();
             _autoSyncWorkflowAssets = EditorPrefs.GetBool(AutoSyncWorkflowAssetsPrefsKey, true);
         }
 
-        private void LoadSlackMentions()
+        private void MigrateSlackMentionsFromEditorPrefs()
         {
-            _slackMentions.Clear();
+            if (_automationSettings == null) return;
 
-            string saved = EditorPrefs.GetString(SlackMentionsPrefsKey, "");
-            if (string.IsNullOrWhiteSpace(saved)) return;
+            string saved = EditorPrefs.GetString(LegacySlackMentionsPrefsKey, "");
+            if (string.IsNullOrWhiteSpace(saved))
+                return;
+
+            if (_automationSettings.buildCommitSlackMentions == null)
+                _automationSettings.buildCommitSlackMentions = new List<BuildAutomationSettingsSO.SlackMentionEntry>();
+
+            if (_automationSettings.buildCommitSlackMentions.Count > 0)
+            {
+                EditorPrefs.DeleteKey(LegacySlackMentionsPrefsKey);
+                return;
+            }
 
             string trimmed = saved.TrimStart();
+            int migratedCount = 0;
             if (trimmed.StartsWith("{"))
             {
                 try
                 {
-                    var prefs = JsonUtility.FromJson<SlackMentionPrefs>(saved);
+                    var prefs = JsonUtility.FromJson<LegacySlackMentionPrefs>(saved);
                     if (prefs?.Entries != null)
                     {
                         foreach (var entry in prefs.Entries)
                         {
                             if (entry == null) continue;
-                            _slackMentions.Add(new SlackMentionEntry
+                            string memberId = entry.MemberId?.Trim();
+                            if (string.IsNullOrEmpty(memberId)) continue;
+
+                            _automationSettings.buildCommitSlackMentions.Add(new BuildAutomationSettingsSO.SlackMentionEntry
                             {
-                                MemberId = entry.MemberId ?? "",
-                                Memo = entry.Memo ?? ""
+                                enabled = true,
+                                memberId = memberId,
+                                memo = entry.Memo ?? ""
                             });
+                            migratedCount++;
                         }
                     }
-                    return;
                 }
                 catch
                 {
-                    _slackMentions.Clear();
+                    _automationSettings.buildCommitSlackMentions.Clear();
+                    migratedCount = 0;
+                }
+            }
+            else
+            {
+                foreach (string token in SplitSlackMentionText(saved))
+                {
+                    _automationSettings.buildCommitSlackMentions.Add(new BuildAutomationSettingsSO.SlackMentionEntry
+                    {
+                        enabled = true,
+                        memberId = token,
+                        memo = ""
+                    });
+                    migratedCount++;
                 }
             }
 
-            foreach (string token in SplitSlackMentionText(saved))
-                _slackMentions.Add(new SlackMentionEntry { MemberId = token });
-            SaveSlackMentions();
-        }
+            EditorPrefs.DeleteKey(LegacySlackMentionsPrefsKey);
 
-        private void SaveSlackMentions()
-        {
-            var prefs = new SlackMentionPrefs
-            {
-                Entries = _slackMentions.ToArray()
-            };
-            EditorPrefs.SetString(SlackMentionsPrefsKey, JsonUtility.ToJson(prefs));
+            if (migratedCount <= 0) return;
+
+            EditorUtility.SetDirty(_automationSettings);
+            AssetDatabase.SaveAssets();
+            _serializedAutomationSettings = new SerializedObject(_automationSettings);
+            Debug.Log($"[BuildCommitWindow] Migrated {migratedCount} Slack mention entries from EditorPrefs to BuildAutomationSettingsSO.");
         }
 
         private string[] GetSlackMentionMemberIds()
         {
             var result = new List<string>();
-            foreach (var entry in _slackMentions)
+            if (_automationSettings?.buildCommitSlackMentions == null)
+                return result.ToArray();
+
+            foreach (var entry in _automationSettings.buildCommitSlackMentions)
             {
-                string memberId = entry?.MemberId?.Trim();
+                if (entry == null || !entry.enabled) continue;
+                string memberId = entry.memberId?.Trim();
                 if (string.IsNullOrEmpty(memberId) || result.Contains(memberId)) continue;
                 result.Add(memberId);
             }
@@ -816,20 +887,34 @@ namespace ActionFit.BuildAutomation.Editor
         // SerializedObject 변경사항을 SO에 반영 및 저장
         private void ApplySerializedIfModified()
         {
-            if (_serializedSettings == null || !_serializedSettings.hasModifiedProperties) return;
-            _serializedSettings.ApplyModifiedProperties();
-            EditorUtility.SetDirty(_settings);
+            bool changed = false;
+
+            if (_serializedSettings != null && _serializedSettings.hasModifiedProperties)
+            {
+                _serializedSettings.ApplyModifiedProperties();
+                EditorUtility.SetDirty(_settings);
+                changed = true;
+            }
+
+            if (_serializedAutomationSettings != null && _serializedAutomationSettings.hasModifiedProperties)
+            {
+                _serializedAutomationSettings.ApplyModifiedProperties();
+                EditorUtility.SetDirty(_automationSettings);
+                changed = true;
+            }
+
+            if (!changed) return;
             AssetDatabase.SaveAssets();
         }
 
         [System.Serializable]
-        private sealed class SlackMentionPrefs
+        private sealed class LegacySlackMentionPrefs
         {
-            public SlackMentionEntry[] Entries = new SlackMentionEntry[0];
+            public LegacySlackMentionEntry[] Entries = new LegacySlackMentionEntry[0];
         }
 
         [System.Serializable]
-        private sealed class SlackMentionEntry
+        private sealed class LegacySlackMentionEntry
         {
             public string MemberId = "";
             public string Memo = "";

@@ -184,7 +184,7 @@ Slack notification:
 
 - Runs `notify-slack-build-result.sh` at the end of each Android/iOS build job with `if: always()`.
 - Reads `shared/slack-webhook-url` or `SLACK_BUILD_WEBHOOK_URL`.
-- Reads optional BuildCommit request `slackMentions` JSON array through `SLACK_BUILD_MENTIONS` and prepends multiple Slack member mentions to the notification. AutoBuild stores local memo text separately in EditorPrefs; memo values are not committed.
+- Reads optional BuildCommit request `slackMentions` JSON array through `SLACK_BUILD_MENTIONS` and prepends multiple Slack member mentions to the notification. AutoBuild stores shared mention rows in `BuildAutomationSettingsSO`; only rows with `Mention` enabled enter the request, and memo values are not committed into `.build/build_request.json`.
 - Sends a short message with one summary line plus profile, commit, and GitHub Actions run URL. It intentionally omits separate `Project`, `Version`, `Platform`, `Result`, `Upload`, and `Ref` lines.
 - Sends both success and failure results.
 - Skips without failing the build when the webhook file is missing, empty, invalid, or Slack POST fails.

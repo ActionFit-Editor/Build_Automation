@@ -11,7 +11,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
   "dependencies": {
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.3",
     "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/GitHub_Auth.git#1.0.1",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.22"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.23"
   }
 }
 ```
@@ -26,6 +26,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`
 - Workflow script templates: `.github/scripts/resolve-unity-editor.sh`, `.github/scripts/validate-local-runner-secrets.sh`, `.github/scripts/prepare-actionfit-private-package-access.sh`, `.github/scripts/notify-slack-build-result.sh`
 - Workflow sync: `AutoBuild` 창의 `Update GitHub Workflow` 버튼
+- 자동 빌드 설정 에셋: `Assets/_Data/_BuildAutomation/BuildAutomationSettingsSO.asset`
 - Mac runner guide: `MAC_SELF_HOSTED_RUNNER_SETUP.md`
 
 ## AutoBuild
@@ -61,7 +62,7 @@ Android package name은 `BuildSettingsSO.androidPackageName`, iOS bundle id는 `
    - Android keystore / alias / password
    - 필요한 iOS / Android 빌드 옵션
 3. `Tools > ActionFit > BuildSetting > AutoBuild`를 실행합니다.
-4. `Build Settings`에 사용할 `BuildSettingsSO`가 연결되어 있는지 확인합니다.
+4. `Build Settings`에 사용할 `BuildSettingsSO`가 연결되어 있고, `Automation Settings`에 `BuildAutomationSettingsSO`가 연결되어 있는지 확인합니다. 둘 다 없으면 AutoBuild 창에서 기본 경로에 자동 생성합니다.
 5. `Version Info`에서 Version과 Bundle ID 표시를 확인합니다. 코드상 Bundle ID 라벨은 실제로 `bundleNo`, 즉 빌드 번호입니다.
 6. `CI Build Request`에서 Platform을 선택합니다.
    - Android
@@ -71,9 +72,9 @@ Android package name은 `BuildSettingsSO.androidPackageName`, iOS bundle id는 `
 7. `Build Kind`, `Upload Target`, `Distribution Profile`을 확인합니다. Platform 선택 시 기본값이 자동 세팅됩니다.
 8. `Auto Sync Build Files`는 기본 ON입니다. ON이면 `Commit, Tag & Push` 실행 시 `.github/workflows`와 `.github/scripts`가 자동 동기화됩니다.
 9. Slack 알림이 필요하면 Mac runner 로컬 시크릿 번들에 `shared/slack-webhook-url`을 설정합니다.
-10. 사람 태그가 필요하면 AutoBuild 창의 `Slack Mentions`에서 `+` 버튼으로 행을 추가하고 `Member ID`와 `Memo`를 입력합니다. `Member ID` 예: `U12345678`, `<@U23456789>`. 표시 이름 `@송제우`는 실제 멘션 알림으로 동작하지 않을 수 있습니다.
+10. 사람 태그가 필요하면 AutoBuild 창의 `Slack Mentions`에서 `+` 버튼으로 행을 추가하고 `Mention` 체크박스, `Member ID`, `Memo`를 설정합니다. 이 목록은 `BuildAutomationSettingsSO`에 저장되어 프로젝트에서 공유됩니다. 기본 에셋 경로는 `Assets/_Data/_BuildAutomation/BuildAutomationSettingsSO.asset`입니다. `Member ID` 예: `U12345678`, `<@U23456789>`. 표시 이름 `@송제우`는 실제 멘션 알림으로 동작하지 않을 수 있습니다.
 11. GitHub 인증 팝업이 표시되면 `Packages/com.actionfit.githubauth/README.md`의 연결 확인 절차를 따르거나 AI에게 GitHub 인증 가이드를 문의합니다.
-12. `Commit, Tag & Push` 버튼을 실행합니다. `Slack Mentions`의 `Member ID` 값만 `.build/build_request.json`에 JSON 배열 `slackMentions`로 직렬화되어 해당 BuildCommit 요청에 저장됩니다. `Memo`는 EditorPrefs에만 저장되어 AutoBuild 창에서 식별용으로만 보입니다.
+12. `Commit, Tag & Push` 버튼을 실행합니다. `Slack Mentions`에서 `Mention`이 체크된 행의 `Member ID` 값만 `.build/build_request.json`에 JSON 배열 `slackMentions`로 직렬화되어 해당 BuildCommit 요청에 저장됩니다. `Memo`는 공유 SO에 저장되지만 request에는 포함되지 않고 AutoBuild 창에서 식별용으로만 보입니다.
 
 ```json
 "slackMentions": [

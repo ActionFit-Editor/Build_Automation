@@ -42,7 +42,7 @@ bash Packages/com.actionfit.buildautomation/RunnerSetup/setup-local-runner-secre
 
 3. Place real secret files and fill the `.env` files described in `LOCAL_RUNNER_SECRETS_GUIDE.md`.
 4. Run `gh auth setup-git --hostname github.com` as the runner user, or put a read-only package token at `$HOME/workspace/build-automation/shared/github-package-read-token`.
-5. Optional: put the Slack Incoming Webhook URL at `$HOME/workspace/build-automation/shared/slack-webhook-url` to enable BuildCommit success/failure notifications. Slack member mentions are not stored in this local bundle; AutoBuild serializes Member ID values into `.build/build_request.json` as the `slackMentions` JSON array. AutoBuild memo values stay local in EditorPrefs.
+5. Optional: put the Slack Incoming Webhook URL at `$HOME/workspace/build-automation/shared/slack-webhook-url` to enable BuildCommit success/failure notifications. Slack member mentions are not stored in this local bundle; AutoBuild reads shared `BuildAutomationSettingsSO` mention rows and serializes only `Mention`-enabled Member ID values into `.build/build_request.json` as the `slackMentions` JSON array. AutoBuild memo values stay in the shared SO and are not committed into the request JSON.
 5. Validate before running GitHub Actions:
 
 ```bash

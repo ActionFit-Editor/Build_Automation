@@ -15,14 +15,19 @@ MonoBehaviour:
   _packageId: com.actionfit.buildautomation
   _displayName: Build Automation
   _repoName: Build_Automation
+  _repositoryVisibility: 0
   _owner: "\uC1A1\uC81C\uC6B0"
   _status: verified
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- `com.actionfit.githubauth` \uC758\uC874\uC131 \uB300\uC0C1\uC744
-    `1.0.1`\uB85C \uAC31\uC2E0\uD588\uC2B5\uB2C8\uB2E4.\n\n- PackageInfo \uB9B4\uB9AC\uC988
-    \uB178\uD2B8\uB97C \uD604\uC7AC `1.0.22` \uBC30\uD3EC \uD6C4\uBCF4 \uAE30\uC900\uC73C\uB85C
-    \uC815\uB9AC\uD588\uC2B5\uB2C8\uB2E4.\n\n- \uD328\uD0A4\uC9C0 \uBC84\uC804\uC744
-    `1.0.22`\uB85C \uC62C\uB838\uC2B5\uB2C8\uB2E4."
+  _releaseNote: "- Slack Mentions \uBAA9\uB85D\uC744 EditorPrefs\uAC00 \uC544\uB2CC
+    `BuildAutomationSettingsSO`\uC5D0 \uC800\uC7A5\uD574 \uD504\uB85C\uC81D\uD2B8\uC5D0\uC11C
+    \uACF5\uC720\uD558\uB3C4\uB85D \uBCC0\uACBD\uD588\uC2B5\uB2C8\uB2E4.\n\n- \uAC01
+    Slack Mention \uD589\uC5D0 `Mention` \uCCB4\uD06C\uBC15\uC2A4\uB97C \uCD94\uAC00\uD574
+    \uC6D0\uD558\uB294 \uC0AC\uB78C\uB9CC BuildCommit request\uC758 `slackMentions`\uB85C
+    \uC9C1\uB82C\uD654\uD558\uB3C4\uB85D \uD588\uC2B5\uB2C8\uB2E4.\n\n- \uAE30\uC874
+    EditorPrefs Slack Mention \uB370\uC774\uD130\uB294 SO \uBAA9\uB85D\uC774 \uBE44\uC5B4
+    \uC788\uC744 \uB54C 1\uD68C \uB9C8\uC774\uADF8\uB808\uC774\uC158\uD55C \uB4A4
+    \uC81C\uAC70\uD569\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.githubauth@1.0.1, com.actionfit.buildsetting@1.1.3
