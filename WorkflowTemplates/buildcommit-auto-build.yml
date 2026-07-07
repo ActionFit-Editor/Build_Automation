@@ -277,6 +277,7 @@ jobs:
 
       - name: Upload Android AAB artifact
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: Android-BuildCommit-AAB
@@ -288,6 +289,7 @@ jobs:
 
       - name: Upload Android logs
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: Android-BuildCommit-Logs
@@ -885,6 +887,7 @@ jobs:
 
       - name: Upload iOS app artifact
         if: success()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: iOS-BuildCommit-App
@@ -899,6 +902,7 @@ jobs:
 
       - name: Upload iOS diagnostic artifact
         if: failure()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: iOS-BuildCommit-Diagnostics

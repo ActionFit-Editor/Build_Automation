@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using ActionFit.BuildSetting.Editor;
+using ActionFit.GitHubAuth.Editor;
 using UnityEditor;
 using UnityEngine;
 using Process = System.Diagnostics.Process;
@@ -461,13 +462,19 @@ namespace ActionFit.BuildAutomation.Editor
             string commitMessage = CreateCommitMessage(version, bundleNo);
             string tagPreview = CreateBuildTag(version, bundleNo, "commit");
 
+            _logs.Clear();
+
+            if (!EnsureGitHubAuthForCommitPush())
+            {
+                Repaint();
+                return;
+            }
+
             if (!EditorUtility.DisplayDialog(
                     "Commit, Tag & Push",
                     $"다음 저장 커밋과 빌드 태그를 푸시합니다:\n\n{commitMessage}\n{tagPreview}\n\n계속하시겠습니까?",
                     "Push", "Cancel"))
                 return;
-
-            _logs.Clear();
 
             if (!SyncWorkflowAssetsForCommit())
             {
@@ -513,6 +520,28 @@ namespace ActionFit.BuildAutomation.Editor
             Debug.Log($"[BuildCommitWindow] Commit, tag & push complete: {commitMessage}, {buildTag}");
 
             Repaint();
+        }
+
+        private bool EnsureGitHubAuthForCommitPush()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            bool isReady = GitHubAuthPreflight.EnsureProjectGitHubPushAccess(
+                projectRoot,
+                "BuildCommit Commit, Tag & Push",
+                out GitHubAuthCheckResult result);
+
+            if (isReady)
+            {
+                AddLog($"[GitHub Auth] {result.Message}");
+                return true;
+            }
+
+            AddLog($"[ERROR] [GitHub Auth] {result.Message}");
+            if (!string.IsNullOrEmpty(result.FailedCommand))
+                AddLog($"[GitHub Auth] Failed command: {result.FailedCommand}");
+            if (!string.IsNullOrEmpty(result.Details))
+                AddLog(result.Details);
+            return false;
         }
 
         private bool SyncWorkflowAssetsForCommit()

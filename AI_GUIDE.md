@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.20`
+- Current package version at generation time: `1.0.22`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -42,10 +42,12 @@ Read this file when:
 - Read `README.md` for human-facing setup and usage.
 - Read `package.json` for package ID, version, Unity version, and dependencies.
 - Read `Editor/PackageInfo/ActionFitPackageInfo_SO.asset` for catalog metadata, repository name, owner, status, description, release note, and dependency override.
+- Read `Packages/com.actionfit.githubauth/AI_GUIDE.md` before changing BuildCommit local GitHub authentication preflight behavior or user guidance.
 
 ## Editing Rules
 
 - Keep BuildCommit, request JSON, CI entry, workflow template, and runner setup changes in this package.
+- Treat `WorkflowTemplates/*.yml`, package `.github/scripts/*.sh`, package README/AI guide updates, and package metadata changes as package source changes. Prepare a package release and bump `package.json` version when these files change; the consuming project's root `.github/workflows/*.yml` is only the synced project copy.
 - Keep Android/iOS player/build settings and local build process implementations in `com.actionfit.buildsetting`.
 - Do not change public menu paths, request JSON field names, enum numeric values, tag prefix, or CI entry method casually. Existing workflow triggers and stored request JSON depend on them.
 - Preserve Unity `.meta` files when adding, moving, or renaming files inside the package.
@@ -59,6 +61,8 @@ Read this file when:
 - Storage commit message prefix: `[BuildRequest]`.
 - Distribution profile request field: `distributionProfile`. Current profiles are `Actionfit` and `Stormborn`; only the profile name is stored in request JSON.
 - BuildCommit window starts with `Platform=None`. `Commit, Tag & Push` is disabled until the user selects `Current`, `Android`, `iOS`, or `Both`. `Current` remains a selectable option and resolves to the active Unity build target when the request is created.
+- `Commit, Tag & Push` runs local `git push` and tag push from the Unity editor. Each developer machine that uses BuildCommit must have GitHub credentials configured for the consuming repository with push/tag permission. BuildCommit calls `GitHubAuthPreflight.EnsureProjectGitHubPushAccess` from `com.actionfit.githubauth` before creating the request commit/tag; on failure, GitHub Auth shows the shared authentication-required dialog and BuildCommit stops.
+- When explaining or diagnosing local BuildCommit push failures, route detailed command sequences and error-specific guidance through `Packages/com.actionfit.githubauth/README.md` and `Packages/com.actionfit.githubauth/AI_GUIDE.md`. Treat `fatal: could not read Username for 'https://github.com': Device not configured` as a local GitHub credential/helper issue, not a workflow yml or GitHub Actions runner issue.
 - BuildCommit window has `Auto Sync Build Files`, stored in `EditorPrefs` as `BuildCommitAutoSyncWorkflowAssets`, defaulting to true. When enabled, `Commit, Tag & Push` syncs package workflow assets into project `.github/` before saving the request and running `git add .`.
 - Android request fields `androidKeystoreFileName`, `androidKeystoreBase64`, `androidKeyaliasName`, `androidKeystorePassword`, and `androidAliasPassword` are copied from `BuildSettingsSO.keyStorePath`, `BuildSettingsSO.keyStoreAlias`, `BuildSettingsSO.keystorePassword`, and `BuildSettingsSO.aliasPassword`. Android request keystore/password values are used first; local runner env values are fallback only.
 - BuildCommit window platform changes reset default request options: Android uses `AndroidAab` and `GooglePlayInternal`; iOS uses `iOSXcodeProject` and `TestFlight`; Both uses `AndroidAabAndiOSXcodeProject` and `GooglePlayInternalAndTestFlight`.
@@ -71,15 +75,17 @@ Read this file when:
 - Workflow Slack notification calls the project-root `.github/scripts/notify-slack-build-result.sh` at the end of Android and iOS jobs with `if: always()`. The script reads `CI_SECRET_ROOT/shared/slack-webhook-url` or `SLACK_BUILD_WEBHOOK_URL`, skips when missing, and sends a short result message with one summary line plus profile, commit, and run URL. Optional mentions come from BuildCommit request `slackMentions`, serialized by the AutoBuild window as a JSON string array and passed to the script as `SLACK_BUILD_MENTIONS`; the AutoBuild UI stores rows with `Member ID` and local-only `Memo`, but only `Member ID` enters the request.
 - Workflow artifact paths must not hardcode a consuming project name. Android Google Play upload copies the discovered AAB to `.build/google-play-upload/upload.aab`, and iOS archive uses `Builds/iOSArchive/BuildCommit.xcarchive`.
 - Android artifact upload is intentionally slim: upload AAB files from `.build/google-play-upload/*.aab` and `Builds/**/*.aab` with `compression-level: 0`, and upload logs as a separate artifact. Do not upload `Builds/**`, because Unity/Gradle intermediate output can contain hundreds of files and stall artifact upload.
+- Android artifact/log upload steps are `continue-on-error: true` so GitHub artifact storage quota exhaustion does not mark an otherwise successful build and Google Play upload as failed.
 - Google Play upload action input uses `tracks`, not deprecated `track`.
 - iOS archive signing passes a single `CODE_SIGN_IDENTITY` value. Do not add `CODE_SIGN_IDENTITY[sdk=iphoneos*]` to the xcodebuild command; Xcode can misparse that command-line key and look for a certificate named `iphoneos*]=Apple Distribution...`.
 - The Android and iOS workflows restore the Unity `Library` cache with `actions/cache/restore` only. Do not use the combined `actions/cache` save step in mobile deploy jobs, because cache post-save can hold or fail an otherwise successful upload.
 - iOS artifact upload is intentionally slim: successful runs upload only IPA/plist files and logs, while failed runs upload diagnostic logs and export output. Do not upload `Builds/iOS/**` or the full `.xcarchive` by default; those directories can exceed 1 GB and make an otherwise successful TestFlight run fail during artifact upload.
+- iOS app/diagnostic artifact upload steps are `continue-on-error: true` so GitHub artifact storage quota exhaustion does not mark an otherwise successful archive/export and TestFlight upload as failed.
 - Runner setup files live under `RunnerSetup/`: `setup-local-runner-secrets.sh`, `validate-local-runner-secrets.sh`, `LOCAL_RUNNER_SECRETS_GUIDE.md`, and `AI_MAC_STUDIO_BUILD_AUTOMATION_GUIDE.md`.
 - CI entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`.
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.
 - AutoBuild window workflow sync copies `WorkflowTemplates/buildcommit-auto-build.yml` to `.github/workflows/buildcommit-auto-build.yml` and package `.github/scripts/*.sh` workflow scripts to project `.github/scripts/`, including Slack notification support. Manual sync asks for confirmation; BuildCommit auto sync runs without confirmation when `Auto Sync Build Files` is enabled.
-- Build Automation depends on `com.actionfit.buildsetting@1.1.3` or newer.
+- Build Automation depends on `com.actionfit.githubauth@1.0.1` and `com.actionfit.buildsetting@1.1.3` or newer.
 - The storage commit alone should not trigger CI. The pushed `build/**` tag is the actual CI request.
 - `Platform=Both` is split by the workflow into Android and iOS jobs before calling `CIBuildEntry`.
 

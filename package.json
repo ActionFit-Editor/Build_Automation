@@ -1,6 +1,6 @@
 {
     "name": "com.actionfit.buildautomation",
-    "version": "1.0.20",
+    "version": "1.0.22",
     "displayName": "Build Automation",
     "description": "BuildCommit request creation, Git tag based CI triggers, GitHub Actions workflow templates, and macOS self-hosted mobile build guidance for ActionFit Unity projects.",
     "unity": "6000.2",
@@ -8,6 +8,7 @@
         "name": "ActionFit"
     },
     "dependencies": {
+        "com.actionfit.githubauth": "1.0.1",
         "com.actionfit.buildsetting": "1.1.3"
     }
 }

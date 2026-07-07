@@ -10,12 +10,13 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 {
   "dependencies": {
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.3",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.20"
+    "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/GitHub_Auth.git#1.0.1",
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.22"
   }
 }
 ```
 
-`Build_Automation` 레포와 태그가 아직 배포되지 않았다면 위 URL은 배포 후 사용할 수 있습니다.
+`Build_Automation` 또는 `GitHub_Auth` 레포와 태그가 아직 배포되지 않았다면 위 URL은 배포 후 사용할 수 있습니다.
 
 ## 구성
 
@@ -30,6 +31,8 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 ## AutoBuild
 
 `AutoBuild` 창은 연결된 `BuildSettingsSO`의 버전과 번들 번호를 `PlayerSettings`에 적용한 뒤, `.build/build_request.json`을 생성합니다. 그 다음 `[BuildRequest] v{version}({bundleNo})` 형식의 저장용 커밋을 만들고 push한 뒤, `build/{platform}-{upload}/{version}/{bundleNo}-{shortSha}` 형식의 태그를 생성해 push합니다. `BuildSettingsSO`가 없으면 Build Setting 패키지가 `Assets/_Data/_BuildSetting/BuildSettingsSO.asset`을 자동 생성하고 프로젝트 `PlayerSettings` 기본값을 1차 초기화합니다.
+
+`Commit, Tag & Push`는 Unity를 실행 중인 로컬 기기의 `git push`와 tag push 권한을 사용합니다. 자동빌드를 요청하는 각 개발자 기기는 해당 GitHub repository에 push/tag 권한이 있는 계정으로 Git 인증을 먼저 설정해야 합니다. BuildCommit은 커밋 생성 전에 `com.actionfit.githubauth`의 preflight를 호출하고, 인증이 없으면 GitHub 인증 필요 팝업을 띄운 뒤 중단합니다. 자세한 연결 확인 순서와 오류별 안내는 `Packages/com.actionfit.githubauth/README.md`를 확인합니다.
 
 `Auto Sync Build Files`는 기본값이 켜짐입니다. 켜져 있으면 `Commit, Tag & Push` 실행 시 Build Automation 패키지의 workflow/template scripts를 프로젝트 루트 `.github/`로 먼저 동기화하고, 그 변경분도 같은 저장 커밋에 포함합니다.
 
@@ -69,7 +72,8 @@ Android package name은 `BuildSettingsSO.androidPackageName`, iOS bundle id는 `
 8. `Auto Sync Build Files`는 기본 ON입니다. ON이면 `Commit, Tag & Push` 실행 시 `.github/workflows`와 `.github/scripts`가 자동 동기화됩니다.
 9. Slack 알림이 필요하면 Mac runner 로컬 시크릿 번들에 `shared/slack-webhook-url`을 설정합니다.
 10. 사람 태그가 필요하면 AutoBuild 창의 `Slack Mentions`에서 `+` 버튼으로 행을 추가하고 `Member ID`와 `Memo`를 입력합니다. `Member ID` 예: `U12345678`, `<@U23456789>`. 표시 이름 `@송제우`는 실제 멘션 알림으로 동작하지 않을 수 있습니다.
-11. `Commit, Tag & Push` 버튼을 실행합니다. `Slack Mentions`의 `Member ID` 값만 `.build/build_request.json`에 JSON 배열 `slackMentions`로 직렬화되어 해당 BuildCommit 요청에 저장됩니다. `Memo`는 EditorPrefs에만 저장되어 AutoBuild 창에서 식별용으로만 보입니다.
+11. GitHub 인증 팝업이 표시되면 `Packages/com.actionfit.githubauth/README.md`의 연결 확인 절차를 따르거나 AI에게 GitHub 인증 가이드를 문의합니다.
+12. `Commit, Tag & Push` 버튼을 실행합니다. `Slack Mentions`의 `Member ID` 값만 `.build/build_request.json`에 JSON 배열 `slackMentions`로 직렬화되어 해당 BuildCommit 요청에 저장됩니다. `Memo`는 EditorPrefs에만 저장되어 AutoBuild 창에서 식별용으로만 보입니다.
 
 ```json
 "slackMentions": [
@@ -91,7 +95,7 @@ Unity -batchmode -quit -projectPath . -executeMethod ActionFit.BuildAutomation.E
 
 workflow는 macOS self-hosted runner 기준입니다. runner에는 `self-hosted`, `macOS`, `unity-mobile` 라벨이 있어야 하며, 같은 Mac에서 Unity CLI로 Android/iOS를 빌드합니다. `Platform=Both` 요청은 workflow가 Android job과 iOS job으로 나눠 `.build/build_request.json`의 platform 값을 임시 변환한 뒤 `CIBuildEntry.BuildFromRequest`를 각각 호출합니다.
 
-Google Play service account, iOS team id, App Store Connect API key, keychain password, Slack webhook URL은 Mac runner의 로컬 시크릿 번들에서 읽습니다. Android keystore 파일과 signing 비밀번호는 request 값을 우선 사용하고, request에 없을 때만 로컬 env로 fallback합니다. 로컬 시크릿 번들 경로는 workflow yml의 `CI_SECRET_ROOT`가 기준이며 현재 yml 값은 `/Users/lydia/workspace/build-automation`입니다. workflow는 Unity/PackageCache가 준비되기 전에 Unity editor 경로 확인과 secret 검증을 실행하므로 패키지 경로가 아니라 프로젝트 루트 `.github/scripts/` 아래의 scripts를 호출합니다. Unity editor는 workflow yml의 고정 버전이 아니라 `ProjectSettings/ProjectVersion.txt`의 `m_EditorVersion`으로 결정되며, `UNITY_HUB_EDITOR_ROOT` 아래에 해당 버전이 없으면 빌드 전에 실패합니다. Android Google Play upload는 프로젝트명을 하드코딩하지 않고 발견된 AAB를 `.build/google-play-upload/upload.aab`로 복사해 업로드하며, Android artifact는 AAB와 로그를 분리해서 올리고 `Builds/**` 전체 업로드는 하지 않습니다. iOS archive 기본 경로도 `Builds/iOSArchive/BuildCommit.xcarchive`를 사용합니다. Google Play action은 deprecated `track` 대신 `tracks` 입력을 사용합니다. iOS App Store profiles are selected by request bundle id from `ios/profiles/<bundle-id>.mobileprovision`, with optional `fastlane sigh` generation. iOS archive signing은 `xcodebuild`에 단일 `CODE_SIGN_IDENTITY`만 전달해 Xcode가 `CODE_SIGN_IDENTITY[sdk=iphoneos*]` 값을 인증서 이름으로 오해하지 않게 합니다. Android/iOS workflow는 Unity `Library` cache를 restore-only로 사용해 Google Play/TestFlight 업로드 성공 후 cache 저장 후처리가 전체 Run을 붙잡지 않게 합니다. iOS artifact는 성공 시 IPA/plist와 로그만, 실패 시 diagnostic 로그와 export 결과만 업로드해 `Builds/iOS/**`와 `.xcarchive` 전체 업로드로 인한 1GB급 artifact 실패를 피합니다. 설치/검증 스크립트와 상세 가이드는 `RunnerSetup/` 아래에 있습니다.
+Google Play service account, iOS team id, App Store Connect API key, keychain password, Slack webhook URL은 Mac runner의 로컬 시크릿 번들에서 읽습니다. Android keystore 파일과 signing 비밀번호는 request 값을 우선 사용하고, request에 없을 때만 로컬 env로 fallback합니다. 로컬 시크릿 번들 경로는 workflow yml의 `CI_SECRET_ROOT`가 기준이며 현재 yml 값은 `/Users/lydia/workspace/build-automation`입니다. workflow는 Unity/PackageCache가 준비되기 전에 Unity editor 경로 확인과 secret 검증을 실행하므로 패키지 경로가 아니라 프로젝트 루트 `.github/scripts/` 아래의 scripts를 호출합니다. Unity editor는 workflow yml의 고정 버전이 아니라 `ProjectSettings/ProjectVersion.txt`의 `m_EditorVersion`으로 결정되며, `UNITY_HUB_EDITOR_ROOT` 아래에 해당 버전이 없으면 빌드 전에 실패합니다. Android Google Play upload는 프로젝트명을 하드코딩하지 않고 발견된 AAB를 `.build/google-play-upload/upload.aab`로 복사해 업로드하며, Android artifact는 AAB와 로그를 분리해서 올리고 `Builds/**` 전체 업로드는 하지 않습니다. iOS archive 기본 경로도 `Builds/iOSArchive/BuildCommit.xcarchive`를 사용합니다. Google Play action은 deprecated `track` 대신 `tracks` 입력을 사용합니다. iOS App Store profiles are selected by request bundle id from `ios/profiles/<bundle-id>.mobileprovision`, with optional `fastlane sigh` generation. iOS archive signing은 `xcodebuild`에 단일 `CODE_SIGN_IDENTITY`만 전달해 Xcode가 `CODE_SIGN_IDENTITY[sdk=iphoneos*]` 값을 인증서 이름으로 오해하지 않게 합니다. Android/iOS workflow는 Unity `Library` cache를 restore-only로 사용해 Google Play/TestFlight 업로드 성공 후 cache 저장 후처리가 전체 Run을 붙잡지 않게 합니다. Android/iOS artifact upload steps are `continue-on-error: true`, so GitHub artifact storage quota exhaustion does not mark an otherwise successful Google Play/TestFlight deployment as failed. iOS artifact는 성공 시 IPA/plist와 로그만, 실패 시 diagnostic 로그와 export 결과만 업로드해 `Builds/iOS/**`와 `.xcarchive` 전체 업로드로 인한 1GB급 artifact 실패를 피합니다. 설치/검증 스크립트와 상세 가이드는 `RunnerSetup/` 아래에 있습니다.
 
 상세 Mac 서버 준비 절차는 [MAC_SELF_HOSTED_RUNNER_SETUP.md](MAC_SELF_HOSTED_RUNNER_SETUP.md)를 참고합니다.
 
