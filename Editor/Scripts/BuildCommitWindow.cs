@@ -36,6 +36,7 @@ namespace ActionFit.BuildAutomation.Editor
         private BuildRequestDistributionProfile _distributionProfile = BuildRequestDistributionProfile.Actionfit; // 배포 계정 프로필
         private bool _autoSyncWorkflowAssets = true; // Commit 전 패키지 workflow/scripts 자동 동기화
 
+        private Vector2 _contentScrollPosition; // 창 전체 스크롤 위치
         private Vector2 _logScrollPosition; // 로그 스크롤 위치
         private readonly List<string> _logs = new(); // 실행 결과 로그 목록
 
@@ -63,50 +64,63 @@ namespace ActionFit.BuildAutomation.Editor
 
         private void OnGUI()
         {
-            EditorGUILayout.Space(8);
+            _contentScrollPosition = EditorGUILayout.BeginScrollView(
+                _contentScrollPosition,
+                false,
+                true,
+                GUILayout.ExpandHeight(true));
 
-            if (!BuildSettingBridge.EnsureAvailable(false))
+            try
             {
-                EditorGUILayout.HelpBox(
-                    $"Build Setting package is required. Install or update Build Automation through ActionFit Package Manager so `{BuildSettingBridge.PackageId}@{BuildSettingBridge.MinimumVersion}` is applied.",
-                    MessageType.Warning);
-                if (GUILayout.Button("Open ActionFit Package Manager", GUILayout.Height(24)))
-                    OpenActionFitPackageManagerOrShowGuide();
-                return;
+                EditorGUILayout.Space(8);
+
+                if (!BuildSettingBridge.EnsureAvailable(false))
+                {
+                    EditorGUILayout.HelpBox(
+                        $"Build Setting package is required. Install or update Build Automation through ActionFit Package Manager so `{BuildSettingBridge.PackageId}@{BuildSettingBridge.MinimumVersion}` is applied.",
+                        MessageType.Warning);
+                    if (GUILayout.Button("Open ActionFit Package Manager", GUILayout.Height(24)))
+                        OpenActionFitPackageManagerOrShowGuide();
+                    return;
+                }
+
+                DrawSOField();
+                EditorGUILayout.Space(8);
+
+                if (_settings == null || _automationSettings == null)
+                    LoadSO();
+
+                if (_settings == null)
+                {
+                    EditorGUILayout.HelpBox("BuildSettingsSO를 연결해주세요.", MessageType.Warning);
+                    return;
+                }
+
+                if (_automationSettings == null)
+                {
+                    EditorGUILayout.HelpBox("BuildAutomationSettingsSO를 연결해주세요.", MessageType.Warning);
+                    return;
+                }
+
+                _serializedSettings?.Update();
+                _serializedAutomationSettings?.Update();
+
+                DrawVersionInput();
+                EditorGUILayout.Space(10);
+                DrawBuildRequestOptions();
+                EditorGUILayout.Space(10);
+                DrawWorkflowSync();
+                EditorGUILayout.Space(10);
+                DrawButtons();
+                EditorGUILayout.Space(8);
+                DrawLog();
+
+                ApplySerializedIfModified();
             }
-
-            DrawSOField();
-            EditorGUILayout.Space(8);
-
-            if (_settings == null || _automationSettings == null)
-                LoadSO();
-
-            if (_settings == null)
+            finally
             {
-                EditorGUILayout.HelpBox("BuildSettingsSO를 연결해주세요.", MessageType.Warning);
-                return;
+                EditorGUILayout.EndScrollView();
             }
-
-            if (_automationSettings == null)
-            {
-                EditorGUILayout.HelpBox("BuildAutomationSettingsSO를 연결해주세요.", MessageType.Warning);
-                return;
-            }
-
-            _serializedSettings?.Update();
-            _serializedAutomationSettings?.Update();
-
-            DrawVersionInput();
-            EditorGUILayout.Space(10);
-            DrawBuildRequestOptions();
-            EditorGUILayout.Space(10);
-            DrawWorkflowSync();
-            EditorGUILayout.Space(10);
-            DrawButtons();
-            EditorGUILayout.Space(8);
-            DrawLog();
-
-            ApplySerializedIfModified();
         }
 
         #endregion
@@ -361,10 +375,10 @@ namespace ActionFit.BuildAutomation.Editor
         {
             EditorGUILayout.LabelField("Log", EditorStyles.boldLabel);
 
+            float logHeight = Mathf.Clamp(position.height * 0.25f, 80f, 180f);
             _logScrollPosition = EditorGUILayout.BeginScrollView(
                 _logScrollPosition,
-                GUILayout.MinHeight(80),
-                GUILayout.ExpandHeight(true)
+                GUILayout.Height(logHeight)
             );
 
             foreach (var log in _logs)

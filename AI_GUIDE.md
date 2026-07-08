@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.25`
+- Current package version at generation time: `1.0.26`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -61,6 +61,7 @@ Read this file when:
 - Storage commit message prefix: `[BuildRequest]`.
 - Distribution profile request field: `distributionProfile`. Current profiles are `Actionfit` and `Stormborn`; only the profile name is stored in request JSON.
 - BuildCommit window starts with `Platform=None`. `Commit, Tag & Push` is disabled until the user selects `Current`, `Android`, `iOS`, or `Both`. `Current` remains a selectable option and resolves to the active Unity build target when the request is created.
+- BuildCommit window wraps its main body in a vertical scroll view so short Unity editor windows can still reach settings, actions, and logs. Keep the log area as a nested scroll view with bounded layout behavior.
 - `Commit, Tag & Push` runs local `git push` and tag push from the Unity editor. Each developer machine that uses BuildCommit must have GitHub credentials configured for the consuming repository with push/tag permission. BuildCommit uses `GitHubAuthPreflight.EnsureProjectGitHubPushAccess` from `com.actionfit.githubauth` before creating the request commit/tag; on failure, GitHub Auth shows the shared authentication-required dialog and BuildCommit stops. BuildAutomation must not hard-reference `ActionFit.BuildSetting.Editor` or `ActionFit.GitHubAuth.Editor` in `using` statements or the editor asmdef, because missing Git UPM dependencies would prevent the package from compiling. Use `BuildSettingBridge` and reflection for optional calls. Leave dependency installation to ActionFit Package Manager's catalog CSV dependency flow; if editing `Packages/manifest.json` manually, all required Git UPM URLs must be added explicitly.
 - When explaining or diagnosing local BuildCommit push failures, route detailed command sequences and error-specific guidance through `Packages/com.actionfit.githubauth/README.md` and `Packages/com.actionfit.githubauth/AI_GUIDE.md`. Treat `fatal: could not read Username for 'https://github.com': Device not configured` as a local GitHub credential/helper issue, not a workflow yml or GitHub Actions runner issue.
 - BuildCommit window has `Auto Sync Build Files`, stored in `EditorPrefs` as `BuildCommitAutoSyncWorkflowAssets`, defaulting to true. When enabled, `Commit, Tag & Push` syncs package workflow assets into project `.github/` before saving the request and running `git add .`.

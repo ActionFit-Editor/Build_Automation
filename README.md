@@ -11,7 +11,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
   "dependencies": {
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.3",
     "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/GitHub_Auth.git#1.0.1",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.25"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.26"
   }
 }
 ```
@@ -38,6 +38,8 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 `CS0103: The name 'BuildSettingBridge' does not exist in the current context`가 발생하면 `com.actionfit.buildautomation`을 `1.0.25` 이상으로 업데이트한 뒤 `AssetDatabase.Refresh` 또는 Unity 재시작으로 스크립트 컴파일 목록을 갱신합니다. 이 버전부터 bridge 타입은 Unity가 이미 컴파일하는 소스에 포함되어 부분 refresh 상태에서도 BuildAutomation 참조가 깨지지 않도록 되어 있습니다.
 
 `Auto Sync Build Files`는 기본값이 켜짐입니다. 켜져 있으면 `Commit, Tag & Push` 실행 시 Build Automation 패키지의 workflow/template scripts를 프로젝트 루트 `.github/`로 먼저 동기화하고, 그 변경분도 같은 저장 커밋에 포함합니다.
+
+`AutoBuild` 창 본문은 세로 스크롤 영역입니다. 창 높이가 낮아져도 Version Info, CI Build Request, GitHub Workflow, 버튼, Log 순서가 유지되며 Log 영역은 별도 스크롤을 사용합니다.
 
 실제 GitHub Actions 빌드 요청은 저장 커밋 push가 아니라 `build/**` 태그 push로 발생합니다. 저장 커밋은 요청 JSON과 변경사항을 남기는 용도이며, 같은 버전으로 재요청할 수 있도록 커밋은 `--allow-empty`를 허용합니다.
 

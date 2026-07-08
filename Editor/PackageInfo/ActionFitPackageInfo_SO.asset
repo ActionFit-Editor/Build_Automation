@@ -21,16 +21,10 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- `BuildSettingBridge`\uB97C \uBCC4\uB3C4 `.cs` \uD30C\uC77C\uC774
-    \uC544\uB2CC \uC774\uBBF8 \uCEF4\uD30C\uC77C \uC785\uB825\uC5D0 \uD3EC\uD568\uB418\uB294
-    `BuildCommitWindow.cs` \uB0B4\uBD80 \uD0C0\uC785\uC73C\uB85C \uC62E\uACBC\uC2B5\uB2C8\uB2E4.\n\n-
-    Unity\uAC00 \uC0C8 bridge \uD30C\uC77C\uC744 \uCEF4\uD30C\uC77C \uC18C\uC2A4
-    \uBAA9\uB85D\uC5D0 \uB204\uB77D\uD558\uB294 \uC0C1\uD0DC\uC5D0\uC11C\uB3C4 `CS0103:
-    BuildSettingBridge` \uC624\uB958\uAC00 \uBC1C\uC0DD\uD558\uC9C0 \uC54A\uB3C4\uB85D
-    \uD588\uC2B5\uB2C8\uB2E4.\n\n- Build Setting\uACFC GitHub Auth\uB97C \uC9C1\uC811
-    asmdef \uCC38\uC870\uD558\uC9C0 \uC54A\uB294 reflection \uAD6C\uC870\uB294 \uC720\uC9C0\uD588\uC2B5\uB2C8\uB2E4.\n\n-
-    Caution: \uC774\uBBF8 \uC5F4\uB9B0 Unity\uC5D0\uC11C \uC774\uC804 \uCEF4\uD30C\uC77C
-    \uCE90\uC2DC\uAC00 \uB0A8\uC544 \uC788\uC73C\uBA74 \uD328\uD0A4\uC9C0 \uC5C5\uB370\uC774\uD2B8
-    \uD6C4 `AssetDatabase.Refresh` \uB610\uB294 Unity \uC7AC\uC2DC\uC791\uC774 \uD544\uC694\uD560
-    \uC218 \uC788\uC2B5\uB2C8\uB2E4."
+  _releaseNote: '- Wrapped the AutoBuild window body in a vertical scroll view so
+    controls remain reachable in short Unity editor windows.
+
+
+    - Kept the existing
+    build log area as a separate nested scroll view.'
   _dependenciesOverride: com.actionfit.githubauth@1.0.1, com.actionfit.buildsetting@1.1.3
