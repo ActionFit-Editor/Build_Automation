@@ -1,10 +1,7 @@
 {
     "name": "com.actionfit.buildautomation.Editor",
     "rootNamespace": "ActionFit.BuildAutomation.Editor",
-    "references": [
-        "com.actionfit.githubauth.Editor",
-        "com.actionfit.buildsetting.Editor"
-    ],
+    "references": [],
     "includePlatforms": [
         "Editor"
     ],

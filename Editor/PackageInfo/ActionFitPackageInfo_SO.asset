@@ -21,13 +21,17 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- Slack Mentions \uBAA9\uB85D\uC744 EditorPrefs\uAC00 \uC544\uB2CC
-    `BuildAutomationSettingsSO`\uC5D0 \uC800\uC7A5\uD574 \uD504\uB85C\uC81D\uD2B8\uC5D0\uC11C
-    \uACF5\uC720\uD558\uB3C4\uB85D \uBCC0\uACBD\uD588\uC2B5\uB2C8\uB2E4.\n\n- \uAC01
-    Slack Mention \uD589\uC5D0 `Mention` \uCCB4\uD06C\uBC15\uC2A4\uB97C \uCD94\uAC00\uD574
-    \uC6D0\uD558\uB294 \uC0AC\uB78C\uB9CC BuildCommit request\uC758 `slackMentions`\uB85C
-    \uC9C1\uB82C\uD654\uD558\uB3C4\uB85D \uD588\uC2B5\uB2C8\uB2E4.\n\n- \uAE30\uC874
-    EditorPrefs Slack Mention \uB370\uC774\uD130\uB294 SO \uBAA9\uB85D\uC774 \uBE44\uC5B4
-    \uC788\uC744 \uB54C 1\uD68C \uB9C8\uC774\uADF8\uB808\uC774\uC158\uD55C \uB4A4
-    \uC81C\uAC70\uD569\uB2C8\uB2E4."
+  _releaseNote: "- BuildAutomation\uC774 Build Setting\uACFC GitHub Auth package\uB97C
+    \uC9C1\uC811 asmdef \uCC38\uC870\uD558\uC9C0 \uC54A\uACE0 \uBA3C\uC800 \uCEF4\uD30C\uC77C\uB418\uB3C4\uB85D
+    \uBCC0\uACBD\uD588\uC2B5\uB2C8\uB2E4.\n\n- ActionFit Package Manager\uAC00 catalog
+    CSV\uC758 dependency \uC815\uBCF4\uB97C \uC77D\uC5B4 `Packages/manifest.json`\uC5D0
+    `com.actionfit.buildsetting`\uACFC `com.actionfit.githubauth` Git UPM URL\uC744
+    \uD568\uAED8 \uAE30\uB85D\uD558\uB294 \uD750\uB984\uC744 \uC804\uC81C\uB85C \uC815\uB9AC\uD588\uC2B5\uB2C8\uB2E4.\n\n-
+    \uC218\uB3D9\uC73C\uB85C `Packages/manifest.json`\uC744 \uD3B8\uC9D1\uD558\uB294
+    \uD504\uB85C\uC81D\uD2B8\uC5D0\uC11C\uB294 BuildAutomation\uBFD0 \uC544\uB2C8\uB77C
+    Build Setting\uACFC GitHub Auth Git UPM URL\uB3C4 \uC9C1\uC811 \uCD94\uAC00\uD574\uC57C
+    \uD55C\uB2E4\uACE0 \uC548\uB0B4\uD569\uB2C8\uB2E4.\n\n- \uD328\uD0A4\uC9C0\uBCC4
+    \uD558\uB4DC\uCF54\uB529 \uC124\uCE58 \uC2A4\uD06C\uB9BD\uD2B8\uB294 \uCD94\uAC00\uD558\uC9C0
+    \uC54A\uACE0, `package.json`/`_dependenciesOverride`\uC5D0 \uC758\uC874\uC131
+    \uBA54\uD0C0\uB370\uC774\uD130\uB97C \uC720\uC9C0\uD569\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.githubauth@1.0.1, com.actionfit.buildsetting@1.1.3

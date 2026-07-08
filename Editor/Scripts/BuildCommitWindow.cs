@@ -1,10 +1,10 @@
 #if UNITY_EDITOR
 
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Text;
-using ActionFit.BuildSetting.Editor;
-using ActionFit.GitHubAuth.Editor;
 using UnityEditor;
 using UnityEngine;
 using Process = System.Diagnostics.Process;
@@ -16,13 +16,16 @@ namespace ActionFit.BuildAutomation.Editor
     {
         #region Fields
 
-        private const string BuildSettingsPrefsKey = BuildSettingsSO.SOPrefsKey; // BuildSettingsWindow와 동일한 키 공유
         private const string DistributionProfilePrefsKey = "BuildCommitDistributionProfile";
         private const string LegacySlackMentionsPrefsKey = "BuildCommitSlackMentions";
         private const string AutoSyncWorkflowAssetsPrefsKey = "BuildCommitAutoSyncWorkflowAssets";
         private const string BuildTagPrefix = "build";
+        private const string ActionFitPackageManagerMenuPath = "Tools/ActionFit/Package Manager/Package Manager";
+        private const string GitHubAuthPackageId = "com.actionfit.githubauth";
+        private const string GitHubAuthMinimumVersion = "1.0.1";
+        private const string GitHubAuthPreflightTypeName = "ActionFit.GitHubAuth.Editor.GitHubAuthPreflight, com.actionfit.githubauth.Editor";
 
-        private BuildSettingsSO _settings; // 빌드 설정 SO
+        private ScriptableObject _settings; // 빌드 설정 SO
         private SerializedObject _serializedSettings; // SO 직렬화 래퍼
         private BuildAutomationSettingsSO _automationSettings; // 자동 빌드 공유 설정 SO
         private SerializedObject _serializedAutomationSettings; // 자동 빌드 SO 직렬화 래퍼
@@ -60,6 +63,17 @@ namespace ActionFit.BuildAutomation.Editor
         private void OnGUI()
         {
             EditorGUILayout.Space(8);
+
+            if (!BuildSettingBridge.EnsureAvailable(false))
+            {
+                EditorGUILayout.HelpBox(
+                    $"Build Setting package is required. Install or update Build Automation through ActionFit Package Manager so `{BuildSettingBridge.PackageId}@{BuildSettingBridge.MinimumVersion}` is applied.",
+                    MessageType.Warning);
+                if (GUILayout.Button("Open ActionFit Package Manager", GUILayout.Height(24)))
+                    OpenActionFitPackageManagerOrShowGuide();
+                return;
+            }
+
             DrawSOField();
             EditorGUILayout.Space(8);
 
@@ -105,13 +119,13 @@ namespace ActionFit.BuildAutomation.Editor
             EditorGUILayout.PrefixLabel("Build Settings");
 
             EditorGUI.BeginChangeCheck();
-            _settings = (BuildSettingsSO)EditorGUILayout.ObjectField(_settings, typeof(BuildSettingsSO), false);
+            _settings = EditorGUILayout.ObjectField(_settings, BuildSettingBridge.SettingsType, false) as ScriptableObject;
             if (EditorGUI.EndChangeCheck())
             {
                 if (_settings != null)
                 {
                     _serializedSettings = new SerializedObject(_settings);
-                    EditorPrefs.SetString(BuildSettingsPrefsKey, AssetDatabase.GetAssetPath(_settings));
+                    EditorPrefs.SetString(BuildSettingBridge.SOPrefsKey, AssetDatabase.GetAssetPath(_settings));
                 }
                 else
                 {
@@ -376,12 +390,15 @@ namespace ActionFit.BuildAutomation.Editor
         // BuildSettingsSO 자동 로드 (BuildSettingsWindow와 동일한 SO 공유)
         private void LoadSO()
         {
-            string savedPath = EditorPrefs.GetString(BuildSettingsPrefsKey, "");
+            if (!BuildSettingBridge.EnsureAvailable(false))
+                return;
+
+            string savedPath = EditorPrefs.GetString(BuildSettingBridge.SOPrefsKey, "");
             if (!string.IsNullOrEmpty(savedPath))
-                _settings = AssetDatabase.LoadAssetAtPath<BuildSettingsSO>(savedPath);
+                _settings = AssetDatabase.LoadAssetAtPath(savedPath, BuildSettingBridge.SettingsType) as ScriptableObject;
 
             if (_settings == null)
-                _settings = BuildSettingsSO.FindOrCreateSettingsAsset();
+                _settings = BuildSettingBridge.FindOrCreateSettingsAsset();
 
             if (_settings != null)
                 _serializedSettings = new SerializedObject(_settings);
@@ -506,8 +523,8 @@ namespace ActionFit.BuildAutomation.Editor
 
             ApplySerializedIfModified();
 
-            BuildSettingsApplier.ApplyVersionSettings(_settings);
-            AddLog($"[Apply] version={_settings.buildVersion}, bundleNo={_settings.bundleNo}");
+            BuildSettingBridge.ApplyVersionSettings(_settings);
+            AddLog($"[Apply] version={BuildSettingBridge.GetString(_settings, "buildVersion")}, bundleNo={BuildSettingBridge.GetString(_settings, "bundleNo")}");
         }
 
         // PlayerSettings 적용 후 저장 커밋을 푸시하고, 빌드 요청 태그를 푸시한다.
@@ -528,8 +545,8 @@ namespace ActionFit.BuildAutomation.Editor
                 return;
             }
 
-            string version = _settings.buildVersion;
-            string bundleNo = _settings.bundleNo;
+            string version = BuildSettingBridge.GetString(_settings, "buildVersion");
+            string bundleNo = BuildSettingBridge.GetString(_settings, "bundleNo");
             string commitMessage = CreateCommitMessage(version, bundleNo);
             string tagPreview = CreateBuildTag(version, bundleNo, "commit");
 
@@ -595,24 +612,112 @@ namespace ActionFit.BuildAutomation.Editor
 
         private bool EnsureGitHubAuthForCommitPush()
         {
+            Type preflightType = Type.GetType(GitHubAuthPreflightTypeName);
+            if (preflightType == null)
+            {
+                AddLog($"[ERROR] GitHub Auth package is required. Install {GitHubAuthPackageId}@{GitHubAuthMinimumVersion} through ActionFit Package Manager and reopen Unity.");
+                ShowGitHubAuthMissingDialog();
+                return false;
+            }
+
+            MethodInfo method = GetGitHubAuthEnsureMethod(preflightType);
+            if (method == null)
+            {
+                AddLog($"[ERROR] GitHub Auth preflight API is not available. Update {GitHubAuthPackageId} to {GitHubAuthMinimumVersion} or newer through ActionFit Package Manager.");
+                ShowGitHubAuthMissingDialog();
+                return false;
+            }
+
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            bool isReady = GitHubAuthPreflight.EnsureProjectGitHubPushAccess(
-                projectRoot,
-                "BuildCommit Commit, Tag & Push",
-                out GitHubAuthCheckResult result);
+            object[] args = { projectRoot, "BuildCommit Commit, Tag & Push", null };
+            bool isReady;
+            object result;
+
+            try
+            {
+                isReady = (bool)method.Invoke(null, args);
+                result = args[2];
+            }
+            catch (System.Exception exception)
+            {
+                AddLog($"[ERROR] [GitHub Auth] {exception.Message}");
+                Debug.LogError($"[BuildCommitWindow] GitHub Auth preflight failed: {exception}");
+                return false;
+            }
+
+            string message = GetStringProperty(result, "Message");
+            string failedCommand = GetStringProperty(result, "FailedCommand");
+            string details = GetStringProperty(result, "Details");
 
             if (isReady)
             {
-                AddLog($"[GitHub Auth] {result.Message}");
+                AddLog($"[GitHub Auth] {message}");
                 return true;
             }
 
-            AddLog($"[ERROR] [GitHub Auth] {result.Message}");
-            if (!string.IsNullOrEmpty(result.FailedCommand))
-                AddLog($"[GitHub Auth] Failed command: {result.FailedCommand}");
-            if (!string.IsNullOrEmpty(result.Details))
-                AddLog(result.Details);
+            AddLog($"[ERROR] [GitHub Auth] {message}");
+            if (!string.IsNullOrEmpty(failedCommand))
+                AddLog($"[GitHub Auth] Failed command: {failedCommand}");
+            if (!string.IsNullOrEmpty(details))
+                AddLog(details);
             return false;
+        }
+
+        private static void ShowGitHubAuthMissingDialog()
+        {
+            int result = EditorUtility.DisplayDialogComplex(
+                "GitHub Auth Required",
+                $"BuildCommit push preflight requires `{GitHubAuthPackageId}@{GitHubAuthMinimumVersion}`.\n\n" +
+                "Install or update Build Automation through ActionFit Package Manager so its declared dependencies are applied.\n\n" +
+                "For GitHub credential setup, read GitHub Auth README or ask AI for the GitHub authentication guide.",
+                "Open Package Manager",
+                "OK",
+                "");
+
+            if (result == 0)
+                OpenActionFitPackageManagerOrShowGuide();
+        }
+
+        private static void OpenActionFitPackageManagerOrShowGuide()
+        {
+            if (EditorApplication.ExecuteMenuItem(ActionFitPackageManagerMenuPath))
+                return;
+
+                EditorUtility.DisplayDialog(
+                    "ActionFit Package Manager",
+                    "ActionFit Package Manager is not available in this project.\n\n" +
+                $"Install the ActionFit Package Manager first, or manually add Build Automation plus `{BuildSettingBridge.PackageId}@{BuildSettingBridge.MinimumVersion}` and `{GitHubAuthPackageId}@{GitHubAuthMinimumVersion}` Git UPM URLs to the project manifest.",
+                "OK");
+        }
+
+        private static MethodInfo GetGitHubAuthEnsureMethod(Type preflightType)
+        {
+            foreach (MethodInfo method in preflightType.GetMethods(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (method.Name != "EnsureProjectGitHubPushAccess")
+                    continue;
+
+                ParameterInfo[] parameters = method.GetParameters();
+                if (parameters.Length != 3)
+                    continue;
+                if (parameters[0].ParameterType != typeof(string) || parameters[1].ParameterType != typeof(string))
+                    continue;
+                if (!parameters[2].ParameterType.IsByRef)
+                    continue;
+
+                return method;
+            }
+
+            return null;
+        }
+
+        private static string GetStringProperty(object source, string propertyName)
+        {
+            if (source == null || string.IsNullOrEmpty(propertyName))
+                return "";
+
+            PropertyInfo property = source.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+            return property?.GetValue(source) as string ?? "";
         }
 
         private bool SyncWorkflowAssetsForCommit()

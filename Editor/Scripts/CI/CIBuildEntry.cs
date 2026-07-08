@@ -2,7 +2,6 @@
 
 using System;
 using System.IO;
-using ActionFit.BuildSetting.Editor;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
@@ -28,7 +27,13 @@ namespace ActionFit.BuildAutomation.Editor
                 return 1;
             }
 
-            BuildSettingsSO settings = BuildSettingsSO.FindSettingsAsset();
+            if (!BuildSettingBridge.EnsureAvailable(false))
+            {
+                Debug.LogError("[CIBuildEntry] Build Setting package is required. Install/update Build Automation through ActionFit Package Manager so catalog dependencies are written to Packages/manifest.json, or manually add the Build Setting Git UPM URL before running CI.");
+                return 1;
+            }
+
+            ScriptableObject settings = BuildSettingBridge.FindSettingsAsset();
             if (settings == null)
             {
                 Debug.LogError("[CIBuildEntry] BuildSettingsSO not found");
@@ -36,7 +41,7 @@ namespace ActionFit.BuildAutomation.Editor
             }
 
             ApplyRequest(settings, request);
-            BuildSettingsApplier.ApplyVersionSettings(settings);
+            BuildSettingBridge.ApplyVersionSettings(settings);
             ApplyPlayerIdentifiers(settings);
 
             BuildReport report = RunBuild(settings, request);
@@ -51,37 +56,40 @@ namespace ActionFit.BuildAutomation.Editor
             return summary.result == BuildResult.Succeeded ? 0 : 1;
         }
 
-        private static void ApplyRequest(BuildSettingsSO settings, BuildRequest request)
+        private static void ApplyRequest(ScriptableObject settings, BuildRequest request)
         {
             string androidAlias = request.androidKeyaliasName?.Trim();
             string androidPackageName = request.androidPackageName?.Trim();
             string iosBundleId = request.iosBundleId?.Trim();
             string iosDevelopmentTeamId = PickEnvironmentOrRequest("IOS_DEVELOPMENT_TEAM_ID", request.iosDevelopmentTeamId);
 
-            if (!string.IsNullOrEmpty(request.buildVersion)) settings.buildVersion = request.buildVersion;
-            if (!string.IsNullOrEmpty(request.bundleNo)) settings.bundleNo = request.bundleNo;
-            if (!string.IsNullOrEmpty(request.buildFileName)) settings.buildFileName = request.buildFileName;
-            if (!string.IsNullOrEmpty(androidPackageName)) settings.androidPackageName = androidPackageName;
-            if (!string.IsNullOrEmpty(iosBundleId)) settings.iosPackageName = iosBundleId;
-            if (!string.IsNullOrEmpty(iosDevelopmentTeamId)) settings.developmentTeamId = iosDevelopmentTeamId;
-            if (!string.IsNullOrEmpty(androidAlias)) settings.keyStoreAlias = androidAlias;
-            settings.saveFileInProject = true;
+            if (!string.IsNullOrEmpty(request.buildVersion)) BuildSettingBridge.SetString(settings, "buildVersion", request.buildVersion);
+            if (!string.IsNullOrEmpty(request.bundleNo)) BuildSettingBridge.SetString(settings, "bundleNo", request.bundleNo);
+            if (!string.IsNullOrEmpty(request.buildFileName)) BuildSettingBridge.SetString(settings, "buildFileName", request.buildFileName);
+            if (!string.IsNullOrEmpty(androidPackageName)) BuildSettingBridge.SetString(settings, "androidPackageName", androidPackageName);
+            if (!string.IsNullOrEmpty(iosBundleId)) BuildSettingBridge.SetString(settings, "iosPackageName", iosBundleId);
+            if (!string.IsNullOrEmpty(iosDevelopmentTeamId)) BuildSettingBridge.SetString(settings, "developmentTeamId", iosDevelopmentTeamId);
+            if (!string.IsNullOrEmpty(androidAlias)) BuildSettingBridge.SetString(settings, "keyStoreAlias", androidAlias);
+            BuildSettingBridge.SetBool(settings, "saveFileInProject", true);
 
             EditorUtility.SetDirty(settings);
             AssetDatabase.SaveAssets();
             Debug.Log($"[CIBuildEntry] Request applied: trigger={request.triggerSource}, platform={request.platform}, kind={request.buildKind}, upload={request.uploadTarget}, profile={request.distributionProfile}, androidPackage={androidPackageName}, iosBundle={iosBundleId}, iosTeamId={iosDevelopmentTeamId}, androidAlias={androidAlias}");
         }
 
-        private static void ApplyPlayerIdentifiers(BuildSettingsSO settings)
+        private static void ApplyPlayerIdentifiers(ScriptableObject settings)
         {
-            if (!string.IsNullOrWhiteSpace(settings.androidPackageName))
-                PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, settings.androidPackageName.Trim());
+            string androidPackageName = BuildSettingBridge.GetString(settings, "androidPackageName");
+            string iosPackageName = BuildSettingBridge.GetString(settings, "iosPackageName");
 
-            if (!string.IsNullOrWhiteSpace(settings.iosPackageName))
-                PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.iOS, settings.iosPackageName.Trim());
+            if (!string.IsNullOrWhiteSpace(androidPackageName))
+                PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, androidPackageName.Trim());
+
+            if (!string.IsNullOrWhiteSpace(iosPackageName))
+                PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.iOS, iosPackageName.Trim());
         }
 
-        private static BuildReport RunBuild(BuildSettingsSO settings, BuildRequest request)
+        private static BuildReport RunBuild(ScriptableObject settings, BuildRequest request)
         {
             BuildRequestPlatform platform = ResolvePlatform(request.platform);
 
@@ -91,14 +99,14 @@ namespace ActionFit.BuildAutomation.Editor
 #if UNITY_ANDROID
                     ApplyAndroidSigning(request);
                     bool aab = request.buildKind != BuildRequestKind.AndroidApk;
-                    return AOSBuildProcess.BuildForCI(settings, aab);
+                    return BuildSettingBridge.BuildAndroidForCI(settings, aab);
 #else
                     Debug.LogError("[CIBuildEntry] Android build requested, but UNITY_ANDROID is not active");
                     return null;
 #endif
                 case BuildRequestPlatform.iOS:
 #if UNITY_IOS
-                    return iOSBuildProcess.BuildForCI(settings);
+                    return BuildSettingBridge.BuildIosForCI(settings);
 #else
                     Debug.LogError("[CIBuildEntry] iOS build requested, but UNITY_IOS is not active");
                     return null;

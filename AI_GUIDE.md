@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.23`
+- Current package version at generation time: `1.0.24`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -61,7 +61,7 @@ Read this file when:
 - Storage commit message prefix: `[BuildRequest]`.
 - Distribution profile request field: `distributionProfile`. Current profiles are `Actionfit` and `Stormborn`; only the profile name is stored in request JSON.
 - BuildCommit window starts with `Platform=None`. `Commit, Tag & Push` is disabled until the user selects `Current`, `Android`, `iOS`, or `Both`. `Current` remains a selectable option and resolves to the active Unity build target when the request is created.
-- `Commit, Tag & Push` runs local `git push` and tag push from the Unity editor. Each developer machine that uses BuildCommit must have GitHub credentials configured for the consuming repository with push/tag permission. BuildCommit calls `GitHubAuthPreflight.EnsureProjectGitHubPushAccess` from `com.actionfit.githubauth` before creating the request commit/tag; on failure, GitHub Auth shows the shared authentication-required dialog and BuildCommit stops.
+- `Commit, Tag & Push` runs local `git push` and tag push from the Unity editor. Each developer machine that uses BuildCommit must have GitHub credentials configured for the consuming repository with push/tag permission. BuildCommit uses `GitHubAuthPreflight.EnsureProjectGitHubPushAccess` from `com.actionfit.githubauth` before creating the request commit/tag; on failure, GitHub Auth shows the shared authentication-required dialog and BuildCommit stops. BuildAutomation must not hard-reference `ActionFit.BuildSetting.Editor` or `ActionFit.GitHubAuth.Editor` in `using` statements or the editor asmdef, because missing Git UPM dependencies would prevent the package from compiling. Use `BuildSettingBridge` and reflection for optional calls. Leave dependency installation to ActionFit Package Manager's catalog CSV dependency flow; if editing `Packages/manifest.json` manually, all required Git UPM URLs must be added explicitly.
 - When explaining or diagnosing local BuildCommit push failures, route detailed command sequences and error-specific guidance through `Packages/com.actionfit.githubauth/README.md` and `Packages/com.actionfit.githubauth/AI_GUIDE.md`. Treat `fatal: could not read Username for 'https://github.com': Device not configured` as a local GitHub credential/helper issue, not a workflow yml or GitHub Actions runner issue.
 - BuildCommit window has `Auto Sync Build Files`, stored in `EditorPrefs` as `BuildCommitAutoSyncWorkflowAssets`, defaulting to true. When enabled, `Commit, Tag & Push` syncs package workflow assets into project `.github/` before saving the request and running `git add .`.
 - Android request fields `androidKeystoreFileName`, `androidKeystoreBase64`, `androidKeyaliasName`, `androidKeystorePassword`, and `androidAliasPassword` are copied from `BuildSettingsSO.keyStorePath`, `BuildSettingsSO.keyStoreAlias`, `BuildSettingsSO.keystorePassword`, and `BuildSettingsSO.aliasPassword`. Android request keystore/password values are used first; local runner env values are fallback only.
@@ -85,7 +85,7 @@ Read this file when:
 - CI entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`.
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.
 - AutoBuild window workflow sync copies `WorkflowTemplates/buildcommit-auto-build.yml` to `.github/workflows/buildcommit-auto-build.yml` and package `.github/scripts/*.sh` workflow scripts to project `.github/scripts/`, including Slack notification support. Manual sync asks for confirmation; BuildCommit auto sync runs without confirmation when `Auto Sync Build Files` is enabled.
-- Build Automation depends on `com.actionfit.githubauth@1.0.1` and `com.actionfit.buildsetting@1.1.3` or newer.
+- Build Automation depends on `com.actionfit.buildsetting@1.1.3` or newer and `com.actionfit.githubauth@1.0.1` or newer. Do not add package-specific installer scripts for these dependencies. Keep dependency metadata in `package.json` and `Editor/PackageInfo/ActionFitPackageInfo_SO.asset` `_dependenciesOverride`; ActionFit Package Manager must publish that dependency metadata to the catalog CSV and write the resolved Git UPM URLs into `Packages/manifest.json` during install/update. If a dependency is missing, BuildAutomation should compile, show a clear warning, and stop the affected workflow.
 - The storage commit alone should not trigger CI. The pushed `build/**` tag is the actual CI request.
 - `Platform=Both` is split by the workflow into Android and iOS jobs before calling `CIBuildEntry`.
 

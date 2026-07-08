@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using ActionFit.BuildSetting.Editor;
 using UnityEditor;
 using UnityEngine;
 using Process = System.Diagnostics.Process;
@@ -26,7 +25,7 @@ namespace ActionFit.BuildAutomation.Editor
         private static string ProjectRoot => Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
         public static BuildRequest Create(
-            BuildSettingsSO settings,
+            ScriptableObject settings,
             BuildRequestPlatform platform,
             BuildRequestKind buildKind,
             BuildRequestUploadTarget uploadTarget,
@@ -53,16 +52,16 @@ namespace ActionFit.BuildAutomation.Editor
                 buildKind = buildKind,
                 uploadTarget = uploadTarget,
                 distributionProfile = distributionProfile,
-                buildVersion = settings.buildVersion,
-                bundleNo = settings.bundleNo,
-                buildFileName = settings.buildFileName,
-                androidPackageName = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.androidPackageName, EmptyAndroidPackagePlaceholder) : "",
-                iosBundleId = UsesIos(resolvedPlatform) ? SanitizeSettingValue(settings.iosPackageName, EmptyIosBundlePlaceholder) : "",
+                buildVersion = BuildSettingBridge.GetString(settings, "buildVersion"),
+                bundleNo = BuildSettingBridge.GetString(settings, "bundleNo"),
+                buildFileName = BuildSettingBridge.GetString(settings, "buildFileName"),
+                androidPackageName = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(BuildSettingBridge.GetString(settings, "androidPackageName"), EmptyAndroidPackagePlaceholder) : "",
+                iosBundleId = UsesIos(resolvedPlatform) ? SanitizeSettingValue(BuildSettingBridge.GetString(settings, "iosPackageName"), EmptyIosBundlePlaceholder) : "",
                 iosDevelopmentTeamId = "",
                 androidKeystoreFileName = UsesAndroid(resolvedPlatform) ? GetAndroidKeystoreFileName(settings) : "",
                 androidKeystoreBase64 = UsesAndroid(resolvedPlatform) ? GetAndroidKeystoreBase64(settings) : "",
-                androidKeystorePassword = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.keystorePassword, EmptyKeystorePasswordPlaceholder) : "",
-                androidAliasPassword = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(settings.aliasPassword, EmptyAliasPasswordPlaceholder) : "",
+                androidKeystorePassword = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(BuildSettingBridge.GetString(settings, "keystorePassword"), EmptyKeystorePasswordPlaceholder) : "",
+                androidAliasPassword = UsesAndroid(resolvedPlatform) ? SanitizeSettingValue(BuildSettingBridge.GetString(settings, "aliasPassword"), EmptyAliasPasswordPlaceholder) : "",
                 googlePlayServiceAccountJson = "",
                 appStoreConnectApiKeyId = "",
                 appStoreConnectIssuerId = "",
@@ -76,7 +75,7 @@ namespace ActionFit.BuildAutomation.Editor
         }
 
         public static BuildRequest Create(
-            BuildSettingsSO settings,
+            ScriptableObject settings,
             BuildRequestPlatform platform,
             BuildRequestKind buildKind,
             BuildRequestUploadTarget uploadTarget)
@@ -84,20 +83,20 @@ namespace ActionFit.BuildAutomation.Editor
             return Create(settings, platform, buildKind, uploadTarget, BuildRequestDistributionProfile.Actionfit);
         }
 
-        public static string GetAndroidKeyaliasName(BuildSettingsSO settings)
+        public static string GetAndroidKeyaliasName(ScriptableObject settings)
         {
             if (settings == null) return "";
 
-            return SanitizeSettingValue(settings.keyStoreAlias, EmptyKeystoreAliasPlaceholder);
+            return SanitizeSettingValue(BuildSettingBridge.GetString(settings, "keyStoreAlias"), EmptyKeystoreAliasPlaceholder);
         }
 
-        private static string GetAndroidKeystoreFileName(BuildSettingsSO settings)
+        private static string GetAndroidKeystoreFileName(ScriptableObject settings)
         {
             string keystorePath = ResolveAndroidKeystorePath(settings);
             return string.IsNullOrEmpty(keystorePath) ? "" : Path.GetFileName(keystorePath);
         }
 
-        private static string GetAndroidKeystoreBase64(BuildSettingsSO settings)
+        private static string GetAndroidKeystoreBase64(ScriptableObject settings)
         {
             string keystorePath = ResolveAndroidKeystorePath(settings);
             if (string.IsNullOrEmpty(keystorePath)) return "";
@@ -114,11 +113,11 @@ namespace ActionFit.BuildAutomation.Editor
             }
         }
 
-        private static string ResolveAndroidKeystorePath(BuildSettingsSO settings)
+        private static string ResolveAndroidKeystorePath(ScriptableObject settings)
         {
             if (settings == null) return "";
 
-            string configuredPath = SanitizeSettingValue(settings.keyStorePath, EmptyKeystorePathPlaceholder);
+            string configuredPath = SanitizeSettingValue(BuildSettingBridge.GetString(settings, "keyStorePath"), EmptyKeystorePathPlaceholder);
             string resolvedPath = ResolveKeystorePath(configuredPath);
             if (!string.IsNullOrEmpty(resolvedPath)) return resolvedPath;
 
