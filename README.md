@@ -11,7 +11,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
   "dependencies": {
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.3",
     "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/GitHub_Auth.git#1.0.1",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.24"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.25"
   }
 }
 ```
@@ -34,6 +34,8 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 `AutoBuild` 창은 연결된 `BuildSettingsSO`의 버전과 번들 번호를 `PlayerSettings`에 적용한 뒤, `.build/build_request.json`을 생성합니다. 그 다음 `[BuildRequest] v{version}({bundleNo})` 형식의 저장용 커밋을 만들고 push한 뒤, `build/{platform}-{upload}/{version}/{bundleNo}-{shortSha}` 형식의 태그를 생성해 push합니다. `BuildSettingsSO`가 없으면 Build Setting 패키지가 `Assets/_Data/_BuildSetting/BuildSettingsSO.asset`을 자동 생성하고 프로젝트 `PlayerSettings` 기본값을 1차 초기화합니다.
 
 `Commit, Tag & Push`는 Unity를 실행 중인 로컬 기기의 `git push`와 tag push 권한을 사용합니다. 자동빌드를 요청하는 각 개발자 기기는 해당 GitHub repository에 push/tag 권한이 있는 계정으로 Git 인증을 먼저 설정해야 합니다. BuildCommit은 커밋 생성 전에 `com.actionfit.githubauth`의 preflight를 reflection으로 호출하고, 인증이 없으면 GitHub 인증 필요 팝업을 띄운 뒤 중단합니다. `com.actionfit.buildsetting` 또는 `com.actionfit.githubauth`가 누락된 프로젝트에서는 BuildAutomation이 컴파일은 유지하지만 AutoBuild 실행을 막고 의존성 설치를 안내합니다. ActionFit Package Manager로 설치/업데이트하면 catalog CSV의 dependency 정보가 `Packages/manifest.json`에 Git UPM URL로 함께 기록됩니다. 수동으로 `Packages/manifest.json`을 편집하는 경우에는 BuildAutomation뿐 아니라 Build Setting과 GitHub Auth Git UPM URL도 직접 추가해야 합니다. 자세한 연결 확인 순서와 오류별 안내는 `Packages/com.actionfit.githubauth/README.md`를 확인합니다.
+
+`CS0103: The name 'BuildSettingBridge' does not exist in the current context`가 발생하면 `com.actionfit.buildautomation`을 `1.0.25` 이상으로 업데이트한 뒤 `AssetDatabase.Refresh` 또는 Unity 재시작으로 스크립트 컴파일 목록을 갱신합니다. 이 버전부터 bridge 타입은 Unity가 이미 컴파일하는 소스에 포함되어 부분 refresh 상태에서도 BuildAutomation 참조가 깨지지 않도록 되어 있습니다.
 
 `Auto Sync Build Files`는 기본값이 켜짐입니다. 켜져 있으면 `Commit, Tag & Push` 실행 시 Build Automation 패키지의 workflow/template scripts를 프로젝트 루트 `.github/`로 먼저 동기화하고, 그 변경분도 같은 저장 커밋에 포함합니다.
 
