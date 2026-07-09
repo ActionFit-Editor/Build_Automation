@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.31`
+- Current package version at generation time: `1.0.32`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -85,11 +85,13 @@ Read this file when:
 - iOS artifact upload is intentionally slim: successful runs upload only IPA/plist files and logs, while failed runs upload diagnostic logs and export output. Do not upload `Builds/iOS/**` or the full `.xcarchive` by default; those directories can exceed 1 GB and make an otherwise successful TestFlight run fail during artifact upload.
 - iOS app/diagnostic artifact upload steps are `continue-on-error: true` so GitHub artifact storage quota exhaustion does not mark an otherwise successful archive/export and TestFlight upload as failed.
 - Runner setup files live under `RunnerSetup/`: `setup-local-runner-secrets.sh`, `validate-local-runner-secrets.sh`, `LOCAL_RUNNER_SECRETS_GUIDE.md`, and `AI_MAC_STUDIO_BUILD_AUTOMATION_GUIDE.md`.
-- CI entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`.
+- CI build entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`.
+- CI target switch entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.SwitchToRequestBuildTarget`.
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.
 - AutoBuild window workflow sync copies `WorkflowTemplates/buildcommit-auto-build.yml` to `.github/workflows/buildcommit-auto-build.yml` and package `.github/scripts/*.sh` workflow scripts to project `.github/scripts/`, including Slack notification support. Manual sync asks for confirmation; BuildCommit auto sync runs without confirmation when `Auto Sync Build Files` is enabled.
 - Build Automation depends on `com.actionfit.buildsetting@1.1.8` or newer and `com.actionfit.githubauth@1.0.3` or newer. Do not add package-specific installer scripts for these dependencies. Keep dependency metadata in `package.json` and `Editor/PackageInfo/ActionFitPackageInfo_SO.asset` `_dependenciesOverride`; ActionFit Package Manager must publish that dependency metadata to the catalog CSV and write the resolved Git UPM URLs into `Packages/manifest.json` during install/update. If a dependency is missing, BuildAutomation should compile, show a clear warning, and stop the affected workflow.
 - The storage commit alone should not trigger CI. The pushed `build/**` tag is the actual CI request.
+- Android and iOS workflow jobs must run `CIBuildEntry.SwitchToRequestBuildTarget` in a separate Unity batchmode process before `CIBuildEntry.BuildFromRequest`. This lets Unity reopen/recompile editor assemblies for the requested platform so Build Setting's `UNITY_ANDROID` or `UNITY_IOS` build process exists before the actual build call.
 - `Platform=Both` is split by the workflow into Android and iOS jobs before calling `CIBuildEntry`.
 
 ## Package Tools Menu

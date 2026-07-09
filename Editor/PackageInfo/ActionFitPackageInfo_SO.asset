@@ -21,15 +21,23 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- Android/iOS BuildCommit Unity batchmode \uC2E4\uD328 \uC2DC `Logs/unity-android.log`
-    \uB610\uB294 `Logs/unity-ios.log` \uB9C8\uC9C0\uB9C9 400\uC904\uC744 GitHub Actions
-    log group\uC5D0 \uCD9C\uB825\uD558\uB3C4\uB85D \uD588\uC2B5\uB2C8\uB2E4.\n- \uC2E4\uD328
-    \uC6D0\uC778\uC744 artifact \uB2E4\uC6B4\uB85C\uB4DC \uC5C6\uC774 Actions \uD654\uBA74\uC5D0\uC11C
-    \uBC14\uB85C \uD655\uC778\uD560 \uC218 \uC788\uC5B4 self-hosted runner \uBE4C\uB4DC
-    \uC9C4\uB2E8 \uC2DC\uAC04\uC774 \uC904\uC5B4\uB4ED\uB2C8\uB2E4.\n- `WorkflowTemplates/buildcommit-auto-build.yml`\uC5D0
-    \uAC19\uC740 \uCC98\uB9AC\uB97C \uBC18\uC601\uD574 `Auto Sync Build Files`\uAC00
-    \uD504\uB85C\uC81D\uD2B8 root workflow\uB97C \uC608\uC804 \uB0B4\uC6A9\uC73C\uB85C
-    \uB418\uB3CC\uB9AC\uC9C0 \uC54A\uB3C4\uB85D \uD588\uC2B5\uB2C8\uB2E4.\n- \uAE30\uC874
-    signing, upload, Slack, private package access \uC124\uC815\uC740 \uADF8\uB300\uB85C
-    \uC0AC\uC6A9\uD558\uBBC0\uB85C runner secret migration\uC740 \uD544\uC694 \uC5C6\uC2B5\uB2C8\uB2E4."
+  _releaseNote: "- `CIBuildEntry.SwitchToRequestBuildTarget` CI \uC9C4\uC785\uC810\uC744
+    \uCD94\uAC00\uD574 `.build/build_request.json`\uC758 \uC694\uCCAD \uD50C\uB7AB\uD3FC
+    \uAE30\uC900\uC73C\uB85C Unity active build target\uC744 \uBA3C\uC800 \uC804\uD658\uD560
+    \uC218 \uC788\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n- Android/iOS BuildCommit workflow\uAC00
+    \uC2E4\uC81C `BuildFromRequest` \uC2E4\uD589 \uC804\uC5D0 \uBCC4\uB3C4 Unity
+    batchmode\uB85C target switch\uB97C \uC218\uD589\uD558\uB3C4\uB85D \uBCC0\uACBD\uD574,
+    Editor assembly\uAC00 `UNITY_ANDROID` \uB610\uB294 `UNITY_IOS` \uC2EC\uBCFC\uB85C
+    \uC7AC\uCEF4\uD30C\uC77C\uB41C \uB4A4 \uBE4C\uB4DC\uAC00 \uC2DC\uC791\uB429\uB2C8\uB2E4.\n-
+    `BuildFromRequest` \uC9C1\uC804 request platform, resolved platform, active build
+    target, selected group\uC744 \uB85C\uADF8\uB85C \uB0A8\uACA8 `Build report is
+    null` \uC6D0\uC778\uC744 Actions \uB85C\uADF8\uC5D0\uC11C \uB354 \uBE68\uB9AC
+    \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.\n- \uD50C\uB7AB\uD3FC \uC2EC\uBCFC\uC774
+    \uC544\uC9C1 \uB9DE\uC9C0 \uC54A\uC744 \uB54C\uB294 `SwitchToRequestBuildTarget`
+    \uC120\uD589 \uC2E4\uD589\uC774 \uD544\uC694\uD558\uB2E4\uB294 \uC624\uB958 \uBA54\uC2DC\uC9C0\uB97C
+    \uCD9C\uB825\uD574 \uC798\uBABB\uB41C workflow copy\uB97C \uC9C4\uB2E8\uD558\uAE30
+    \uC27D\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n- `WorkflowTemplates/buildcommit-auto-build.yml`\uACFC
+    \uD504\uB85C\uC81D\uD2B8 root `.github/workflows/buildcommit-auto-build.yml`\uC744
+    \uD568\uAED8 \uAC31\uC2E0\uD574 Auto Sync \uD6C4\uC5D0\uB3C4 \uAC19\uC740 \uB450
+    \uB2E8\uACC4 \uBE4C\uB4DC \uD750\uB984\uC774 \uC720\uC9C0\uB429\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.githubauth@1.0.3, com.actionfit.buildsetting@1.1.8

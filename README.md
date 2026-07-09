@@ -11,7 +11,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
   "dependencies": {
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.8",
     "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/GitHub_Auth.git#1.0.3",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.31"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.32"
   }
 }
 ```
@@ -29,7 +29,8 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 
 - 메뉴: `Tools > Package > Build Automation > AutoBuild`
 - 요청 파일: `.build/build_request.json`
-- CI 진입점: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`
+- CI 빌드 진입점: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`
+- CI 타겟 전환 진입점: `ActionFit.BuildAutomation.Editor.CIBuildEntry.SwitchToRequestBuildTarget`
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`
 - Workflow script templates: `.github/scripts/resolve-unity-editor.sh`, `.github/scripts/validate-local-runner-secrets.sh`, `.github/scripts/prepare-actionfit-private-package-access.sh`, `.github/scripts/notify-slack-build-result.sh`, `.github/scripts/cleanup-old-build-artifacts.sh`
 - Workflow sync: `AutoBuild` 창의 `Update GitHub Workflow` 버튼
@@ -104,10 +105,12 @@ Android package name은 `BuildSettingsSO.androidPackageName`, iOS bundle id는 `
 Unity -batchmode -quit -projectPath . -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest
 ```
 
+GitHub Actions workflow는 Android/iOS 실제 빌드 실행 전에 Unity를 같은 target으로 한 번 더 실행해 `SwitchToRequestBuildTarget`만 호출합니다. 이 단계는 `.build/build_request.json`의 `platform`을 읽고 `EditorUserBuildSettings.SwitchActiveBuildTarget(...)`으로 active build target을 맞춘 뒤 종료합니다. 그 다음 별도 Unity 실행에서 `BuildFromRequest`를 호출하므로, Editor assembly가 Android/iOS 심볼로 재컴파일된 상태에서 Build Setting의 플랫폼별 build process를 찾을 수 있습니다.
+
 기본 GitHub Actions workflow template은 `WorkflowTemplates/buildcommit-auto-build.yml`에 있고, workflow가 호출하는 script 원본은 패키지의 `.github/scripts/`에 있습니다. `prepare-actionfit-private-package-access.sh`는 runner의 `gh auth` 또는 `CI_SECRET_ROOT/shared/github-package-read-token`으로 private GitHub UPM package 접근을 준비합니다. token helper를 사용할 때는 generic `credential.helper`를 비우고 GitHub host 전용 helper를 설정한 뒤, 같은 설정을 `GIT_CONFIG_*` 환경변수로 `GITHUB_ENV`에 남겨 이후 workflow step과 Unity 하위 Git 프로세스에서도 private package credential이 유지되게 합니다. `resolve-unity-editor.sh`는 `ProjectSettings/ProjectVersion.txt`에서 Unity 버전을 읽어 `UNITY_VERSION`, `UNITY_VERSION_WITH_REVISION`, `UNITY_EXECUTABLE`을 이후 step으로 전달하고, `validate-local-runner-secrets.sh`는 Mac runner secret bundle을 검증합니다. `notify-slack-build-result.sh`는 Android/iOS job 시작 시 `[Start]` Slack 알림을 보내고, job 마지막에는 빌드 결과와 `Time`을 함께 Slack으로 보냅니다. BuildCommit request의 `slackMentions` 배열이 있으면 여러 Slack member ID를 메시지 첫 줄에 붙입니다. 프로젝트에서 사용하려면 workflow는 `.github/workflows/buildcommit-auto-build.yml`로, scripts는 `.github/scripts/`로 복사한 뒤 Unity Hub root, Xcode 경로 같은 프로젝트별 env 값을 조정합니다.
 `AutoBuild` 창의 `Update GitHub Workflow` 버튼은 패키지의 workflow template과 script templates를 프로젝트 루트의 `.github/workflows/buildcommit-auto-build.yml`, `.github/scripts/`로 복사합니다. 기존 파일이 template과 다르면 확인창을 띄운 뒤 덮어씁니다.
 
-workflow는 macOS self-hosted runner 기준입니다. runner에는 `self-hosted`, `macOS`, `unity-mobile` 라벨이 있어야 하며, 같은 Mac에서 Unity CLI로 Android/iOS를 빌드합니다. `Platform=Both` 요청은 workflow가 Android job과 iOS job으로 나눠 `.build/build_request.json`의 platform 값을 임시 변환한 뒤 `CIBuildEntry.BuildFromRequest`를 각각 호출합니다.
+workflow는 macOS self-hosted runner 기준입니다. runner에는 `self-hosted`, `macOS`, `unity-mobile` 라벨이 있어야 하며, 같은 Mac에서 Unity CLI로 Android/iOS를 빌드합니다. `Platform=Both` 요청은 workflow가 Android job과 iOS job으로 나눠 `.build/build_request.json`의 platform 값을 임시 변환한 뒤, 각 job에서 `SwitchToRequestBuildTarget`와 `BuildFromRequest`를 별도 Unity 실행으로 순서대로 호출합니다.
 
 Google Play service account, iOS team id, App Store Connect API key, keychain password, Slack webhook URL은 Mac runner의 로컬 시크릿 번들에서 읽습니다. Android keystore 파일과 signing 비밀번호는 request 값을 우선 사용하고, request에 없을 때만 로컬 env로 fallback합니다. 로컬 시크릿 번들 경로는 workflow yml의 `CI_SECRET_ROOT`가 기준이며 현재 yml 값은 `/Users/lydia/workspace/build-automation`입니다. workflow는 Unity/PackageCache가 준비되기 전에 Unity editor 경로 확인과 secret 검증을 실행하므로 패키지 경로가 아니라 프로젝트 루트 `.github/scripts/` 아래의 scripts를 호출합니다. Unity editor는 workflow yml의 고정 버전이 아니라 `ProjectSettings/ProjectVersion.txt`의 `m_EditorVersion`으로 결정되며, `UNITY_HUB_EDITOR_ROOT` 아래에 해당 버전이 없으면 빌드 전에 실패합니다. Android Google Play upload는 프로젝트명을 하드코딩하지 않고 발견된 AAB를 `.build/google-play-upload/upload.aab`로 복사해 업로드하며, Android artifact는 AAB와 로그를 분리해서 올리고 `Builds/**` 전체 업로드는 하지 않습니다. iOS archive 기본 경로도 `Builds/iOSArchive/BuildCommit.xcarchive`를 사용합니다. Google Play action은 deprecated `track` 대신 `tracks` 입력을 사용합니다. iOS App Store profiles are selected by request bundle id from `ios/profiles/<bundle-id>.mobileprovision`, with optional `fastlane sigh` generation. iOS archive signing은 `xcodebuild`에 단일 `CODE_SIGN_IDENTITY`만 전달해 Xcode가 `CODE_SIGN_IDENTITY[sdk=iphoneos*]` 값을 인증서 이름으로 오해하지 않게 합니다. Android/iOS workflow는 Unity `Library` cache를 restore-only로 사용해 Google Play/TestFlight 업로드 성공 후 cache 저장 후처리가 전체 Run을 붙잡지 않게 합니다. Android/iOS artifact upload steps are `continue-on-error: true`, so GitHub artifact storage quota exhaustion does not mark an otherwise successful Google Play/TestFlight deployment as failed. iOS artifact는 성공 시 IPA/plist와 로그만, 실패 시 diagnostic 로그와 export 결과만 업로드해 `Builds/iOS/**`와 `.xcarchive` 전체 업로드로 인한 1GB급 artifact 실패를 피합니다. 설치/검증 스크립트와 상세 가이드는 `RunnerSetup/` 아래에 있습니다.
 

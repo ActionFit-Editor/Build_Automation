@@ -242,6 +242,28 @@ jobs:
             Android \
             "$UPLOAD_TARGET"
 
+      - name: Switch Unity to Android build target
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p Logs
+
+          unity_status=0
+          "$UNITY_EXECUTABLE" \
+            -batchmode \
+            -quit \
+            -projectPath "$GITHUB_WORKSPACE" \
+            -buildTarget Android \
+            -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.SwitchToRequestBuildTarget \
+            -logFile Logs/unity-android-switch.log || unity_status=$?
+
+          if [ "$unity_status" -ne 0 ]; then
+            echo "::group::Unity Android target switch log tail"
+            tail -n 400 Logs/unity-android-switch.log || true
+            echo "::endgroup::"
+            exit "$unity_status"
+          fi
+
       - name: Build signed Android from BuildCommit request
         shell: bash
         run: |
@@ -506,6 +528,28 @@ jobs:
             "$DISTRIBUTION_PROFILE" \
             iOS \
             "$UPLOAD_TARGET"
+
+      - name: Switch Unity to iOS build target
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p Logs
+
+          unity_status=0
+          "$UNITY_EXECUTABLE" \
+            -batchmode \
+            -quit \
+            -projectPath "$GITHUB_WORKSPACE" \
+            -buildTarget iOS \
+            -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.SwitchToRequestBuildTarget \
+            -logFile Logs/unity-ios-switch.log || unity_status=$?
+
+          if [ "$unity_status" -ne 0 ]; then
+            echo "::group::Unity iOS target switch log tail"
+            tail -n 400 Logs/unity-ios-switch.log || true
+            echo "::endgroup::"
+            exit "$unity_status"
+          fi
 
       - name: Clear iOS Scriptable Build Pipeline cache
         shell: bash

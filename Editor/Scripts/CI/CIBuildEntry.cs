@@ -16,6 +16,12 @@ namespace ActionFit.BuildAutomation.Editor
             EditorApplication.Exit(exitCode);
         }
 
+        public static void SwitchToRequestBuildTarget()
+        {
+            int exitCode = ExecuteSwitchToRequestBuildTarget();
+            EditorApplication.Exit(exitCode);
+        }
+
         private static int ExecuteBuildFromRequest()
         {
             BuildRequest request = BuildRequestUtility.Load();
@@ -92,6 +98,10 @@ namespace ActionFit.BuildAutomation.Editor
         private static BuildReport RunBuild(ScriptableObject settings, BuildRequest request)
         {
             BuildRequestPlatform platform = ResolvePlatform(request.platform);
+            Debug.Log(
+                $"[CIBuildEntry] request platform={request.platform}, resolvedPlatform={platform}, " +
+                $"activeBuildTarget={EditorUserBuildSettings.activeBuildTarget}, " +
+                $"selectedGroup={EditorUserBuildSettings.selectedBuildTargetGroup}");
 
             switch (platform)
             {
@@ -101,14 +111,14 @@ namespace ActionFit.BuildAutomation.Editor
                     bool aab = request.buildKind != BuildRequestKind.AndroidApk;
                     return BuildSettingBridge.BuildAndroidForCI(settings, aab);
 #else
-                    Debug.LogError("[CIBuildEntry] Android build requested, but UNITY_ANDROID is not active");
+                    Debug.LogError("[CIBuildEntry] Android build requested, but UNITY_ANDROID is not active. Run SwitchToRequestBuildTarget in a separate Unity batchmode step before BuildFromRequest.");
                     return null;
 #endif
                 case BuildRequestPlatform.iOS:
 #if UNITY_IOS
                     return BuildSettingBridge.BuildIosForCI(settings);
 #else
-                    Debug.LogError("[CIBuildEntry] iOS build requested, but UNITY_IOS is not active");
+                    Debug.LogError("[CIBuildEntry] iOS build requested, but UNITY_IOS is not active. Run SwitchToRequestBuildTarget in a separate Unity batchmode step before BuildFromRequest.");
                     return null;
 #endif
                 case BuildRequestPlatform.Both:
@@ -117,6 +127,66 @@ namespace ActionFit.BuildAutomation.Editor
                 default:
                     Debug.LogError($"[CIBuildEntry] Unsupported platform: {platform}");
                     return null;
+            }
+        }
+
+        private static int ExecuteSwitchToRequestBuildTarget()
+        {
+            BuildRequest request = BuildRequestUtility.Load();
+            if (request == null) return 1;
+
+            if (request.triggerSource != BuildRequest.BuildCommitTriggerSource)
+            {
+                Debug.LogError($"[CIBuildEntry] Unsupported trigger source: {request.triggerSource}");
+                return 1;
+            }
+
+            BuildRequestPlatform platform = ResolvePlatform(request.platform);
+            if (!TryGetBuildTarget(platform, out BuildTargetGroup group, out BuildTarget target))
+            {
+                Debug.LogError($"[CIBuildEntry] Unsupported target switch platform: {platform}");
+                return 1;
+            }
+
+            Debug.Log(
+                $"[CIBuildEntry] target switch requested: requestPlatform={request.platform}, " +
+                $"resolvedPlatform={platform}, target={target}, group={group}, " +
+                $"activeBuildTarget={EditorUserBuildSettings.activeBuildTarget}, " +
+                $"selectedGroup={EditorUserBuildSettings.selectedBuildTargetGroup}");
+
+            if (EditorUserBuildSettings.activeBuildTarget == target)
+            {
+                Debug.Log($"[CIBuildEntry] Active build target is already {target}");
+                return 0;
+            }
+
+            bool switched = EditorUserBuildSettings.SwitchActiveBuildTarget(group, target);
+            if (!switched)
+            {
+                Debug.LogError($"[CIBuildEntry] Failed to switch active build target to {target}");
+                return 1;
+            }
+
+            Debug.Log($"[CIBuildEntry] Switched active build target to {target}");
+            return 0;
+        }
+
+        private static bool TryGetBuildTarget(BuildRequestPlatform platform, out BuildTargetGroup group, out BuildTarget target)
+        {
+            switch (platform)
+            {
+                case BuildRequestPlatform.Android:
+                    group = BuildTargetGroup.Android;
+                    target = BuildTarget.Android;
+                    return true;
+                case BuildRequestPlatform.iOS:
+                    group = BuildTargetGroup.iOS;
+                    target = BuildTarget.iOS;
+                    return true;
+                default:
+                    group = default;
+                    target = default;
+                    return false;
             }
         }
 
