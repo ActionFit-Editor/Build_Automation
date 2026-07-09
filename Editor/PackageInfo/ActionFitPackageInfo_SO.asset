@@ -21,17 +21,15 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- Android/iOS BuildCommit job \uC2DC\uC791 \uC9C1\uD6C4 Slack `[Start]`
-    \uC54C\uB9BC\uC744 \uBCF4\uB0B4 \uBE4C\uB4DC \uC2DC\uC791 \uC5EC\uBD80\uB97C
-    \uC989\uC2DC \uD655\uC778\uD560 \uC218 \uC788\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n-
-    \uBE4C\uB4DC \uACB0\uACFC Slack \uC54C\uB9BC\uC5D0 `Time` \uB77C\uC778\uC744
-    \uCD94\uAC00\uD574 job \uC2DC\uC791\uBD80\uD130 \uACB0\uACFC \uC54C\uB9BC\uAE4C\uC9C0
-    \uAC78\uB9B0 \uC2DC\uAC04\uC744 \uD45C\uC2DC\uD569\uB2C8\uB2E4.\n- `prepare-actionfit-private-package-access.sh`\uAC00
-    token helper\uB97C `GIT_CONFIG_*` \uD658\uACBD\uBCC0\uC218\uB85C\uB3C4 \uB0A8\uACA8,
-    \uD6C4\uC18D Unity/Git \uD504\uB85C\uC138\uC2A4\uC5D0\uC11C\uB3C4 private GitHub
-    package credential\uC774 \uC720\uC9C0\uB418\uB3C4\uB85D \uD588\uC2B5\uB2C8\uB2E4.\n-
-    \uAE30\uC874 `shared/slack-webhook-url`, `Slack Mentions`, `shared/github-package-read-token`
-    \uC124\uC815\uC744 \uADF8\uB300\uB85C \uC0AC\uC6A9\uD558\uBBC0\uB85C \uBCC4\uB3C4
-    migration \uC5C6\uC774 \uC0C8 \uC54C\uB9BC\uACFC package access \uBCF4\uC815\uC774
-    \uC801\uC6A9\uB429\uB2C8\uB2E4."
+  _releaseNote: "- Android/iOS BuildCommit Unity batchmode \uC2E4\uD328 \uC2DC `Logs/unity-android.log`
+    \uB610\uB294 `Logs/unity-ios.log` \uB9C8\uC9C0\uB9C9 400\uC904\uC744 GitHub Actions
+    log group\uC5D0 \uCD9C\uB825\uD558\uB3C4\uB85D \uD588\uC2B5\uB2C8\uB2E4.\n- \uC2E4\uD328
+    \uC6D0\uC778\uC744 artifact \uB2E4\uC6B4\uB85C\uB4DC \uC5C6\uC774 Actions \uD654\uBA74\uC5D0\uC11C
+    \uBC14\uB85C \uD655\uC778\uD560 \uC218 \uC788\uC5B4 self-hosted runner \uBE4C\uB4DC
+    \uC9C4\uB2E8 \uC2DC\uAC04\uC774 \uC904\uC5B4\uB4ED\uB2C8\uB2E4.\n- `WorkflowTemplates/buildcommit-auto-build.yml`\uC5D0
+    \uAC19\uC740 \uCC98\uB9AC\uB97C \uBC18\uC601\uD574 `Auto Sync Build Files`\uAC00
+    \uD504\uB85C\uC81D\uD2B8 root workflow\uB97C \uC608\uC804 \uB0B4\uC6A9\uC73C\uB85C
+    \uB418\uB3CC\uB9AC\uC9C0 \uC54A\uB3C4\uB85D \uD588\uC2B5\uB2C8\uB2E4.\n- \uAE30\uC874
+    signing, upload, Slack, private package access \uC124\uC815\uC740 \uADF8\uB300\uB85C
+    \uC0AC\uC6A9\uD558\uBBC0\uB85C runner secret migration\uC740 \uD544\uC694 \uC5C6\uC2B5\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.githubauth@1.0.3, com.actionfit.buildsetting@1.1.8

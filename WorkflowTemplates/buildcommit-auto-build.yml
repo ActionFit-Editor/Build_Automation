@@ -248,13 +248,21 @@ jobs:
           set -euo pipefail
           mkdir -p Logs
 
+          unity_status=0
           "$UNITY_EXECUTABLE" \
             -batchmode \
             -quit \
             -projectPath "$GITHUB_WORKSPACE" \
             -buildTarget Android \
             -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest \
-            -logFile Logs/unity-android.log
+            -logFile Logs/unity-android.log || unity_status=$?
+
+          if [ "$unity_status" -ne 0 ]; then
+            echo "::group::Unity Android log tail"
+            tail -n 400 Logs/unity-android.log || true
+            echo "::endgroup::"
+            exit "$unity_status"
+          fi
 
       - name: Locate AAB for upload
         id: aab
@@ -517,13 +525,21 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p Logs
+          unity_status=0
           "$UNITY_EXECUTABLE" \
             -batchmode \
             -quit \
             -projectPath "$GITHUB_WORKSPACE" \
             -buildTarget iOS \
             -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest \
-            -logFile Logs/unity-ios.log
+            -logFile Logs/unity-ios.log || unity_status=$?
+
+          if [ "$unity_status" -ne 0 ]; then
+            echo "::group::Unity iOS log tail"
+            tail -n 400 Logs/unity-ios.log || true
+            echo "::endgroup::"
+            exit "$unity_status"
+          fi
 
       - name: Install iOS CocoaPods dependencies
         shell: bash

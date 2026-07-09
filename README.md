@@ -11,7 +11,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
   "dependencies": {
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.8",
     "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/GitHub_Auth.git#1.0.3",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.29"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.31"
   }
 }
 ```
@@ -49,6 +49,8 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 `AutoBuild` 창 본문은 세로 스크롤 영역입니다. 창 높이가 낮아져도 Version Info, CI Build Request, GitHub Workflow, 버튼, Log 순서가 유지되며 Log 영역은 별도 스크롤을 사용합니다.
 
 실제 GitHub Actions 빌드 요청은 저장 커밋 push가 아니라 `build/**` 태그 push로 발생합니다. 저장 커밋은 요청 JSON과 변경사항을 남기는 용도이며, 같은 버전으로 재요청할 수 있도록 커밋은 `--allow-empty`를 허용합니다.
+
+Android/iOS Unity batchmode 빌드가 실패하면 workflow가 `Logs/unity-android.log` 또는 `Logs/unity-ios.log` 마지막 400줄을 GitHub Actions log group에 출력합니다. 따라서 실패 원인 확인을 위해 먼저 artifact를 내려받지 않아도 됩니다.
 
 `Platform` 기본값은 `None`이며, 플랫폼을 선택하지 않으면 `Commit, Tag & Push` 버튼이 비활성화됩니다. `Current`, Android, iOS, Both 중 하나를 명시적으로 선택해야 BuildCommit request를 만들 수 있습니다. `Current`를 직접 선택한 경우에는 Unity의 현재 active build target을 기준으로 Android 또는 iOS 요청으로 해석됩니다.
 
