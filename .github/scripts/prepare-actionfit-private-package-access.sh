@@ -66,6 +66,8 @@ printf 'password=%s\n' "\$token"
 EOF
 
   chmod 700 "$helper_path"
+  git config --local --unset-all "http.https://$github_host/.extraheader" 2>/dev/null || true
+  git config --global --unset-all "http.https://$github_host/.extraheader" 2>/dev/null || true
   git config --global --replace-all "credential.helper" ""
   git config --global --replace-all "credential.https://$github_host.helper" "!$helper_path"
 
