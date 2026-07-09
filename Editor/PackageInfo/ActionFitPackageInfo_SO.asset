@@ -21,9 +21,17 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- Unity \uC0C1\uB2E8 \uBA54\uB274\uB97C `Tools/Package/Build Automation/...`
-    \uAD6C\uC870\uB85C \uC815\uB9AC\uD588\uC2B5\uB2C8\uB2E4.\n- \uD558\uB2E8 \uAD6C\uBD84\uC120
-    \uC601\uC5ED\uC5D0 `Setting SO`\uC640 `README` \uBA54\uB274\uB97C \uCD94\uAC00\uD574
-    \uC124\uC815 SO\uC640 \uD328\uD0A4\uC9C0 README\uC5D0 \uBC14\uB85C \uC811\uADFC\uD560
-    \uC218 \uC788\uAC8C \uD588\uC2B5\uB2C8\uB2E4."
+  _releaseNote: "- Android/iOS BuildCommit job \uC2DC\uC791 \uC9C1\uD6C4 Slack `[Start]`
+    \uC54C\uB9BC\uC744 \uBCF4\uB0B4 \uBE4C\uB4DC \uC2DC\uC791 \uC5EC\uBD80\uB97C
+    \uC989\uC2DC \uD655\uC778\uD560 \uC218 \uC788\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n-
+    \uBE4C\uB4DC \uACB0\uACFC Slack \uC54C\uB9BC\uC5D0 `Time` \uB77C\uC778\uC744
+    \uCD94\uAC00\uD574 job \uC2DC\uC791\uBD80\uD130 \uACB0\uACFC \uC54C\uB9BC\uAE4C\uC9C0
+    \uAC78\uB9B0 \uC2DC\uAC04\uC744 \uD45C\uC2DC\uD569\uB2C8\uB2E4.\n- `prepare-actionfit-private-package-access.sh`\uAC00
+    token helper\uB97C `GIT_CONFIG_*` \uD658\uACBD\uBCC0\uC218\uB85C\uB3C4 \uB0A8\uACA8,
+    \uD6C4\uC18D Unity/Git \uD504\uB85C\uC138\uC2A4\uC5D0\uC11C\uB3C4 private GitHub
+    package credential\uC774 \uC720\uC9C0\uB418\uB3C4\uB85D \uD588\uC2B5\uB2C8\uB2E4.\n-
+    \uAE30\uC874 `shared/slack-webhook-url`, `Slack Mentions`, `shared/github-package-read-token`
+    \uC124\uC815\uC744 \uADF8\uB300\uB85C \uC0AC\uC6A9\uD558\uBBC0\uB85C \uBCC4\uB3C4
+    migration \uC5C6\uC774 \uC0C8 \uC54C\uB9BC\uACFC package access \uBCF4\uC815\uC774
+    \uC801\uC6A9\uB429\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.githubauth@1.0.3, com.actionfit.buildsetting@1.1.8

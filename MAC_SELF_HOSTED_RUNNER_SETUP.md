@@ -224,7 +224,7 @@ gh auth setup-git --hostname github.com
 
 `gh auth`를 사용할 수 없는 runner라면 `shared/github-package-read-token` 파일의 첫 non-comment line에 private ActionFit package repo read 권한이 있는 fine-grained token을 넣습니다. workflow는 Unity 실행 전에 이 credential을 준비하고 `Packages/manifest.json`의 ActionFit GitHub package 접근을 `git ls-remote`로 사전 확인합니다.
 
-Slack 빌드 결과 알림을 사용하려면 `shared/slack-webhook-url` 파일의 첫 non-comment line에 Slack Incoming Webhook URL을 넣습니다. 이 파일이 없거나 비어 있으면 Android/iOS job 마지막의 알림 step은 조용히 skip됩니다.
+Slack 빌드 알림을 사용하려면 `shared/slack-webhook-url` 파일의 첫 non-comment line에 Slack Incoming Webhook URL을 넣습니다. 이 파일이 없거나 비어 있으면 Android/iOS job 시작과 마지막의 알림 step은 조용히 skip됩니다. 시작 알림은 `[Start]`로 표시되고, 결과 알림은 `Time` 라인으로 job 소요 시간을 표시합니다.
 
 Slack 사람 태그는 AutoBuild 창의 `Slack Mentions` 행 목록에서 설정합니다. 각 행은 `Mention` 체크박스, `Member ID`, `Memo`를 가지며 BuildAutomation 패키지의 `BuildAutomationSettingsSO`에 저장되어 프로젝트에서 공유됩니다. 기본 에셋 경로는 `Assets/_Data/_BuildAutomation/BuildAutomationSettingsSO.asset`입니다. `Mention`이 체크된 행의 `Member ID`만 `.build/build_request.json`의 `slackMentions` JSON 배열로 직렬화되어 workflow에 전달됩니다. `Memo`는 request에 포함되지 않고 AutoBuild 창에서 식별용으로 보입니다. 표시 이름 `@송제우`가 아니라 `U12345678` 또는 `<@U12345678>` 형식을 사용합니다.
 

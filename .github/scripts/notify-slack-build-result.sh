@@ -39,6 +39,7 @@ fi
 echo "::add-mask::$webhook_url"
 
 status="${BUILD_JOB_STATUS:-${1:-unknown}}"
+status_normalized="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
 platform="${BUILD_PLATFORM:-Build}"
 repository="${GITHUB_REPOSITORY:-}"
 project_name="${BUILD_PROJECT_NAME:-${repository##*/}}"
@@ -50,10 +51,35 @@ bundle_no="${BUILD_BUNDLE_NO:-}"
 distribution_profile="${BUILD_DISTRIBUTION_PROFILE:-}"
 run_url="${BUILD_RUN_URL:-${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-}}"
 short_sha="${BUILD_SHORT_SHA:-${GITHUB_SHA:-}}"
+started_at_epoch="${BUILD_STARTED_AT_EPOCH:-}"
+completed_at_epoch="${BUILD_COMPLETED_AT_EPOCH:-}"
 
 if [ -n "$short_sha" ]; then
   short_sha="${short_sha:0:7}"
 fi
+
+if [ -z "$completed_at_epoch" ]; then
+  completed_at_epoch="$(date +%s)"
+fi
+
+format_duration() {
+  local total_seconds="$1"
+  if ! [[ "$total_seconds" =~ ^[0-9]+$ ]]; then
+    return 0
+  fi
+
+  local hours=$((total_seconds / 3600))
+  local minutes=$(((total_seconds % 3600) / 60))
+  local seconds=$((total_seconds % 60))
+
+  if [ "$hours" -gt 0 ]; then
+    printf '%dh %02dm %02ds\n' "$hours" "$minutes" "$seconds"
+  elif [ "$minutes" -gt 0 ]; then
+    printf '%dm %02ds\n' "$minutes" "$seconds"
+  else
+    printf '%ds\n' "$seconds"
+  fi
+}
 
 version_label=""
 version_prefix="v"
@@ -73,7 +99,11 @@ else
   version_label="version unknown"
 fi
 
-case "$status" in
+case "$status_normalized" in
+  start|started)
+    status_label="STARTED"
+    status_symbol="Start"
+    ;;
   success)
     status_label="SUCCESS"
     status_symbol="OK"
@@ -92,12 +122,21 @@ case "$status" in
     ;;
 esac
 
+duration_label=""
+if [ "$status_symbol" != "Start" ] \
+  && [[ "$started_at_epoch" =~ ^[0-9]+$ ]] \
+  && [[ "$completed_at_epoch" =~ ^[0-9]+$ ]] \
+  && [ "$completed_at_epoch" -ge "$started_at_epoch" ]; then
+  duration_label="$(format_duration "$((completed_at_epoch - started_at_epoch))")"
+fi
+
 payload="$(
   PROJECT_NAME="$project_name" \
   PLATFORM="$platform" \
   STATUS_LABEL="$status_label" \
   STATUS_SYMBOL="$status_symbol" \
   VERSION_LABEL="$version_label" \
+  DURATION_LABEL="$duration_label" \
   DISTRIBUTION_PROFILE="$distribution_profile" \
   SHORT_SHA="$short_sha" \
   RUN_URL="$run_url" \
@@ -108,6 +147,7 @@ platform = ENV.fetch("PLATFORM", "")
 status_label = ENV.fetch("STATUS_LABEL", "")
 status_symbol = ENV.fetch("STATUS_SYMBOL", "")
 version_label = ENV.fetch("VERSION_LABEL", "")
+duration_label = ENV.fetch("DURATION_LABEL", "")
 distribution_profile = ENV.fetch("DISTRIBUTION_PROFILE", "")
 short_sha = ENV.fetch("SHORT_SHA", "")
 run_url = ENV.fetch("RUN_URL", "")
@@ -134,6 +174,7 @@ lines = [
 ]
 
 lines.unshift(mentions) unless mentions.empty?
+lines << "Time: #{duration_label}" unless duration_label.empty?
 lines << "Profile: #{distribution_profile}" unless distribution_profile.empty?
 lines << "Commit: #{short_sha}" unless short_sha.empty?
 lines << "Run: #{run_url}" unless run_url.empty?
@@ -151,4 +192,8 @@ if ! curl --fail --silent --show-error \
   exit 0
 fi
 
-echo "Slack build notification sent: $project_name $platform $status_label $version_label"
+if [ -n "$duration_label" ]; then
+  echo "Slack build notification sent: $project_name $platform $status_label $version_label, $duration_label"
+else
+  echo "Slack build notification sent: $project_name $platform $status_label $version_label"
+fi

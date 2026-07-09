@@ -100,11 +100,11 @@ This file is used only when the runner user does not already have working `gh au
 `shared/slack-webhook-url`
 
 ```bash
-# Optional. Slack Incoming Webhook URL for build result notifications.
+# Optional. Slack Incoming Webhook URL for build start/result notifications.
 https://hooks.slack.com/services/...
 ```
 
-This file is optional. When present, the workflow sends Android/iOS BuildCommit success and failure notifications to Slack. The message includes one summary line plus distribution profile, commit, and GitHub Actions run URL. Leave the file commented or empty to skip Slack notifications.
+This file is optional. When present, the workflow sends Android/iOS BuildCommit start and result notifications to Slack. Start messages use `[Start]`, and result messages include one summary line plus elapsed `Time`, distribution profile, commit, and GitHub Actions run URL. Leave the file commented or empty to skip Slack notifications.
 
 `profiles/actionfit/profile.env`
 
@@ -177,16 +177,17 @@ Private package access:
 
 - Runs `gh auth setup-git --hostname github.com` when the runner user already has `gh auth`.
 - Falls back to `shared/github-package-read-token` or `ACTIONFIT_GITHUB_PACKAGE_READ_TOKEN`.
+- Exports token helper settings through `GIT_CONFIG_*` into `GITHUB_ENV` so later workflow steps and Unity child Git processes keep the same private package credential.
 - Rewrites `git@github.com:` and `ssh://git@github.com/` package URLs to HTTPS so the same GitHub credential path can be used.
 - Checks private package repository access with `git ls-remote` before Unity package resolution.
 
 Slack notification:
 
-- Runs `notify-slack-build-result.sh` at the end of each Android/iOS build job with `if: always()`.
+- Runs `notify-slack-build-result.sh` at the start of each Android/iOS build job and at the end with `if: always()`.
 - Reads `shared/slack-webhook-url` or `SLACK_BUILD_WEBHOOK_URL`.
 - Reads optional BuildCommit request `slackMentions` JSON array through `SLACK_BUILD_MENTIONS` and prepends multiple Slack member mentions to the notification. AutoBuild stores shared mention rows in `BuildAutomationSettingsSO`; only rows with `Mention` enabled enter the request, and memo values are not committed into `.build/build_request.json`.
-- Sends a short message with one summary line plus profile, commit, and GitHub Actions run URL. It intentionally omits separate `Project`, `Version`, `Platform`, `Result`, `Upload`, and `Ref` lines.
-- Sends both success and failure results.
+- Sends a short message with one summary line plus time when available, profile, commit, and GitHub Actions run URL. It intentionally omits separate `Project`, `Version`, `Platform`, `Result`, `Upload`, and `Ref` lines.
+- Sends `[Start]` messages plus success, failure, and cancelled results.
 - Skips without failing the build when the webhook file is missing, empty, invalid, or Slack POST fails.
 
 Android:

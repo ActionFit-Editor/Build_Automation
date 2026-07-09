@@ -55,7 +55,7 @@ write_if_missing "$secret_root/shared/github-package-read-token" \
   "# Required access: read-only Contents access to private ActionFit package repositories."
 
 write_if_missing "$secret_root/shared/slack-webhook-url" \
-  "# Optional Slack Incoming Webhook URL for BuildCommit success/failure notifications." \
+  "# Optional Slack Incoming Webhook URL for BuildCommit start/result notifications." \
   "# Put one https://hooks.slack.com/services/... URL on the first non-comment line." \
   "# Leave this file commented or empty to skip Slack notifications."
 

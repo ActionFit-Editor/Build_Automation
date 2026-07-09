@@ -66,7 +66,24 @@ printf 'password=%s\n' "\$token"
 EOF
 
   chmod 700 "$helper_path"
+  git config --global --replace-all "credential.helper" ""
   git config --global --replace-all "credential.https://$github_host.helper" "!$helper_path"
+
+  export GIT_CONFIG_COUNT=2
+  export GIT_CONFIG_KEY_0="credential.helper"
+  export GIT_CONFIG_VALUE_0=""
+  export GIT_CONFIG_KEY_1="credential.https://$github_host.helper"
+  export GIT_CONFIG_VALUE_1="!$helper_path"
+
+  if [ -n "${GITHUB_ENV:-}" ]; then
+    {
+      echo "GIT_CONFIG_COUNT=$GIT_CONFIG_COUNT"
+      echo "GIT_CONFIG_KEY_0=$GIT_CONFIG_KEY_0"
+      echo "GIT_CONFIG_VALUE_0=$GIT_CONFIG_VALUE_0"
+      echo "GIT_CONFIG_KEY_1=$GIT_CONFIG_KEY_1"
+      echo "GIT_CONFIG_VALUE_1=$GIT_CONFIG_VALUE_1"
+    } >> "$GITHUB_ENV"
+  fi
 }
 
 ensure_github_credential() {

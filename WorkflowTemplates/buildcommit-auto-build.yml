@@ -160,6 +160,33 @@ jobs:
         with:
           lfs: true
 
+      - name: Mark Android build start
+        id: build_timer
+        shell: bash
+        run: |
+          echo "started_at_epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Slack Android start
+        shell: bash
+        env:
+          BUILD_JOB_STATUS: start
+          BUILD_PLATFORM: AOS
+          BUILD_PROJECT_NAME: ${{ github.event.repository.name }}
+          BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
+          BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
+          BUILD_DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
+          SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
+          BUILD_SHORT_SHA: ${{ github.sha }}
+          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
+        run: |
+          if [ ! -f .github/scripts/notify-slack-build-result.sh ]; then
+            echo "::warning::Slack notification script not found; skipping."
+            exit 0
+          fi
+
+          bash .github/scripts/notify-slack-build-result.sh
+
       - name: Prepare private package access
         shell: bash
         run: |
@@ -356,7 +383,7 @@ jobs:
         shell: bash
         env:
           BUILD_JOB_STATUS: ${{ job.status }}
-          BUILD_PLATFORM: Android
+          BUILD_PLATFORM: AOS
           BUILD_PROJECT_NAME: ${{ github.event.repository.name }}
           BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
           BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
@@ -364,6 +391,7 @@ jobs:
           SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
           BUILD_SHORT_SHA: ${{ github.sha }}
           BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
         run: |
           if [ ! -f .github/scripts/notify-slack-build-result.sh ]; then
             echo "::warning::Slack notification script not found; skipping."
@@ -382,6 +410,33 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: true
+
+      - name: Mark iOS build start
+        id: build_timer
+        shell: bash
+        run: |
+          echo "started_at_epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Slack iOS start
+        shell: bash
+        env:
+          BUILD_JOB_STATUS: start
+          BUILD_PLATFORM: iOS
+          BUILD_PROJECT_NAME: ${{ github.event.repository.name }}
+          BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
+          BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
+          BUILD_DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
+          SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
+          BUILD_SHORT_SHA: ${{ github.sha }}
+          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
+        run: |
+          if [ ! -f .github/scripts/notify-slack-build-result.sh ]; then
+            echo "::warning::Slack notification script not found; skipping."
+            exit 0
+          fi
+
+          bash .github/scripts/notify-slack-build-result.sh
 
       - name: Prepare private package access
         shell: bash
@@ -996,6 +1051,7 @@ jobs:
           SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
           BUILD_SHORT_SHA: ${{ github.sha }}
           BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
         run: |
           if [ ! -f .github/scripts/notify-slack-build-result.sh ]; then
             echo "::warning::Slack notification script not found; skipping."
