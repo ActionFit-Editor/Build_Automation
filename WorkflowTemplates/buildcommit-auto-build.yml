@@ -194,6 +194,18 @@ jobs:
         run: |
           bash .github/scripts/prepare-actionfit-private-package-access.sh
 
+      - name: Ensure Unity editor and Android modules
+        shell: bash
+        env:
+          BUILD_PLATFORM: AOS
+          BUILD_PROJECT_NAME: ${{ github.event.repository.name }}
+          BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
+          BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
+          SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
+          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          bash .github/scripts/ensure-unity-editor-modules.sh Android
+
       - name: Resolve Unity editor
         id: unity
         shell: bash
@@ -475,6 +487,18 @@ jobs:
         shell: bash
         run: |
           bash .github/scripts/prepare-actionfit-private-package-access.sh
+
+      - name: Ensure Unity editor and iOS modules
+        shell: bash
+        env:
+          BUILD_PLATFORM: iOS
+          BUILD_PROJECT_NAME: ${{ github.event.repository.name }}
+          BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
+          BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
+          SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
+          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          bash .github/scripts/ensure-unity-editor-modules.sh iOS
 
       - name: Resolve Unity editor
         id: unity
