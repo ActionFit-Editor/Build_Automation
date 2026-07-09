@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.26`
+- Current package version at generation time: `1.0.27`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -55,7 +55,7 @@ Read this file when:
 
 ## Behavior Notes
 
-- Menu: `Tools/ActionFit/BuildSetting/AutoBuild`.
+- Menu: `Tools/Package/Build Automation/AutoBuild`.
 - Build request path: `.build/build_request.json`.
 - Build tag prefix: `build/**`.
 - Storage commit message prefix: `[BuildRequest]`.
@@ -87,9 +87,18 @@ Read this file when:
 - CI entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`.
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.
 - AutoBuild window workflow sync copies `WorkflowTemplates/buildcommit-auto-build.yml` to `.github/workflows/buildcommit-auto-build.yml` and package `.github/scripts/*.sh` workflow scripts to project `.github/scripts/`, including Slack notification support. Manual sync asks for confirmation; BuildCommit auto sync runs without confirmation when `Auto Sync Build Files` is enabled.
-- Build Automation depends on `com.actionfit.buildsetting@1.1.3` or newer and `com.actionfit.githubauth@1.0.1` or newer. Do not add package-specific installer scripts for these dependencies. Keep dependency metadata in `package.json` and `Editor/PackageInfo/ActionFitPackageInfo_SO.asset` `_dependenciesOverride`; ActionFit Package Manager must publish that dependency metadata to the catalog CSV and write the resolved Git UPM URLs into `Packages/manifest.json` during install/update. If a dependency is missing, BuildAutomation should compile, show a clear warning, and stop the affected workflow.
+- Build Automation depends on `com.actionfit.buildsetting@1.1.8` or newer and `com.actionfit.githubauth@1.0.3` or newer. Do not add package-specific installer scripts for these dependencies. Keep dependency metadata in `package.json` and `Editor/PackageInfo/ActionFitPackageInfo_SO.asset` `_dependenciesOverride`; ActionFit Package Manager must publish that dependency metadata to the catalog CSV and write the resolved Git UPM URLs into `Packages/manifest.json` during install/update. If a dependency is missing, BuildAutomation should compile, show a clear warning, and stop the affected workflow.
 - The storage commit alone should not trigger CI. The pushed `build/**` tag is the actual CI request.
 - `Platform=Both` is split by the workflow into Android and iOS jobs before calling `CIBuildEntry`.
+
+## Package Tools Menu
+
+- Unity menu root: `Tools/Package/Build Automation/`.
+- Keep package commands under this package root.
+- Lower separated entries:
+- `Setting SO`: focuses this package's settings ScriptableObject.
+- `README`: opens this package README.
+- Do not add README or Setting SO access back to Custom Package Manager package rows or Project Files.
 
 ## Release Note Rules
 

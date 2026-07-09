@@ -21,7 +21,7 @@ namespace ActionFit.BuildAutomation.Editor
         private const string LegacySlackMentionsPrefsKey = "BuildCommitSlackMentions";
         private const string AutoSyncWorkflowAssetsPrefsKey = "BuildCommitAutoSyncWorkflowAssets";
         private const string BuildTagPrefix = "build";
-        private const string ActionFitPackageManagerMenuPath = "Tools/ActionFit/Package Manager/Package Manager";
+        private const string ActionFitPackageManagerMenuPath = "Tools/Package/Custom Package Manager/Package Manager";
         private const string GitHubAuthPackageId = "com.actionfit.githubauth";
         private const string GitHubAuthMinimumVersion = "1.0.1";
         private const string GitHubAuthPreflightTypeName = "ActionFit.GitHubAuth.Editor.GitHubAuthPreflight, com.actionfit.githubauth.Editor";
@@ -44,7 +44,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         #region Window
 
-        [MenuItem("Tools/ActionFit/BuildSetting/AutoBuild", false, 21)]
+        [MenuItem("Tools/Package/Build Automation/AutoBuild", false, 21)]
         public static void ShowWindow()
         {
             var window = GetWindow<BuildCommitWindow>("AutoBuild");

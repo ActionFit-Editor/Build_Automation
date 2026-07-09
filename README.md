@@ -9,18 +9,25 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
 ```json
 {
   "dependencies": {
-    "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.3",
-    "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/GitHub_Auth.git#1.0.1",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.26"
+    "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.8",
+    "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/GitHub_Auth.git#1.0.3",
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.27"
   }
 }
 ```
 
 `Build_Automation` 또는 `GitHub_Auth` 레포와 태그가 아직 배포되지 않았다면 위 URL은 배포 후 사용할 수 있습니다.
 
+## Unity Menu
+
+- Package root: `Tools > Package > Build Automation`.
+- README: `Tools > Package > Build Automation > README`.
+- Setting SO: `Tools > Package > Build Automation > Setting SO`.
+- Package commands stay under the same package root and appear above the separated README/Setting SO entries when those entries exist.
+
 ## 구성
 
-- 메뉴: `Tools > ActionFit > BuildSetting > AutoBuild`
+- 메뉴: `Tools > Package > Build Automation > AutoBuild`
 - 요청 파일: `.build/build_request.json`
 - CI 진입점: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`
@@ -65,7 +72,7 @@ Android package name은 `BuildSettingsSO.androidPackageName`, iOS bundle id는 `
    - Bundle Number
    - Android keystore / alias / password
    - 필요한 iOS / Android 빌드 옵션
-3. `Tools > ActionFit > BuildSetting > AutoBuild`를 실행합니다.
+3. `Tools > Package > Build Automation > AutoBuild`를 실행합니다.
 4. `Build Settings`에 사용할 `BuildSettingsSO`가 연결되어 있고, `Automation Settings`에 `BuildAutomationSettingsSO`가 연결되어 있는지 확인합니다. 둘 다 없으면 AutoBuild 창에서 기본 경로에 자동 생성합니다.
 5. `Version Info`에서 Version과 Bundle ID 표시를 확인합니다. 코드상 Bundle ID 라벨은 실제로 `bundleNo`, 즉 빌드 번호입니다.
 6. `CI Build Request`에서 Platform을 선택합니다.
@@ -106,8 +113,8 @@ Google Play service account, iOS team id, App Store Connect API key, keychain pa
 
 ## 의존성
 
-- `com.actionfit.buildsetting@1.1.3` 이상
-- `com.actionfit.githubauth@1.0.1` 이상
+- `com.actionfit.buildsetting@1.1.8` 이상
+- `com.actionfit.githubauth@1.0.3` 이상
 - Unity `6000.2`
 - Android/iOS 빌드용 Unity modules
 - GitHub Actions self-hosted macOS runner

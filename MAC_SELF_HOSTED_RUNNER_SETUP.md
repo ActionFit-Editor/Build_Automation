@@ -269,7 +269,7 @@ bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-se
 
 더 자세한 로컬 시크릿 번들 설명은 [RunnerSetup/LOCAL_RUNNER_SECRETS_GUIDE.md](RunnerSetup/LOCAL_RUNNER_SECRETS_GUIDE.md)를 참고합니다. Mac Studio를 다른 AI가 세팅하거나 진단해야 할 때는 [RunnerSetup/AI_MAC_STUDIO_BUILD_AUTOMATION_GUIDE.md](RunnerSetup/AI_MAC_STUDIO_BUILD_AUTOMATION_GUIDE.md)를 먼저 읽게 하면 됩니다.
 
-AutoBuild request의 `iosDevelopmentTeamId`가 있으면 workflow가 request 값을 우선 사용하고, 없으면 profile별 `profile.env`의 `IOS_DEVELOPMENT_TEAM_ID` 값으로 fallback합니다. Android package name과 iOS bundle id는 `Tools > ActionFit > BuildSetting > SettingWindow`에서 설정한 값을 AutoBuild request로 전달하므로 workflow 상단 env에 따로 추가하지 않습니다.
+AutoBuild request의 `iosDevelopmentTeamId`가 있으면 workflow가 request 값을 우선 사용하고, 없으면 profile별 `profile.env`의 `IOS_DEVELOPMENT_TEAM_ID` 값으로 fallback합니다. Android package name과 iOS bundle id는 `Tools > Package > Build Setting > Setting Window`에서 설정한 값을 AutoBuild request로 전달하므로 workflow 상단 env에 따로 추가하지 않습니다.
 
 ## 7. 첫 테스트 순서
 
@@ -278,7 +278,7 @@ AutoBuild request의 `iosDevelopmentTeamId`가 있으면 workflow가 request 값
 1. Android 빌드만 테스트
 
 ```text
-Tools > ActionFit > BuildSetting > AutoBuild
+Tools > Package > Build Automation > AutoBuild
 Platform = Android
 Build Kind = AndroidAab
 Upload Target = GooglePlayInternal
@@ -296,7 +296,7 @@ Commit, Tag & Push
 2. iOS 빌드만 테스트
 
 ```text
-Tools > ActionFit > BuildSetting > AutoBuild
+Tools > Package > Build Automation > AutoBuild
 Platform = iOS
 Build Kind = iOSXcodeProject
 Upload Target = TestFlight
@@ -313,7 +313,7 @@ Commit, Tag & Push
 3. 양쪽 동시 요청 테스트
 
 ```text
-Tools > ActionFit > BuildSetting > AutoBuild
+Tools > Package > Build Automation > AutoBuild
 Platform = Both
 Upload Target = GooglePlayInternalAndTestFlight
 Commit, Tag & Push

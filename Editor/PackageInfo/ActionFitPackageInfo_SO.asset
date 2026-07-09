@@ -21,10 +21,9 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: '- Wrapped the AutoBuild window body in a vertical scroll view so
-    controls remain reachable in short Unity editor windows.
-
-
-    - Kept the existing
-    build log area as a separate nested scroll view.'
-  _dependenciesOverride: com.actionfit.githubauth@1.0.1, com.actionfit.buildsetting@1.1.3
+  _releaseNote: "- Unity \uC0C1\uB2E8 \uBA54\uB274\uB97C `Tools/Package/Build Automation/...`
+    \uAD6C\uC870\uB85C \uC815\uB9AC\uD588\uC2B5\uB2C8\uB2E4.\n- \uD558\uB2E8 \uAD6C\uBD84\uC120
+    \uC601\uC5ED\uC5D0 `Setting SO`\uC640 `README` \uBA54\uB274\uB97C \uCD94\uAC00\uD574
+    \uC124\uC815 SO\uC640 \uD328\uD0A4\uC9C0 README\uC5D0 \uBC14\uB85C \uC811\uADFC\uD560
+    \uC218 \uC788\uAC8C \uD588\uC2B5\uB2C8\uB2E4."
+  _dependenciesOverride: com.actionfit.githubauth@1.0.3, com.actionfit.buildsetting@1.1.8
