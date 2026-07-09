@@ -14,6 +14,7 @@ namespace ActionFit.BuildAutomation.Editor
         internal const string ResolveUnityScriptRelativePath = ".github/scripts/resolve-unity-editor.sh";
         internal const string PreparePrivatePackageAccessScriptRelativePath = ".github/scripts/prepare-actionfit-private-package-access.sh";
         internal const string NotifySlackScriptRelativePath = ".github/scripts/notify-slack-build-result.sh";
+        internal const string CleanupOldBuildArtifactsScriptRelativePath = ".github/scripts/cleanup-old-build-artifacts.sh";
 
         private const string PackageName = "com.actionfit.buildautomation";
         private static readonly string[] PackageAssetRelativePaths =
@@ -22,7 +23,8 @@ namespace ActionFit.BuildAutomation.Editor
             ValidateSecretsScriptRelativePath,
             ResolveUnityScriptRelativePath,
             PreparePrivatePackageAccessScriptRelativePath,
-            NotifySlackScriptRelativePath
+            NotifySlackScriptRelativePath,
+            CleanupOldBuildArtifactsScriptRelativePath
         };
 
         private static readonly string[] ProjectAssetRelativePaths =
@@ -31,7 +33,8 @@ namespace ActionFit.BuildAutomation.Editor
             ValidateSecretsScriptRelativePath,
             ResolveUnityScriptRelativePath,
             PreparePrivatePackageAccessScriptRelativePath,
-            NotifySlackScriptRelativePath
+            NotifySlackScriptRelativePath,
+            CleanupOldBuildArtifactsScriptRelativePath
         };
 
         internal static bool IsWorkflowCurrent()
@@ -93,7 +96,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static string GetWorkflowAssetSummary()
         {
-            return $"{WorkflowRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {NotifySlackScriptRelativePath}";
+            return $"{WorkflowRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}";
         }
 
         private static bool PackageFileMatchesProjectFile(string packageRelativePath, string projectRelativePath)
