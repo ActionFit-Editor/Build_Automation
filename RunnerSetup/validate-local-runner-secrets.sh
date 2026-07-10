@@ -4,8 +4,13 @@ set -euo pipefail
 profile="${1:-${DISTRIBUTION_PROFILE:-Actionfit}}"
 platform="${2:-${REQUEST_PLATFORM:-Both}}"
 upload_target="${3:-${UPLOAD_TARGET:-None}}"
-secret_root="${CI_SECRET_ROOT:-$HOME/workspace/build-automation}"
-request_path="${BUILD_REQUEST_PATH:-.build/build_request.json}"
+secret_root="${CI_SECRET_ROOT:-$HOME/ci-secrets/build-automation}"
+export CI_SECRET_ROOT="$secret_root"
+repository_root="${GITHUB_WORKSPACE:-}"
+if [ -z "$repository_root" ]; then
+  repository_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"
+fi
+request_path="${BUILD_REQUEST_PATH:-$repository_root/.build/build_request.json}"
 
 profile_slug="$(printf '%s' "$profile" | tr '[:upper:]' '[:lower:]')"
 case "$profile_slug" in
@@ -93,7 +98,7 @@ source_optional_env_file() {
 
 mask_value() {
   local value="$1"
-  if [ -n "$value" ]; then
+  if [ -n "$value" ] && [ "${GITHUB_ACTIONS:-}" = "true" ]; then
     echo "::add-mask::$value"
   fi
 }
@@ -219,17 +224,15 @@ if [ "$uses_android" -eq 1 ]; then
   mask_value "$request_keyalias_pass"
   if [ -z "$request_keystore_base64" ] && [ -n "${ANDROID_KEYSTORE_PATH:-}" ]; then
     append_github_env "ANDROID_KEYSTORE_PATH" "${ANDROID_KEYSTORE_PATH:-}"
-  fi
-  if [ -n "${ANDROID_KEYSTORE_PASS:-}" ]; then
-    append_github_env "ANDROID_KEYSTORE_PASS" "${ANDROID_KEYSTORE_PASS:-}"
-  fi
-  if [ -n "${ANDROID_KEYALIAS_PASS:-}" ]; then
-    append_github_env "ANDROID_KEYALIAS_PASS" "${ANDROID_KEYALIAS_PASS:-}"
-  fi
-  if [ -z "$request_keystore_base64" ]; then
     append_github_output "android_keystore_path" "${ANDROID_KEYSTORE_PATH:-}"
   else
     append_github_output "android_keystore_path" ""
+  fi
+  if [ -z "$request_keystore_pass" ] && [ -n "${ANDROID_KEYSTORE_PASS:-}" ]; then
+    append_github_env "ANDROID_KEYSTORE_PASS" "${ANDROID_KEYSTORE_PASS:-}"
+  fi
+  if [ -z "$request_keyalias_pass" ] && [ -n "${ANDROID_KEYALIAS_PASS:-}" ]; then
+    append_github_env "ANDROID_KEYALIAS_PASS" "${ANDROID_KEYALIAS_PASS:-}"
   fi
 fi
 

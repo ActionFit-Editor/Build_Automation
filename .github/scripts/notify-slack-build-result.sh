@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-secret_root="${CI_SECRET_ROOT:-$HOME/workspace/build-automation}"
+secret_root="${CI_SECRET_ROOT:-$HOME/ci-secrets/build-automation}"
 webhook_file="${SLACK_WEBHOOK_URL_FILE:-$secret_root/shared/slack-webhook-url}"
 webhook_url="${SLACK_BUILD_WEBHOOK_URL:-${SLACK_WEBHOOK_URL:-}}"
 mentions="${SLACK_BUILD_MENTIONS:-${SLACK_MENTIONS:-}}"

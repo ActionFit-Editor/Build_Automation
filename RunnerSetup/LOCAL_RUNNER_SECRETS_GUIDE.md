@@ -2,22 +2,22 @@
 
 This guide describes the local secret bundle used by the `BuildCommit Auto Build` workflow on a macOS self-hosted runner.
 
-The BuildCommit request contains distribution profile, platform, build kind, upload target, app identifiers, version, bundle number, Android keystore bytes, Android alias, and Android signing passwords copied from BuildSetting. Google Play JSON, App Store Connect API keys, Apple Distribution certificates, and App Store provisioning profiles stay on the Mac runner.
+BuildRequest schema 11 contains build metadata plus project-specific Android keystore Base64 and signing passwords. Android request values take precedence, while the Mac runner bundle provides optional Android fallbacks and remains the source for Google Play JSON, iOS team and App Store Connect credentials, Apple Distribution certificates, and provisioning profiles.
 
 ## Directory Layout
 
 Workflow root:
 
 ```bash
-$HOME/workspace/build-automation
+$HOME/ci-secrets/build-automation
 ```
 
-The workflow declares this path in `.github/workflows/buildcommit-auto-build.yml` as `CI_SECRET_ROOT` using the absolute runner path `/Users/lydia/workspace/build-automation`. BuildCommit requests do not carry runner-local paths. The setup and validation scripts keep the same path as their local fallback so manual terminal checks match CI.
+The workflow and setup/validation scripts use `$HOME/ci-secrets/build-automation` as the default `CI_SECRET_ROOT`. BuildCommit requests do not carry runner-local paths; set `CI_SECRET_ROOT` explicitly when the runner uses another location.
 
 Expected files:
 
 ```bash
-workspace/build-automation/
+ci-secrets/build-automation/
   shared/
     android-signing.env
     ios-keychain.env
@@ -50,11 +50,14 @@ workspace/build-automation/
 
 ## Create Template Files
 
-Run this from the repository root on the Mac runner:
+Run this from the repository root on the Mac runner. Use `.` when Unity is at the repository root or the repository-relative directory when it is nested:
 
 ```bash
-bash Packages/com.actionfit.buildautomation/RunnerSetup/setup-local-runner-secrets.sh \
-  "$HOME/workspace/build-automation"
+UNITY_PROJECT_PATH="KnitFactory" # Use "." for a repository-root Unity project.
+UNITY_PROJECT_DIR="$(pwd)/$UNITY_PROJECT_PATH"
+
+bash "$UNITY_PROJECT_DIR/Packages/com.actionfit.buildautomation/RunnerSetup/setup-local-runner-secrets.sh" \
+  "$HOME/ci-secrets/build-automation"
 ```
 
 Then copy the real secret files into the generated folders and fill the `.env` files.
@@ -68,7 +71,7 @@ ANDROID_KEYSTORE_PASS="..."
 ANDROID_KEYALIAS_PASS="..."
 ```
 
-This file is a fallback for manual or legacy requests where `.build/build_request.json` does not contain Android signing passwords. New BuildCommit requests use the Android passwords copied from BuildSetting first.
+These values are fallbacks for Android BuildCommit requests that omit the corresponding signing passwords.
 
 `profiles/actionfit/android-signing.env`
 
@@ -77,7 +80,7 @@ This file is a fallback for manual or legacy requests where `.build/build_reques
 # ANDROID_KEYALIAS_PASS=""
 ```
 
-Leave profile override values commented to use `shared/android-signing.env`. Uncomment and fill them only when a manual or legacy request needs profile-specific fallback passwords. The workflow loads `shared/android-signing.env` first and then loads `profiles/<profile>/android-signing.env`, so profile values win. BuildCommit request passwords still win inside Unity.
+Leave profile override values commented to use `shared/android-signing.env`. Uncomment them when profiles use different signing passwords. The workflow loads `shared/android-signing.env` first and then `profiles/<profile>/android-signing.env`, so profile values win.
 
 `shared/ios-keychain.env`
 
@@ -95,7 +98,7 @@ Leave both values blank for the normal portable setup. The workflow will create 
 REPLACE_WITH_READ_ONLY_GITHUB_TOKEN
 ```
 
-This file is used only when the runner user does not already have working `gh auth` Git credential setup. Put one read-only token on the first non-comment line. The token must be able to read private ActionFit GitHub package repositories used by `Packages/manifest.json`.
+This file is used only when the runner user does not already have working `gh auth` Git credential setup. Put one read-only token on the first non-comment line. The token must be able to read private ActionFit GitHub package repositories used by `$UNITY_PROJECT_DIR/Packages/manifest.json`.
 
 `shared/slack-webhook-url`
 
@@ -109,26 +112,26 @@ This file is optional. When present, the workflow sends Android/iOS BuildCommit 
 `profiles/actionfit/profile.env`
 
 ```bash
-ANDROID_KEYSTORE_PATH="$HOME/workspace/build-automation/profiles/actionfit/android/upload.keystore"
-GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="$HOME/workspace/build-automation/profiles/actionfit/android/google-play-service-account.json"
+ANDROID_KEYSTORE_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/android/upload.keystore"
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/android/google-play-service-account.json"
 IOS_DEVELOPMENT_TEAM_ID="49W7A8489P"
 APP_STORE_CONNECT_API_KEY_ID="..."
 APP_STORE_CONNECT_ISSUER_ID="..."
-APP_STORE_CONNECT_API_KEY_P8_PATH="$HOME/workspace/build-automation/profiles/actionfit/ios/AuthKey_Actionfit.p8"
-IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="$HOME/workspace/build-automation/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
+APP_STORE_CONNECT_API_KEY_P8_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/AuthKey_Actionfit.p8"
+IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
 IOS_DISTRIBUTION_CERTIFICATE_PASSWORD="..."
-IOS_APP_STORE_PROVISIONING_PROFILE_DIR="$HOME/workspace/build-automation/profiles/actionfit/ios/profiles"
+IOS_APP_STORE_PROVISIONING_PROFILE_DIR="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/profiles"
 IOS_PROVISIONING_PROFILE_AUTO_GENERATE="true"
 ```
 
 `profiles/stormborn/profile.env` uses the same keys with Stormborn values.
 
-`ANDROID_KEYSTORE_PATH` is a fallback for manual or legacy requests where `.build/build_request.json` does not contain `androidKeystoreBase64`. New BuildCommit requests restore the Android keystore file from request base64 first.
+`ANDROID_KEYSTORE_PATH` is required only when the BuildRequest does not contain `androidKeystoreBase64`. The runner password values are likewise required only when the corresponding request password is empty. Android alias metadata continues to come from the request.
 
 The workflow resolves the App Store provisioning profile from the BuildCommit request bundle id. For `iosBundleId=com.actionfit.catmerge.ios`, the default local file is:
 
 ```bash
-$HOME/workspace/build-automation/profiles/actionfit/ios/profiles/com.actionfit.catmerge.ios.mobileprovision
+$HOME/ci-secrets/build-automation/profiles/actionfit/ios/profiles/com.actionfit.catmerge.ios.mobileprovision
 ```
 
 The App Store provisioning profile must be for the same bundle id as the BuildCommit request and must include the Apple Distribution certificate stored in `IOS_DISTRIBUTION_CERTIFICATE_P12_PATH`. If the file is missing and `IOS_PROVISIONING_PROFILE_AUTO_GENERATE=true`, the workflow attempts `fastlane sigh` generation/download before archive/export.
@@ -140,8 +143,8 @@ The `.p12` must contain the Apple Distribution identity and private key for the 
 The setup script applies these permissions:
 
 ```bash
-find "$HOME/workspace/build-automation" -type d -exec chmod 700 {} \;
-find "$HOME/workspace/build-automation" -type f -exec chmod 600 {} \;
+find "$HOME/ci-secrets/build-automation" -type d -exec chmod 700 {} \;
+find "$HOME/ci-secrets/build-automation" -type f -exec chmod 600 {} \;
 ```
 
 Only the macOS user running the GitHub Actions runner should be able to read these files.
@@ -151,27 +154,27 @@ Only the macOS user running the GitHub Actions runner should be able to read the
 Android only:
 
 ```bash
-bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-secrets.sh \
+bash "$UNITY_PROJECT_DIR/Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-secrets.sh" \
   Actionfit Android GooglePlayInternal
 ```
 
 iOS only:
 
 ```bash
-bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-secrets.sh \
+bash "$UNITY_PROJECT_DIR/Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-secrets.sh" \
   Actionfit iOS TestFlight
 ```
 
 Both:
 
 ```bash
-bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-secrets.sh \
+bash "$UNITY_PROJECT_DIR/Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-secrets.sh" \
   Actionfit Both GooglePlayInternalAndTestFlight
 ```
 
 ## Workflow Behavior
 
-The workflow calls `prepare-actionfit-private-package-access.sh` and `validate-local-runner-secrets.sh` before Unity build steps.
+The workflow calls `prepare-actionfit-private-package-access.sh` and `validate-local-runner-secrets.sh` before Unity build steps. Manual validator runs never print credential values; GitHub `::add-mask::` commands are emitted only when `GITHUB_ACTIONS=true`.
 
 Private package access:
 
@@ -179,7 +182,7 @@ Private package access:
 - Falls back to `shared/github-package-read-token` or `ACTIONFIT_GITHUB_PACKAGE_READ_TOKEN`.
 - Exports token helper settings through `GIT_CONFIG_*` into `GITHUB_ENV` so later workflow steps and Unity child Git processes keep the same private package credential.
 - Rewrites `git@github.com:` and `ssh://git@github.com/` package URLs to HTTPS so the same GitHub credential path can be used.
-- Checks private package repository access with `git ls-remote` before Unity package resolution.
+- Checks private package repository access from `$UNITY_PROJECT_DIR/Packages/manifest.json` with `git ls-remote` before Unity package resolution.
 
 Slack notification:
 
@@ -192,9 +195,9 @@ Slack notification:
 
 Android:
 
-- Restores `androidKeystoreBase64` from `.build/build_request.json` into `.build/ci-keystore/` and uses that file for Unity signing.
-- Uses `ANDROID_KEYSTORE_PATH` only when the request does not contain keystore bytes.
-- Uses `androidKeystorePassword` and `androidAliasPassword` from `.build/build_request.json`; `ANDROID_KEYSTORE_PASS` and `ANDROID_KEYALIAS_PASS` are fallback values.
+- Validates and uses `androidKeystoreBase64`, `androidKeystorePassword`, and `androidAliasPassword` from the schema 11 BuildRequest when present.
+- Falls back independently to `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASS`, and `ANDROID_KEYALIAS_PASS` for missing request values.
+- Uses the request's `androidKeyaliasName` metadata.
 - Uses `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH` for Google Play upload.
 
 iOS:
@@ -207,6 +210,12 @@ iOS:
 - Validates that the resolved provisioning profile matches `IOS_DEVELOPMENT_TEAM_ID`, the request bundle id, and the imported Apple Distribution certificate.
 - Exports the `.ipa` with manual App Store signing, using the installed profile name in `ExportOptions.plist`.
 
+Project and symbols:
+
+- Reads repository-root `.build/build_request.json`; only schema 11 is accepted and `unityProjectPath` resolves `$UNITY_PROJECT_DIR`.
+- Derives `Packages`, `ProjectSettings`, `Library`, `Builds`, and `Logs` from `$UNITY_PROJECT_DIR`; workflow/scripts remain under repository-root `.github`.
+- When `autoConfigureBuildSymbols=true`, prepares the Custom Symbols build list in the target-switch Unity process and verifies it in the separate build process.
+
 ## Security Rule
 
-Do not allow untrusted workflow code to run on this runner. Any workflow running on the self-hosted Mac can read files that the runner user can read. Keep BuildCommit triggers limited to trusted tags/branches and do not run arbitrary pull request workflows on this runner.
+Do not allow untrusted workflow code to run on this runner. Any workflow running on the self-hosted Mac can read files that the runner user can read. Keep BuildCommit triggers limited to trusted tags/branches and do not run arbitrary pull request workflows on this runner. Android BuildRequest signing values must never be printed to workflow logs.

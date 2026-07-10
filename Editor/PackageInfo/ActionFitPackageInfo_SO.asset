@@ -21,23 +21,17 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- `CIBuildEntry.SwitchToRequestBuildTarget` CI \uC9C4\uC785\uC810\uC744
-    \uCD94\uAC00\uD574 `.build/build_request.json`\uC758 \uC694\uCCAD \uD50C\uB7AB\uD3FC
-    \uAE30\uC900\uC73C\uB85C Unity active build target\uC744 \uBA3C\uC800 \uC804\uD658\uD560
-    \uC218 \uC788\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n- Android/iOS BuildCommit workflow\uAC00
-    \uC2E4\uC81C `BuildFromRequest` \uC2E4\uD589 \uC804\uC5D0 \uBCC4\uB3C4 Unity
-    batchmode\uB85C target switch\uB97C \uC218\uD589\uD558\uB3C4\uB85D \uBCC0\uACBD\uD574,
-    Editor assembly\uAC00 `UNITY_ANDROID` \uB610\uB294 `UNITY_IOS` \uC2EC\uBCFC\uB85C
-    \uC7AC\uCEF4\uD30C\uC77C\uB41C \uB4A4 \uBE4C\uB4DC\uAC00 \uC2DC\uC791\uB429\uB2C8\uB2E4.\n-
-    `BuildFromRequest` \uC9C1\uC804 request platform, resolved platform, active build
-    target, selected group\uC744 \uB85C\uADF8\uB85C \uB0A8\uACA8 `Build report is
-    null` \uC6D0\uC778\uC744 Actions \uB85C\uADF8\uC5D0\uC11C \uB354 \uBE68\uB9AC
-    \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.\n- \uD50C\uB7AB\uD3FC \uC2EC\uBCFC\uC774
-    \uC544\uC9C1 \uB9DE\uC9C0 \uC54A\uC744 \uB54C\uB294 `SwitchToRequestBuildTarget`
-    \uC120\uD589 \uC2E4\uD589\uC774 \uD544\uC694\uD558\uB2E4\uB294 \uC624\uB958 \uBA54\uC2DC\uC9C0\uB97C
-    \uCD9C\uB825\uD574 \uC798\uBABB\uB41C workflow copy\uB97C \uC9C4\uB2E8\uD558\uAE30
-    \uC27D\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n- `WorkflowTemplates/buildcommit-auto-build.yml`\uACFC
-    \uD504\uB85C\uC81D\uD2B8 root `.github/workflows/buildcommit-auto-build.yml`\uC744
-    \uD568\uAED8 \uAC31\uC2E0\uD574 Auto Sync \uD6C4\uC5D0\uB3C4 \uAC19\uC740 \uB450
-    \uB2E8\uACC4 \uBE4C\uB4DC \uD750\uB984\uC774 \uC720\uC9C0\uB429\uB2C8\uB2E4."
-  _dependenciesOverride: com.actionfit.githubauth@1.0.3, com.actionfit.buildsetting@1.1.8
+  _releaseNote: "- Schema 11 BuildRequest\uC5D0 Android keystore \uD30C\uC77C\uBA85/Base64\uC640
+    keystore/alias \uBE44\uBC00\uBC88\uD638 \uC804\uB2EC\uC744 \uBCF5\uC6D0\uD588\uC2B5\uB2C8\uB2E4.
+    Android CI\uB294 request \uAC12\uC744 \uC6B0\uC120\uD558\uACE0 \uB204\uB77D\uB41C
+    \uAC12\uB9CC runner \uD658\uACBD\uC5D0\uC11C fallback\uD569\uB2C8\uB2E4.\n- \uAE30\uC874
+    \uD504\uB85C\uC81D\uD2B8\uC758 tracked keystore\uC640 BuildSettings credential
+    \uAC12\uC744 \uBCF4\uC874\uD558\uBA70, Google Play/iOS/App Store Connect credential\uC740
+    \uAE30\uC874\uCC98\uB7FC runner \uB85C\uCEEC \uBC88\uB4E4\uC5D0\uC11C \uC77D\uC2B5\uB2C8\uB2E4.\n-
+    Root/nested Unity \uD504\uB85C\uC81D\uD2B8 \uACBD\uB85C \uCC98\uB9AC\uC640 Custom
+    Symbols target-switch/build 2\uB2E8\uACC4 \uC801\uC6A9\uC740 \uADF8\uB300\uB85C
+    \uC720\uC9C0\uD569\uB2C8\uB2E4.\n- Request \uC6B0\uC120\uC21C\uC704, runner fallback,
+    credential \uBBF8\uCD9C\uB825, schema 11 \uC9C1\uB82C\uD654\uB97C \uAC80\uC99D\uD558\uB294
+    Editor \uBC0F shell \uD14C\uC2A4\uD2B8\uB97C \uAC31\uC2E0\uD588\uC2B5\uB2C8\uB2E4."
+  _dependenciesOverride: com.actionfit.githubauth@1.0.3, com.actionfit.buildsetting@1.1.8,
+    com.actionfit.customsymbols@1.0.5

@@ -2,9 +2,10 @@
 set -euo pipefail
 
 github_host="${ACTIONFIT_GITHUB_HOST:-github.com}"
-manifest_path="${UNITY_MANIFEST_PATH:-Packages/manifest.json}"
+unity_project_dir="${UNITY_PROJECT_DIR:-${GITHUB_WORKSPACE:-$PWD}}"
+manifest_path="${UNITY_MANIFEST_PATH:-$unity_project_dir/Packages/manifest.json}"
 owners="${ACTIONFIT_PRIVATE_PACKAGE_OWNERS:-ActionFit-Editor ActionFitGames}"
-secret_root="${CI_SECRET_ROOT:-$HOME/workspace/build-automation}"
+secret_root="${CI_SECRET_ROOT:-$HOME/ci-secrets/build-automation}"
 token_file="${ACTIONFIT_GITHUB_PACKAGE_READ_TOKEN_FILE:-$secret_root/shared/github-package-read-token}"
 token="${ACTIONFIT_GITHUB_PACKAGE_READ_TOKEN:-${GITHUB_PACKAGE_READ_TOKEN:-}}"
 

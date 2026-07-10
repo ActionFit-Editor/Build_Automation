@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 
@@ -50,6 +51,9 @@ namespace ActionFit.BuildAutomation.Editor
             BuildSettingBridge.ApplyVersionSettings(settings);
             ApplyPlayerIdentifiers(settings);
 
+            if (!ValidatePreparedBuildSymbols(request))
+                return 1;
+
             BuildReport report = RunBuild(settings, request);
             if (report == null)
             {
@@ -67,7 +71,7 @@ namespace ActionFit.BuildAutomation.Editor
             string androidAlias = request.androidKeyaliasName?.Trim();
             string androidPackageName = request.androidPackageName?.Trim();
             string iosBundleId = request.iosBundleId?.Trim();
-            string iosDevelopmentTeamId = PickEnvironmentOrRequest("IOS_DEVELOPMENT_TEAM_ID", request.iosDevelopmentTeamId);
+            string iosDevelopmentTeamId = Environment.GetEnvironmentVariable("IOS_DEVELOPMENT_TEAM_ID")?.Trim();
 
             if (!string.IsNullOrEmpty(request.buildVersion)) BuildSettingBridge.SetString(settings, "buildVersion", request.buildVersion);
             if (!string.IsNullOrEmpty(request.bundleNo)) BuildSettingBridge.SetString(settings, "bundleNo", request.bundleNo);
@@ -77,10 +81,11 @@ namespace ActionFit.BuildAutomation.Editor
             if (!string.IsNullOrEmpty(iosDevelopmentTeamId)) BuildSettingBridge.SetString(settings, "developmentTeamId", iosDevelopmentTeamId);
             if (!string.IsNullOrEmpty(androidAlias)) BuildSettingBridge.SetString(settings, "keyStoreAlias", androidAlias);
             BuildSettingBridge.SetBool(settings, "saveFileInProject", true);
+            BuildSettingBridge.SetBool(settings, "manageSymbolsOnBuild", request.autoConfigureBuildSymbols);
 
             EditorUtility.SetDirty(settings);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[CIBuildEntry] Request applied: trigger={request.triggerSource}, platform={request.platform}, kind={request.buildKind}, upload={request.uploadTarget}, profile={request.distributionProfile}, androidPackage={androidPackageName}, iosBundle={iosBundleId}, iosTeamId={iosDevelopmentTeamId}, androidAlias={androidAlias}");
+            Debug.Log($"[CIBuildEntry] Request applied: trigger={request.triggerSource}, unityProjectPath={request.unityProjectPath}, platform={request.platform}, kind={request.buildKind}, upload={request.uploadTarget}, profile={request.distributionProfile}, autoConfigureBuildSymbols={request.autoConfigureBuildSymbols}, androidPackage={androidPackageName}, iosBundle={iosBundleId}, iosTeamId={iosDevelopmentTeamId}, androidAlias={androidAlias}");
         }
 
         private static void ApplyPlayerIdentifiers(ScriptableObject settings)
@@ -89,10 +94,10 @@ namespace ActionFit.BuildAutomation.Editor
             string iosPackageName = BuildSettingBridge.GetString(settings, "iosPackageName");
 
             if (!string.IsNullOrWhiteSpace(androidPackageName))
-                PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, androidPackageName.Trim());
+                PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, androidPackageName.Trim());
 
             if (!string.IsNullOrWhiteSpace(iosPackageName))
-                PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.iOS, iosPackageName.Trim());
+                PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.iOS, iosPackageName.Trim());
         }
 
         private static BuildReport RunBuild(ScriptableObject settings, BuildRequest request)
@@ -154,6 +159,13 @@ namespace ActionFit.BuildAutomation.Editor
                 $"activeBuildTarget={EditorUserBuildSettings.activeBuildTarget}, " +
                 $"selectedGroup={EditorUserBuildSettings.selectedBuildTargetGroup}");
 
+            if (request.autoConfigureBuildSymbols &&
+                !CustomSymbolsBridge.TryApplyBuildSymbols(target, out string symbolError))
+            {
+                Debug.LogError($"[CIBuildEntry] {symbolError}");
+                return 1;
+            }
+
             if (EditorUserBuildSettings.activeBuildTarget == target)
             {
                 Debug.Log($"[CIBuildEntry] Active build target is already {target}");
@@ -167,8 +179,39 @@ namespace ActionFit.BuildAutomation.Editor
                 return 1;
             }
 
+            if (request.autoConfigureBuildSymbols &&
+                !CustomSymbolsBridge.TryApplyBuildSymbols(target, out string postSwitchSymbolError))
+            {
+                Debug.LogError($"[CIBuildEntry] {postSwitchSymbolError}");
+                return 1;
+            }
+
             Debug.Log($"[CIBuildEntry] Switched active build target to {target}");
             return 0;
+        }
+
+        private static bool ValidatePreparedBuildSymbols(BuildRequest request)
+        {
+            if (!request.autoConfigureBuildSymbols)
+            {
+                Debug.Log("[CIBuildEntry] Automatic build symbol setup is disabled for this request");
+                return true;
+            }
+
+            BuildRequestPlatform platform = ResolvePlatform(request.platform);
+            if (!TryGetBuildTarget(platform, out _, out BuildTarget target))
+            {
+                Debug.LogError($"[CIBuildEntry] Cannot validate Custom Symbols for platform: {platform}");
+                return false;
+            }
+
+            if (!CustomSymbolsBridge.TryValidateBuildSymbols(target, out string error))
+            {
+                Debug.LogError($"[CIBuildEntry] {error}");
+                return false;
+            }
+
+            return true;
         }
 
         private static bool TryGetBuildTarget(BuildRequestPlatform platform, out BuildTargetGroup group, out BuildTarget target)
@@ -203,7 +246,6 @@ namespace ActionFit.BuildAutomation.Editor
         }
 
 #if UNITY_ANDROID
-        // BuildCommit request signing values are preferred; local runner env values are fallback.
         private static void ApplyAndroidSigning(BuildRequest request)
         {
             string keystorePath = ResolveAndroidKeystorePath(request);
@@ -214,7 +256,7 @@ namespace ActionFit.BuildAutomation.Editor
 
             if (string.IsNullOrEmpty(keystorePath) && !hasAliasName && string.IsNullOrEmpty(keystorePass) && string.IsNullOrEmpty(keyaliasPass))
             {
-                Debug.Log("[CIBuildEntry] No keystore env vars found; using project signing settings as-is");
+                Debug.Log("[CIBuildEntry] No request or runner keystore values found; using project signing settings as-is");
                 return;
             }
 
@@ -223,14 +265,14 @@ namespace ActionFit.BuildAutomation.Editor
             {
                 if (!File.Exists(keystorePath))
                     throw new FileNotFoundException("[CIBuildEntry] Android keystore file not found", keystorePath);
-                else
-                    PlayerSettings.Android.keystoreName = keystorePath;
+
+                PlayerSettings.Android.keystoreName = keystorePath;
             }
             if (hasAliasName) PlayerSettings.Android.keyaliasName = aliasName;
             if (!string.IsNullOrEmpty(keystorePass)) PlayerSettings.Android.keystorePass = keystorePass;
             if (!string.IsNullOrEmpty(keyaliasPass)) PlayerSettings.Android.keyaliasPass = keyaliasPass;
 
-            Debug.Log($"[CIBuildEntry] Android signing applied: keystorePathInjected={!string.IsNullOrEmpty(keystorePath)}, alias={PlayerSettings.Android.keyaliasName}, keystorePassInjected={!string.IsNullOrEmpty(keystorePass)}, keyaliasPassInjected={!string.IsNullOrEmpty(keyaliasPass)}");
+            Debug.Log($"[CIBuildEntry] Android signing applied: requestKeystore={!string.IsNullOrEmpty(request.androidKeystoreBase64)}, alias={PlayerSettings.Android.keyaliasName}, requestKeystorePassword={!string.IsNullOrEmpty(request.androidKeystorePassword)}, requestAliasPassword={!string.IsNullOrEmpty(request.androidAliasPassword)}");
         }
 #endif
 
@@ -240,13 +282,13 @@ namespace ActionFit.BuildAutomation.Editor
             if (!string.IsNullOrEmpty(requestKeystoreBase64))
                 return WriteRequestKeystore(request);
 
-            return PickEnvironmentOrRequest("ANDROID_KEYSTORE_PATH", "");
+            return Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PATH")?.Trim();
         }
 
         private static string WriteRequestKeystore(BuildRequest request)
         {
             string fileName = SanitizeFileName(request.androidKeystoreFileName, "android-request.keystore");
-            string directory = Path.GetFullPath(Path.Combine(Application.dataPath, "..", ".build", "ci-keystore"));
+            string directory = Path.Combine(BuildRequestUtility.UnityProjectRoot, ".build", "ci-keystore");
             string path = Path.Combine(directory, fileName);
 
             try
@@ -257,9 +299,11 @@ namespace ActionFit.BuildAutomation.Editor
                 Debug.Log($"[CIBuildEntry] Android keystore restored from BuildCommit request: {path}");
                 return path;
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                throw new InvalidOperationException("[CIBuildEntry] Failed to restore Android keystore from BuildCommit request", ex);
+                throw new InvalidOperationException(
+                    "[CIBuildEntry] Failed to restore Android keystore from BuildCommit request",
+                    exception);
             }
         }
 
@@ -268,18 +312,10 @@ namespace ActionFit.BuildAutomation.Editor
             string fileName = Path.GetFileName(value?.Trim());
             if (string.IsNullOrEmpty(fileName)) fileName = fallback;
 
-            foreach (char invalidChar in Path.GetInvalidFileNameChars())
-                fileName = fileName.Replace(invalidChar, '_');
+            foreach (char invalidCharacter in Path.GetInvalidFileNameChars())
+                fileName = fileName.Replace(invalidCharacter, '_');
 
             return string.IsNullOrEmpty(fileName) ? fallback : fileName;
-        }
-
-        private static string PickEnvironmentOrRequest(string environmentVariableName, string requestValue)
-        {
-            string environmentValue = Environment.GetEnvironmentVariable(environmentVariableName)?.Trim();
-            if (!string.IsNullOrEmpty(environmentValue)) return environmentValue;
-
-            return requestValue?.Trim();
         }
 
         private static string PickRequestOrEnvironment(string requestValue, string environmentVariableName)

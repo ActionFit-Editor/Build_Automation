@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-secret_root="${1:-${CI_SECRET_ROOT:-$HOME/workspace/build-automation}}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+secret_root="${1:-${CI_SECRET_ROOT:-$HOME/ci-secrets/build-automation}}"
 
 mkdir -p \
   "$secret_root/shared" \
@@ -104,5 +105,5 @@ Next:
      - $secret_root/profiles/stormborn/profile.env
      - $secret_root/profiles/stormborn/android-signing.env (optional override)
   3. Validate:
-     CI_SECRET_ROOT="$secret_root" bash Packages/com.actionfit.buildautomation/RunnerSetup/validate-local-runner-secrets.sh Actionfit Both GooglePlayInternalAndTestFlight
+     CI_SECRET_ROOT="$secret_root" bash "$script_dir/validate-local-runner-secrets.sh" Actionfit Both GooglePlayInternalAndTestFlight
 EOF

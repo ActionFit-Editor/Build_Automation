@@ -42,8 +42,10 @@ namespace ActionFit.BuildAutomation.Editor
     {
         public const string BuildCommitTriggerSource = "BuildCommit";
 
-        public int schemaVersion = 10;
+        public int schemaVersion = 11;
         public string triggerSource = BuildCommitTriggerSource;
+        public string unityProjectPath = ".";
+        public bool autoConfigureBuildSymbols = true;
         public BuildRequestPlatform platform = BuildRequestPlatform.None;
         public BuildRequestKind buildKind = BuildRequestKind.Default;
         public BuildRequestUploadTarget uploadTarget = BuildRequestUploadTarget.None;
@@ -53,15 +55,10 @@ namespace ActionFit.BuildAutomation.Editor
         public string buildFileName;
         public string androidPackageName;
         public string iosBundleId;
-        public string iosDevelopmentTeamId;
         public string androidKeystoreFileName;
         public string androidKeystoreBase64;
         public string androidKeystorePassword;
         public string androidAliasPassword;
-        public string googlePlayServiceAccountJson;
-        public string appStoreConnectApiKeyId;
-        public string appStoreConnectIssuerId;
-        public string appStoreConnectApiKeyP8;
         public string androidKeyaliasName;
         public string[] slackMentions = Array.Empty<string>();
         public string sourceBranch;
