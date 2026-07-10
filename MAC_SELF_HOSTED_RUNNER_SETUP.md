@@ -141,12 +141,12 @@ App Store Connect API key는 TestFlight upload에 사용됩니다. signing/expor
 
 ## 6. 로컬 시크릿 번들 준비
 
-self-hosted runner는 Android BuildRequest의 keystore Base64와 signing 비밀번호를 우선 사용하고, 누락된 Android 값 및 Google Play/iOS/App Store Connect credential은 Mac 로컬 파일에서 읽습니다. `CI_SECRET_ROOT`를 지정하지 않으면 기본값은 `$HOME/ci-secrets/build-automation`입니다. BuildCommit request에는 runner 로컬 경로를 넣지 않습니다.
+self-hosted runner는 Android BuildRequest의 keystore Base64와 signing 비밀번호를 우선 사용하고, 누락된 Android 값 및 Google Play/iOS/App Store Connect credential은 Mac 로컬 파일에서 읽습니다. 기본 workflow template은 기존 ActionFit runner bundle을 사용하도록 `CI_SECRET_ROOT=/Users/lydia/workspace/build-automation`을 명시합니다. Setup/validation script를 workflow 밖에서 직접 실행해 이 환경변수가 없으면 `$HOME/ci-secrets/build-automation`을 사용합니다. BuildCommit request에는 runner 로컬 경로를 넣지 않습니다.
 
-기본값:
+기본 workflow template 경로:
 
 ```bash
-$HOME/ci-secrets/build-automation
+/Users/lydia/workspace/build-automation
 ```
 
 runner를 실행하는 macOS 사용자 계정에서 템플릿을 생성합니다.
@@ -157,13 +157,13 @@ REPOSITORY_ROOT="$(git rev-parse --show-toplevel)"
 UNITY_PROJECT_PATH="KnitFactory" # Use "." for a repository-root Unity project.
 UNITY_PROJECT_DIR="$REPOSITORY_ROOT/$UNITY_PROJECT_PATH"
 bash "$UNITY_PROJECT_DIR/Packages/com.actionfit.buildautomation/RunnerSetup/setup-local-runner-secrets.sh" \
-  "$HOME/ci-secrets/build-automation"
+  "/Users/lydia/workspace/build-automation"
 ```
 
 생성되는 구조:
 
 ```text
-ci-secrets/build-automation/
+workspace/build-automation/
   shared/
     android-signing.env
     ios-keychain.env
@@ -237,17 +237,17 @@ Slack 사람 태그는 AutoBuild 창의 `Slack Mentions` 행 목록에서 설정
 회사별 `profile.env`에는 실제 파일 경로와 iOS/App Store Connect 값을 넣습니다.
 
 ```bash
-ANDROID_KEYSTORE_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/android/upload.keystore"
+ANDROID_KEYSTORE_PATH="/Users/lydia/workspace/build-automation/profiles/actionfit/android/upload.keystore"
 # Optional: overrides the request's non-secret Android alias metadata.
 # ANDROID_KEYALIAS_NAME="upload"
-GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/android/google-play-service-account.json"
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="/Users/lydia/workspace/build-automation/profiles/actionfit/android/google-play-service-account.json"
 IOS_DEVELOPMENT_TEAM_ID="49W7A8489P"
 APP_STORE_CONNECT_API_KEY_ID="..."
 APP_STORE_CONNECT_ISSUER_ID="..."
-APP_STORE_CONNECT_API_KEY_P8_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/AuthKey_Actionfit.p8"
-IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
+APP_STORE_CONNECT_API_KEY_P8_PATH="/Users/lydia/workspace/build-automation/profiles/actionfit/ios/AuthKey_Actionfit.p8"
+IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="/Users/lydia/workspace/build-automation/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
 IOS_DISTRIBUTION_CERTIFICATE_PASSWORD="..."
-IOS_APP_STORE_PROVISIONING_PROFILE_DIR="$HOME/ci-secrets/build-automation/profiles/actionfit/ios/profiles"
+IOS_APP_STORE_PROVISIONING_PROFILE_DIR="/Users/lydia/workspace/build-automation/profiles/actionfit/ios/profiles"
 IOS_PROVISIONING_PROFILE_AUTO_GENERATE="true"
 ```
 
@@ -260,9 +260,9 @@ Android package name과 iOS bundle id도 로컬 시크릿이나 workflow env에 
 권한을 잠급니다.
 
 ```bash
-chmod -R go-rwx "$HOME/ci-secrets/build-automation"
-find "$HOME/ci-secrets/build-automation" -type d -exec chmod 700 {} \;
-find "$HOME/ci-secrets/build-automation" -type f -exec chmod 600 {} \;
+chmod -R go-rwx "/Users/lydia/workspace/build-automation"
+find "/Users/lydia/workspace/build-automation" -type d -exec chmod 700 {} \;
+find "/Users/lydia/workspace/build-automation" -type f -exec chmod 600 {} \;
 ```
 
 검증 명령:

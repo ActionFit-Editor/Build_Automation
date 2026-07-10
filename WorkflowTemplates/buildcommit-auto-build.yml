@@ -17,6 +17,7 @@ concurrency:
 env:
   UNITY_HUB_EDITOR_ROOT: "/Applications/Unity/Hub/Editor"
   DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer"
+  CI_SECRET_ROOT: "/Users/lydia/workspace/build-automation"
   IOS_DISTRIBUTION_SIGNING_IDENTITY: "Apple Distribution"
   BUILD_CLEANUP_RETENTION_DAYS: 5
 

@@ -21,17 +21,17 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- Schema 11 BuildRequest\uC5D0 Android keystore \uD30C\uC77C\uBA85/Base64\uC640
-    keystore/alias \uBE44\uBC00\uBC88\uD638 \uC804\uB2EC\uC744 \uBCF5\uC6D0\uD588\uC2B5\uB2C8\uB2E4.
-    Android CI\uB294 request \uAC12\uC744 \uC6B0\uC120\uD558\uACE0 \uB204\uB77D\uB41C
-    \uAC12\uB9CC runner \uD658\uACBD\uC5D0\uC11C fallback\uD569\uB2C8\uB2E4.\n- \uAE30\uC874
-    \uD504\uB85C\uC81D\uD2B8\uC758 tracked keystore\uC640 BuildSettings credential
-    \uAC12\uC744 \uBCF4\uC874\uD558\uBA70, Google Play/iOS/App Store Connect credential\uC740
-    \uAE30\uC874\uCC98\uB7FC runner \uB85C\uCEEC \uBC88\uB4E4\uC5D0\uC11C \uC77D\uC2B5\uB2C8\uB2E4.\n-
-    Root/nested Unity \uD504\uB85C\uC81D\uD2B8 \uACBD\uB85C \uCC98\uB9AC\uC640 Custom
-    Symbols target-switch/build 2\uB2E8\uACC4 \uC801\uC6A9\uC740 \uADF8\uB300\uB85C
-    \uC720\uC9C0\uD569\uB2C8\uB2E4.\n- Request \uC6B0\uC120\uC21C\uC704, runner fallback,
-    credential \uBBF8\uCD9C\uB825, schema 11 \uC9C1\uB82C\uD654\uB97C \uAC80\uC99D\uD558\uB294
-    Editor \uBC0F shell \uD14C\uC2A4\uD2B8\uB97C \uAC31\uC2E0\uD588\uC2B5\uB2C8\uB2E4."
+  _releaseNote: "- \uAE30\uBCF8 BuildCommit workflow template\uC5D0 `CI_SECRET_ROOT=/Users/lydia/workspace/build-automation`\uC744
+    \uBCF5\uAD6C\uD574 \uAE30\uC874 ActionFit runner\uC758 \uB85C\uCEEC credential
+    bundle\uC744 \uB2E4\uC2DC \uCC3E\uC2B5\uB2C8\uB2E4.\n- `Auto Sync Build Files`\uC640
+    `Update GitHub Workflow`\uAC00 \uAC19\uC740 \uACBD\uB85C \uC124\uC815\uC744 \uD504\uB85C\uC81D\uD2B8
+    workflow\uC5D0 \uC720\uC9C0\uD558\uBBC0\uB85C \uB2E4\uC74C BuildCommit \uC694\uCCAD\uC5D0\uC11C\uB3C4
+    \uC124\uC815\uC774 \uC0AC\uB77C\uC9C0\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.\n- credential
+    \uD30C\uC77C\uC774\uB098 \uAC12\uC740 \uC800\uC7A5\uC18C\uC5D0 \uCD94\uAC00\uD558\uC9C0
+    \uC54A\uC73C\uBA70 Android request \uC6B0\uC120\uC21C\uC704\uC640 runner fallback
+    \uB3D9\uC791\uC740 \uADF8\uB300\uB85C \uC720\uC9C0\uD569\uB2C8\uB2E4.\n- Caution:
+    \uB2E4\uB978 macOS \uC0AC\uC6A9\uC790\uB098 \uACBD\uB85C\uB97C \uC0AC\uC6A9\uD558\uB294
+    runner\uB294 \uBC30\uD3EC \uC804\uC5D0 workflow\uC758 `CI_SECRET_ROOT`\uB97C
+    \uD574\uB2F9 \uB85C\uCEEC \uACBD\uB85C\uB85C \uBCC0\uACBD\uD574\uC57C \uD569\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.githubauth@1.0.3, com.actionfit.buildsetting@1.1.8,
     com.actionfit.customsymbols@1.0.5
