@@ -21,23 +21,6 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- `CIBuildEntry.SwitchToRequestBuildTarget` CI \uC9C4\uC785\uC810\uC744
-    \uCD94\uAC00\uD574 `.build/build_request.json`\uC758 \uC694\uCCAD \uD50C\uB7AB\uD3FC
-    \uAE30\uC900\uC73C\uB85C Unity active build target\uC744 \uBA3C\uC800 \uC804\uD658\uD560
-    \uC218 \uC788\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n- Android/iOS BuildCommit workflow\uAC00
-    \uC2E4\uC81C `BuildFromRequest` \uC2E4\uD589 \uC804\uC5D0 \uBCC4\uB3C4 Unity
-    batchmode\uB85C target switch\uB97C \uC218\uD589\uD558\uB3C4\uB85D \uBCC0\uACBD\uD574,
-    Editor assembly\uAC00 `UNITY_ANDROID` \uB610\uB294 `UNITY_IOS` \uC2EC\uBCFC\uB85C
-    \uC7AC\uCEF4\uD30C\uC77C\uB41C \uB4A4 \uBE4C\uB4DC\uAC00 \uC2DC\uC791\uB429\uB2C8\uB2E4.\n-
-    `BuildFromRequest` \uC9C1\uC804 request platform, resolved platform, active build
-    target, selected group\uC744 \uB85C\uADF8\uB85C \uB0A8\uACA8 `Build report is
-    null` \uC6D0\uC778\uC744 Actions \uB85C\uADF8\uC5D0\uC11C \uB354 \uBE68\uB9AC
-    \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.\n- \uD50C\uB7AB\uD3FC \uC2EC\uBCFC\uC774
-    \uC544\uC9C1 \uB9DE\uC9C0 \uC54A\uC744 \uB54C\uB294 `SwitchToRequestBuildTarget`
-    \uC120\uD589 \uC2E4\uD589\uC774 \uD544\uC694\uD558\uB2E4\uB294 \uC624\uB958 \uBA54\uC2DC\uC9C0\uB97C
-    \uCD9C\uB825\uD574 \uC798\uBABB\uB41C workflow copy\uB97C \uC9C4\uB2E8\uD558\uAE30
-    \uC27D\uAC8C \uD588\uC2B5\uB2C8\uB2E4.\n- `WorkflowTemplates/buildcommit-auto-build.yml`\uACFC
-    \uD504\uB85C\uC81D\uD2B8 root `.github/workflows/buildcommit-auto-build.yml`\uC744
-    \uD568\uAED8 \uAC31\uC2E0\uD574 Auto Sync \uD6C4\uC5D0\uB3C4 \uAC19\uC740 \uB450
-    \uB2E8\uACC4 \uBE4C\uB4DC \uD750\uB984\uC774 \uC720\uC9C0\uB429\uB2C8\uB2E4."
-  _dependenciesOverride: com.actionfit.githubauth@1.0.3, com.actionfit.buildsetting@1.1.8
+  _releaseNote: "- BuildRequest schema 11에 `unityProjectPath`를 추가해 Unity 프로젝트가 Git 저장소 루트 또는 `KnitFactory` 같은 하위 경로에 있는 구성을 모두 지원합니다. Workflow와 scripts는 저장소 루트 `.github`에 설치하고 Unity 경로는 request에서 파생합니다.\n- Android keystore Base64와 signing 비밀번호를 포함한 credential 필드를 BuildRequest에서 제거했습니다. Android/iOS signing 및 upload credential은 self-hosted runner의 `CI_SECRET_ROOT`에서만 읽으며 legacy request 값도 fallback으로 사용하지 않습니다.\n- `자동 빌드 심볼 세팅` 옵션과 schema 11의 `autoConfigureBuildSymbols`를 추가했습니다. Target switch 프로세스가 Custom Symbols의 Build 체크 결과를 적용하고 다음 Unity 프로세스가 심볼을 검증한 뒤 빌드합니다.\n- Root/nested 프로젝트 경로, request 직렬화, runner-only Android secret 처리를 검증하는 Editor 및 shell 테스트를 추가했습니다."
+  _dependenciesOverride: com.actionfit.githubauth@1.0.3, com.actionfit.buildsetting@1.1.8,
+    com.actionfit.customsymbols@1.0.5

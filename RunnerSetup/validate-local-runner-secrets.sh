@@ -4,8 +4,13 @@ set -euo pipefail
 profile="${1:-${DISTRIBUTION_PROFILE:-Actionfit}}"
 platform="${2:-${REQUEST_PLATFORM:-Both}}"
 upload_target="${3:-${UPLOAD_TARGET:-None}}"
-secret_root="${CI_SECRET_ROOT:-$HOME/workspace/build-automation}"
-request_path="${BUILD_REQUEST_PATH:-.build/build_request.json}"
+secret_root="${CI_SECRET_ROOT:-$HOME/ci-secrets/build-automation}"
+export CI_SECRET_ROOT="$secret_root"
+repository_root="${GITHUB_WORKSPACE:-}"
+if [ -z "$repository_root" ]; then
+  repository_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"
+fi
+request_path="${BUILD_REQUEST_PATH:-$repository_root/.build/build_request.json}"
 
 profile_slug="$(printf '%s' "$profile" | tr '[:upper:]' '[:lower:]')"
 case "$profile_slug" in
@@ -131,15 +136,6 @@ validate_json_file() {
   }
 }
 
-validate_base64_value() {
-  local label="$1"
-  local value="$2"
-  ruby -rbase64 -e 'Base64.strict_decode64(ARGV.fetch(0))' "$value" >/dev/null || {
-    echo "::error::$label is not valid base64"
-    exit 1
-  }
-}
-
 validate_p12_distribution_identity() {
   local label="$1"
   local path="$2"
@@ -197,40 +193,15 @@ request_ios_bundle_id="${IOS_BUNDLE_ID_FROM_REQUEST:-$(read_request_value "iosBu
 if [ "$uses_android" -eq 1 ]; then
   source_optional_env_file "$android_env"
   source_optional_env_file "$profile_android_env"
-  request_keystore_base64="$(read_request_value "androidKeystoreBase64")"
-  request_keystore_pass="$(read_request_value "androidKeystorePassword")"
-  request_keyalias_pass="$(read_request_value "androidAliasPassword")"
-  if [ -n "$request_keystore_base64" ]; then
-    validate_base64_value "BuildCommit request androidKeystoreBase64" "$request_keystore_base64"
-  else
-    require_readable_file "ANDROID_KEYSTORE_PATH" "${ANDROID_KEYSTORE_PATH:-}"
-  fi
-  if [ -z "${ANDROID_KEYSTORE_PASS:-}" ] && [ -z "$request_keystore_pass" ]; then
-    echo "::error::ANDROID_KEYSTORE_PASS is empty and BuildCommit request androidKeystorePassword is empty"
-    exit 1
-  fi
-  if [ -z "${ANDROID_KEYALIAS_PASS:-}" ] && [ -z "$request_keyalias_pass" ]; then
-    echo "::error::ANDROID_KEYALIAS_PASS is empty and BuildCommit request androidAliasPassword is empty"
-    exit 1
-  fi
+  require_readable_file "ANDROID_KEYSTORE_PATH" "${ANDROID_KEYSTORE_PATH:-}"
+  require_nonempty "ANDROID_KEYSTORE_PASS" "${ANDROID_KEYSTORE_PASS:-}"
+  require_nonempty "ANDROID_KEYALIAS_PASS" "${ANDROID_KEYALIAS_PASS:-}"
   mask_value "${ANDROID_KEYSTORE_PASS:-}"
   mask_value "${ANDROID_KEYALIAS_PASS:-}"
-  mask_value "$request_keystore_pass"
-  mask_value "$request_keyalias_pass"
-  if [ -z "$request_keystore_base64" ] && [ -n "${ANDROID_KEYSTORE_PATH:-}" ]; then
-    append_github_env "ANDROID_KEYSTORE_PATH" "${ANDROID_KEYSTORE_PATH:-}"
-  fi
-  if [ -n "${ANDROID_KEYSTORE_PASS:-}" ]; then
-    append_github_env "ANDROID_KEYSTORE_PASS" "${ANDROID_KEYSTORE_PASS:-}"
-  fi
-  if [ -n "${ANDROID_KEYALIAS_PASS:-}" ]; then
-    append_github_env "ANDROID_KEYALIAS_PASS" "${ANDROID_KEYALIAS_PASS:-}"
-  fi
-  if [ -z "$request_keystore_base64" ]; then
-    append_github_output "android_keystore_path" "${ANDROID_KEYSTORE_PATH:-}"
-  else
-    append_github_output "android_keystore_path" ""
-  fi
+  append_github_env "ANDROID_KEYSTORE_PATH" "${ANDROID_KEYSTORE_PATH:-}"
+  append_github_env "ANDROID_KEYSTORE_PASS" "${ANDROID_KEYSTORE_PASS:-}"
+  append_github_env "ANDROID_KEYALIAS_PASS" "${ANDROID_KEYALIAS_PASS:-}"
+  append_github_output "android_keystore_path" "${ANDROID_KEYSTORE_PATH:-}"
 fi
 
 if [ "$uses_google_play" -eq 1 ]; then

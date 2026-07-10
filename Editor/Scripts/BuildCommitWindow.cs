@@ -3,9 +3,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 using Process = System.Diagnostics.Process;
@@ -213,6 +215,7 @@ namespace ActionFit.BuildAutomation.Editor
             if (EditorGUI.EndChangeCheck())
                 EditorPrefs.SetInt(DistributionProfilePrefsKey, (int)_distributionProfile);
 
+            DrawBuildSymbolSettings();
             DrawSlackMentions();
 
             string version = _serializedSettings.FindProperty("buildVersion").stringValue;
@@ -243,8 +246,42 @@ namespace ActionFit.BuildAutomation.Editor
             DrawLocalRunnerSecretNotice(resolvedPlatform);
 
             EditorGUILayout.HelpBox(
-                $"{BuildRequestUtility.RelativePath} will be committed as storage. GitHub Actions will build when the build tag is pushed.",
+                $"{BuildRequestUtility.RelativePath} will be stored at the Git repository root. GitHub Actions will build when the build tag is pushed.",
                 MessageType.Info);
+        }
+
+        private void DrawBuildSymbolSettings()
+        {
+            SerializedProperty symbolSettingProp =
+                _serializedAutomationSettings.FindProperty("autoConfigureBuildSymbols");
+            if (symbolSettingProp == null)
+            {
+                EditorGUILayout.HelpBox(
+                    "BuildAutomationSettingsSO does not expose autoConfigureBuildSymbols. Update com.actionfit.buildautomation.",
+                    MessageType.Warning);
+                return;
+            }
+
+            EditorGUILayout.Space(4);
+            bool customSymbolsAvailable =
+                CustomSymbolsBridge.TryEnsureAvailable(out string customSymbolsError);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.PropertyField(
+                    symbolSettingProp,
+                    new GUIContent(
+                        "자동 빌드 심볼 세팅",
+                        "체크 시 Custom Symbols의 Build 설정을 러너 빌드 전에 적용하고, 새 Unity 프로세스에서 빌드합니다."));
+
+                using (new EditorGUI.DisabledScope(!customSymbolsAvailable))
+                {
+                    if (GUILayout.Button("Custom Symbols 열기", GUILayout.Width(150), GUILayout.Height(22)))
+                        CustomSymbolsBridge.OpenWindow();
+                }
+            }
+
+            if (symbolSettingProp.boolValue && !customSymbolsAvailable)
+                EditorGUILayout.HelpBox(customSymbolsError, MessageType.Error);
         }
 
         private void DrawWorkflowSync()
@@ -253,7 +290,7 @@ namespace ActionFit.BuildAutomation.Editor
 
             EditorGUI.BeginChangeCheck();
             _autoSyncWorkflowAssets = EditorGUILayout.Toggle(
-                new GUIContent("Auto Sync Build Files", "Commit 전에 BuildAutomation 패키지의 workflow/scripts를 프로젝트 .github 폴더로 동기화합니다."),
+                new GUIContent("Auto Sync Build Files", "Commit 전에 BuildAutomation 패키지의 workflow/scripts를 Git 저장소 루트 .github 폴더로 동기화합니다."),
                 _autoSyncWorkflowAssets);
             if (EditorGUI.EndChangeCheck())
                 EditorPrefs.SetBool(AutoSyncWorkflowAssetsPrefsKey, _autoSyncWorkflowAssets);
@@ -343,8 +380,8 @@ namespace ActionFit.BuildAutomation.Editor
             EditorGUILayout.Space(6);
             EditorGUILayout.LabelField("Runner Credentials", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "Test mode: BuildCommit serializes the Android keystore file, alias, keystore password, and alias password from BuildSetting into the committed request. Google Play, App Store Connect, and keychain credentials stay on the self-hosted Mac runner.",
-                MessageType.Warning);
+                "BuildRequest에는 signing/upload credential을 저장하지 않습니다. Android keystore와 비밀번호, Google Play, App Store Connect, keychain credential은 self-hosted runner의 로컬 secret bundle에서만 읽습니다.",
+                MessageType.Info);
         }
 
         // Apply / Commit, Tag & Push 버튼 영역
@@ -643,8 +680,13 @@ namespace ActionFit.BuildAutomation.Editor
                 return false;
             }
 
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            object[] args = { projectRoot, "BuildCommit Commit, Tag & Push", null };
+            if (!BuildRequestUtility.TryGetRepositoryRoot(out string repositoryRoot, out string repositoryError))
+            {
+                AddLog($"[ERROR] {repositoryError}");
+                return false;
+            }
+
+            object[] args = { repositoryRoot, "BuildCommit Commit, Tag & Push", null };
             bool isReady;
             object result;
 
@@ -941,13 +983,26 @@ namespace ActionFit.BuildAutomation.Editor
                 return false;
             }
 
+            if (_automationSettings != null &&
+                _automationSettings.autoConfigureBuildSymbols &&
+                !CustomSymbolsBridge.HasSettingsAsset())
+            {
+                AddLog("[ERROR] 자동 빌드 심볼 세팅이 켜져 있지만 CustomSymbolsSO가 없습니다.");
+                EditorUtility.DisplayDialog(
+                    "Custom Symbols Required",
+                    "자동 빌드 심볼 세팅을 사용하려면 Custom Symbols 창에서 설정 에셋을 생성하거나 선택해야 합니다.",
+                    "OK");
+                return false;
+            }
+
             var request = BuildRequestUtility.Create(
                 _settings,
                 _requestPlatform,
                 _requestKind,
                 _uploadTarget,
                 _distributionProfile,
-                GetSlackMentionMemberIds());
+                GetSlackMentionMemberIds(),
+                _automationSettings != null && _automationSettings.autoConfigureBuildSymbols);
             if (request == null) return false;
 
             bool saved = BuildRequestUtility.Save(request);
@@ -958,7 +1013,11 @@ namespace ActionFit.BuildAutomation.Editor
         // git 명령어 실행 후 결과 반환 (실패 시 null 반환)
         private string RunGitCommand(string args)
         {
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            if (!BuildRequestUtility.TryGetRepositoryRoot(out string repositoryRoot, out string repositoryError))
+            {
+                AddLog($"[ERROR] {repositoryError}");
+                return null;
+            }
 
             try
             {
@@ -966,7 +1025,7 @@ namespace ActionFit.BuildAutomation.Editor
                 {
                     FileName = "git",
                     Arguments = args,
-                    WorkingDirectory = projectRoot,
+                    WorkingDirectory = repositoryRoot,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -1157,6 +1216,218 @@ namespace ActionFit.BuildAutomation.Editor
 
             FieldInfo field = settings.GetType().GetField(fieldName, BindingFlags.Public | BindingFlags.Instance);
             field?.SetValue(settings, value);
+        }
+    }
+
+    internal static class CustomSymbolsBridge
+    {
+        internal const string PackageId = "com.actionfit.customsymbols";
+        internal const string MinimumVersion = "1.0.5";
+
+        private const string SettingsTypeName = "CustomSymbolsSO, com.actionfit.customsymbols.Editor";
+        private const string WindowTypeName = "SymbolsWindow, com.actionfit.customsymbols.Editor";
+        private const string WindowMenuPath = "Tools/Package/Custom Symbols/Open Window";
+
+        private static bool _availabilityResolved;
+        private static string _availabilityError;
+        private static Type SettingsType => Type.GetType(SettingsTypeName);
+
+        internal static bool IsAvailable()
+        {
+            return TryEnsureAvailable(out _);
+        }
+
+        internal static bool TryEnsureAvailable(out string error)
+        {
+            if (!_availabilityResolved)
+            {
+                _availabilityError = ResolveAvailabilityError();
+                _availabilityResolved = true;
+            }
+
+            error = _availabilityError;
+            return string.IsNullOrEmpty(error);
+        }
+
+        internal static bool OpenWindow()
+        {
+            if (!TryEnsureAvailable(out string availabilityError))
+            {
+                Debug.LogError($"[BuildAutomation] {availabilityError}");
+                return false;
+            }
+
+            if (EditorApplication.ExecuteMenuItem(WindowMenuPath))
+                return true;
+
+            Type windowType = Type.GetType(WindowTypeName);
+            MethodInfo showMethod = windowType?.GetMethod("ShowWindow", BindingFlags.Public | BindingFlags.Static);
+            if (showMethod == null)
+            {
+                Debug.LogError($"[BuildAutomation] Custom Symbols window is unavailable. Update {PackageId} to {MinimumVersion} or newer.");
+                return false;
+            }
+
+            showMethod.Invoke(null, null);
+            return true;
+        }
+
+        internal static bool HasSettingsAsset()
+        {
+            return TryEnsureAvailable(out _) && FindSettingsAsset() != null;
+        }
+
+        internal static bool TryApplyBuildSymbols(BuildTarget target, out string error)
+        {
+            if (!TryGetBuildSymbols(target, out string[] buildSymbols, out error))
+                return false;
+
+            var namedTarget = NamedBuildTarget.FromBuildTargetGroup(BuildPipeline.GetBuildTargetGroup(target));
+            PlayerSettings.GetScriptingDefineSymbols(namedTarget, out string[] currentSymbols);
+            if (SymbolSetsMatch(currentSymbols, buildSymbols))
+            {
+                Debug.Log($"[BuildAutomation] Custom Symbols already prepared for {target}: {FormatSymbols(buildSymbols)}");
+                return true;
+            }
+
+            PlayerSettings.SetScriptingDefineSymbols(namedTarget, buildSymbols);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[BuildAutomation] Prepared Custom Symbols for next Unity process ({target}): {FormatSymbols(buildSymbols)}");
+            return true;
+        }
+
+        internal static bool TryValidateBuildSymbols(BuildTarget target, out string error)
+        {
+            if (!TryGetBuildSymbols(target, out string[] expectedSymbols, out error))
+                return false;
+
+            var namedTarget = NamedBuildTarget.FromBuildTargetGroup(BuildPipeline.GetBuildTargetGroup(target));
+            PlayerSettings.GetScriptingDefineSymbols(namedTarget, out string[] currentSymbols);
+            if (SymbolSetsMatch(currentSymbols, expectedSymbols))
+            {
+                Debug.Log($"[BuildAutomation] Custom Symbols verified for {target}: {FormatSymbols(expectedSymbols)}");
+                return true;
+            }
+
+            var expected = new HashSet<string>(expectedSymbols, StringComparer.Ordinal);
+            var current = new HashSet<string>(currentSymbols ?? Array.Empty<string>(), StringComparer.Ordinal);
+            string missing = FormatSymbols(expected.Where(symbol => !current.Contains(symbol)));
+            string extra = FormatSymbols(current.Where(symbol => !expected.Contains(symbol)));
+            error = $"Custom Symbols mismatch for {target}. Missing: {missing}. Extra: {extra}. " +
+                    "Run SwitchToRequestBuildTarget before BuildFromRequest.";
+            return false;
+        }
+
+        private static bool TryGetBuildSymbols(BuildTarget target, out string[] buildSymbols, out string error)
+        {
+            buildSymbols = Array.Empty<string>();
+            error = null;
+
+            if (!TryEnsureAvailable(out error))
+                return false;
+
+            Type settingsType = SettingsType;
+            ScriptableObject settings = FindSettingsAsset();
+            if (settings == null)
+            {
+                error = "CustomSymbolsSO was not found. Open Custom Symbols from AutoBuild and create/select its settings asset.";
+                return false;
+            }
+
+            MethodInfo getBuildSymbols = settingsType.GetMethod(
+                "GetBuildSymbols",
+                BindingFlags.Public | BindingFlags.Instance,
+                null,
+                new[] { typeof(BuildTarget) },
+                null);
+            if (getBuildSymbols == null)
+            {
+                error = $"{PackageId} does not expose GetBuildSymbols(BuildTarget). Update it to {MinimumVersion} or newer.";
+                return false;
+            }
+
+            var values = getBuildSymbols.Invoke(settings, new object[] { target }) as IEnumerable<string>;
+            if (values == null)
+            {
+                error = $"Custom Symbols returned no build symbol list for {target}.";
+                return false;
+            }
+
+            buildSymbols = values
+                .Select(symbol => symbol?.Trim())
+                .Where(symbol => !string.IsNullOrEmpty(symbol))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            return true;
+        }
+
+        private static ScriptableObject FindSettingsAsset()
+        {
+            Type settingsType = SettingsType;
+            MethodInfo findMethod = settingsType?.GetMethod("FindSettingsAsset", BindingFlags.Public | BindingFlags.Static);
+            var settings = findMethod?.Invoke(null, null) as ScriptableObject;
+            if (settings != null) return settings;
+
+            string[] guids = AssetDatabase.FindAssets("t:CustomSymbolsSO");
+            if (guids.Length == 0 || settingsType == null) return null;
+
+            string path = AssetDatabase.GUIDToAssetPath(guids[0]);
+            return AssetDatabase.LoadAssetAtPath(path, settingsType) as ScriptableObject;
+        }
+
+        private static string ResolveAvailabilityError()
+        {
+            Type settingsType = SettingsType;
+            if (settingsType == null)
+                return $"Custom Symbols package is unavailable. Install {PackageId}@{MinimumVersion} or newer.";
+
+            UnityEditor.PackageManager.PackageInfo packageInfo =
+                UnityEditor.PackageManager.PackageInfo.FindForAssembly(settingsType.Assembly);
+            string installedVersion = packageInfo?.version;
+            if (string.IsNullOrWhiteSpace(installedVersion))
+                return $"Custom Symbols package version could not be resolved. Install {PackageId}@{MinimumVersion} or newer.";
+
+            if (!IsVersionAtLeast(installedVersion, MinimumVersion))
+            {
+                return $"Custom Symbols {installedVersion} is too old for batchmode AutoBuild. " +
+                       $"Install {PackageId}@{MinimumVersion} or newer.";
+            }
+
+            return null;
+        }
+
+        internal static bool IsVersionAtLeast(string installedVersion, string minimumVersion)
+        {
+            string installedWithoutBuild = installedVersion.Split('+')[0];
+            string minimumWithoutBuild = minimumVersion.Split('+')[0];
+            string installedCore = installedWithoutBuild.Split('-')[0];
+            string minimumCore = minimumWithoutBuild.Split('-')[0];
+            if (!Version.TryParse(installedCore, out Version installed) ||
+                !Version.TryParse(minimumCore, out Version minimum))
+            {
+                return false;
+            }
+
+            int coreComparison = installed.CompareTo(minimum);
+            if (coreComparison != 0)
+                return coreComparison > 0;
+
+            bool installedIsPrerelease = installedWithoutBuild.Contains("-");
+            bool minimumIsPrerelease = minimumWithoutBuild.Contains("-");
+            return minimumIsPrerelease || !installedIsPrerelease;
+        }
+
+        private static bool SymbolSetsMatch(IEnumerable<string> left, IEnumerable<string> right)
+        {
+            var leftSet = new HashSet<string>(left ?? Array.Empty<string>(), StringComparer.Ordinal);
+            var rightSet = new HashSet<string>(right ?? Array.Empty<string>(), StringComparer.Ordinal);
+            return leftSet.SetEquals(rightSet);
+        }
+
+        private static string FormatSymbols(IEnumerable<string> symbols)
+        {
+            string[] values = symbols?.Where(symbol => !string.IsNullOrEmpty(symbol)).ToArray() ?? Array.Empty<string>();
+            return values.Length == 0 ? "(none)" : string.Join(", ", values);
         }
     }
 }

@@ -11,6 +11,7 @@ namespace ActionFit.BuildAutomation.Editor
         internal const string TemplateRelativePath = "WorkflowTemplates/buildcommit-auto-build.yml";
         internal const string WorkflowRelativePath = ".github/workflows/buildcommit-auto-build.yml";
         internal const string ValidateSecretsScriptRelativePath = ".github/scripts/validate-local-runner-secrets.sh";
+        internal const string ResolveUnityProjectScriptRelativePath = ".github/scripts/resolve-unity-project.sh";
         internal const string ResolveUnityScriptRelativePath = ".github/scripts/resolve-unity-editor.sh";
         internal const string EnsureUnityModulesScriptRelativePath = ".github/scripts/ensure-unity-editor-modules.sh";
         internal const string PreparePrivatePackageAccessScriptRelativePath = ".github/scripts/prepare-actionfit-private-package-access.sh";
@@ -22,6 +23,7 @@ namespace ActionFit.BuildAutomation.Editor
         {
             TemplateRelativePath,
             ValidateSecretsScriptRelativePath,
+            ResolveUnityProjectScriptRelativePath,
             ResolveUnityScriptRelativePath,
             EnsureUnityModulesScriptRelativePath,
             PreparePrivatePackageAccessScriptRelativePath,
@@ -33,6 +35,7 @@ namespace ActionFit.BuildAutomation.Editor
         {
             WorkflowRelativePath,
             ValidateSecretsScriptRelativePath,
+            ResolveUnityProjectScriptRelativePath,
             ResolveUnityScriptRelativePath,
             EnsureUnityModulesScriptRelativePath,
             PreparePrivatePackageAccessScriptRelativePath,
@@ -58,6 +61,9 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static string GetStatusMessage()
         {
+            if (!BuildRequestUtility.TryGetRepositoryRoot(out string repositoryRoot, out string repositoryError))
+                return repositoryError;
+
             for (int i = 0; i < PackageAssetRelativePaths.Length; i++)
             {
                 string packagePath = GetPackagePath(PackageAssetRelativePaths[i]);
@@ -69,7 +75,7 @@ namespace ActionFit.BuildAutomation.Editor
             {
                 string projectPath = GetProjectPath(ProjectAssetRelativePaths[i]);
                 if (!File.Exists(projectPath))
-                    return $"Workflow asset missing: {ProjectAssetRelativePaths[i]}";
+                    return $"Repository workflow asset missing: {ProjectAssetRelativePaths[i]} ({repositoryRoot})";
             }
 
             return IsWorkflowCurrent()
@@ -80,6 +86,12 @@ namespace ActionFit.BuildAutomation.Editor
         internal static bool TrySync(out string message)
         {
             message = "";
+
+            if (!BuildRequestUtility.TryGetRepositoryRoot(out _, out string repositoryError))
+            {
+                message = repositoryError;
+                return false;
+            }
 
             for (int i = 0; i < PackageAssetRelativePaths.Length; i++)
             {
@@ -94,12 +106,16 @@ namespace ActionFit.BuildAutomation.Editor
                 message += assetMessage;
             }
 
+            int removedLegacyAssets = RemoveLegacyUnityProjectAssets();
+            if (removedLegacyAssets > 0)
+                message += $"; Removed {removedLegacyAssets} legacy Unity-project workflow asset(s)";
+
             return true;
         }
 
         internal static string GetWorkflowAssetSummary()
         {
-            return $"{WorkflowRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}";
+            return $"{WorkflowRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {ResolveUnityScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}";
         }
 
         private static bool PackageFileMatchesProjectFile(string packageRelativePath, string projectRelativePath)
@@ -123,6 +139,12 @@ namespace ActionFit.BuildAutomation.Editor
             }
 
             string projectPath = GetProjectPath(projectRelativePath);
+            if (string.IsNullOrEmpty(projectPath))
+            {
+                message = $"Git repository path could not be resolved for: {projectRelativePath}";
+                return false;
+            }
+
             string projectDirectory = Path.GetDirectoryName(projectPath);
             if (!string.IsNullOrEmpty(projectDirectory))
                 Directory.CreateDirectory(projectDirectory);
@@ -153,7 +175,10 @@ namespace ActionFit.BuildAutomation.Editor
 
         private static string GetProjectPath(string relativePath)
         {
-            return CombineRootPath(GetProjectRoot(), relativePath);
+            string repositoryRoot = GetRepositoryRoot();
+            return string.IsNullOrEmpty(repositoryRoot)
+                ? null
+                : CombineRootPath(repositoryRoot, relativePath);
         }
 
         private static string GetPackageRoot()
@@ -162,13 +187,52 @@ namespace ActionFit.BuildAutomation.Editor
             if (packageInfo != null && !string.IsNullOrEmpty(packageInfo.resolvedPath))
                 return Path.GetFullPath(packageInfo.resolvedPath);
 
-            string embeddedPath = Path.GetFullPath(Path.Combine(GetProjectRoot(), "Packages", PackageName));
+            string embeddedPath = Path.GetFullPath(Path.Combine(GetUnityProjectRoot(), "Packages", PackageName));
             return Directory.Exists(embeddedPath) ? embeddedPath : null;
         }
 
-        private static string GetProjectRoot()
+        private static string GetUnityProjectRoot()
         {
             return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        }
+
+        private static string GetRepositoryRoot()
+        {
+            return BuildRequestUtility.TryGetRepositoryRoot(out string repositoryRoot, out _)
+                ? repositoryRoot
+                : null;
+        }
+
+        private static int RemoveLegacyUnityProjectAssets()
+        {
+            string unityProjectRoot = GetUnityProjectRoot();
+            string repositoryRoot = GetRepositoryRoot();
+            if (string.IsNullOrEmpty(repositoryRoot) ||
+                string.Equals(unityProjectRoot, repositoryRoot, System.StringComparison.Ordinal))
+            {
+                return 0;
+            }
+
+            int removed = 0;
+            foreach (string relativePath in ProjectAssetRelativePaths)
+            {
+                string legacyPath = CombineRootPath(unityProjectRoot, relativePath);
+                if (!File.Exists(legacyPath)) continue;
+
+                File.Delete(legacyPath);
+                removed++;
+            }
+
+            DeleteDirectoryIfEmpty(Path.Combine(unityProjectRoot, ".github", "workflows"));
+            DeleteDirectoryIfEmpty(Path.Combine(unityProjectRoot, ".github", "scripts"));
+            DeleteDirectoryIfEmpty(Path.Combine(unityProjectRoot, ".github"));
+            return removed;
+        }
+
+        private static void DeleteDirectoryIfEmpty(string path)
+        {
+            if (Directory.Exists(path) && Directory.GetFileSystemEntries(path).Length == 0)
+                Directory.Delete(path);
         }
 
         private static string CombineRootPath(string rootPath, string relativePath)

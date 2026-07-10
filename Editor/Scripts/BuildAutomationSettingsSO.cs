@@ -15,6 +15,7 @@ namespace ActionFit.BuildAutomation.Editor
         public const string SOPrefsKey = "LastUsedBuildAutomationSettings";
         public const string DefaultSettingsAssetPath = "Assets/_Data/_BuildAutomation/BuildAutomationSettingsSO.asset";
 
+        public bool autoConfigureBuildSymbols = true;
         public List<SlackMentionEntry> buildCommitSlackMentions = new();
 
         [Serializable]

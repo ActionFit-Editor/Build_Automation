@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-project_version_file="${UNITY_PROJECT_VERSION_FILE:-ProjectSettings/ProjectVersion.txt}"
+unity_project_dir="${UNITY_PROJECT_DIR:-${GITHUB_WORKSPACE:-$PWD}}"
+project_version_file="${UNITY_PROJECT_VERSION_FILE:-$unity_project_dir/ProjectSettings/ProjectVersion.txt}"
 editor_root="${UNITY_HUB_EDITOR_ROOT:-/Applications/Unity/Hub/Editor}"
 
 append_github_env() {

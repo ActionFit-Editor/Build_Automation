@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-project_version_file="${UNITY_PROJECT_VERSION_FILE:-ProjectSettings/ProjectVersion.txt}"
+unity_project_dir="${UNITY_PROJECT_DIR:-${GITHUB_WORKSPACE:-$PWD}}"
+project_version_file="${UNITY_PROJECT_VERSION_FILE:-$unity_project_dir/ProjectSettings/ProjectVersion.txt}"
 editor_root="${UNITY_HUB_EDITOR_ROOT:-/Applications/Unity/Hub/Editor}"
 unity_hub="${UNITY_HUB_EXECUTABLE:-/Applications/Unity Hub.app/Contents/MacOS/Unity Hub}"
 installer_root="${ACTIONFIT_UNITY_INSTALLER_ROOT:-$HOME/.cache/actionfit-unity-installer}"
@@ -42,7 +43,7 @@ read_first_value() {
 }
 
 slack_webhook_url() {
-  local secret_root="${CI_SECRET_ROOT:-$HOME/workspace/build-automation}"
+  local secret_root="${CI_SECRET_ROOT:-$HOME/ci-secrets/build-automation}"
   local webhook_file="${SLACK_WEBHOOK_URL_FILE:-$secret_root/shared/slack-webhook-url}"
   local webhook_url="${SLACK_BUILD_WEBHOOK_URL:-${SLACK_WEBHOOK_URL:-}}"
 

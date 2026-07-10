@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-build_root="${BUILD_CLEANUP_ROOT:-${GITHUB_WORKSPACE:-$PWD}/Builds}"
+unity_project_dir="${UNITY_PROJECT_DIR:-${GITHUB_WORKSPACE:-$PWD}}"
+build_root="${BUILD_CLEANUP_ROOT:-$unity_project_dir/Builds}"
 retention_days="${BUILD_CLEANUP_RETENTION_DAYS:-5}"
 repository_name="${GITHUB_REPOSITORY:-}"
 repository_name="${repository_name##*/}"
@@ -24,7 +25,7 @@ threshold_epoch="$(date -v-"${retention_days}"d +%s 2>/dev/null || date -d "${re
 
 read_build_request_field() {
   local field="$1"
-  local request_path="${BUILD_CLEANUP_REQUEST_PATH:-.build/build_request.json}"
+  local request_path="${BUILD_CLEANUP_REQUEST_PATH:-${GITHUB_WORKSPACE:-$PWD}/.build/build_request.json}"
   if [ ! -r "$request_path" ]; then
     return 0
   fi
