@@ -987,10 +987,10 @@ namespace ActionFit.BuildAutomation.Editor
                 _automationSettings.autoConfigureBuildSymbols &&
                 !CustomSymbolsBridge.HasSettingsAsset())
             {
-                AddLog("[ERROR] 자동 빌드 심볼 세팅이 켜져 있지만 CustomSymbolsSO가 없습니다.");
+                AddLog("[ERROR] CustomSymbolsSO could not be found or created.");
                 EditorUtility.DisplayDialog(
                     "Custom Symbols Required",
-                    "자동 빌드 심볼 세팅을 사용하려면 Custom Symbols 창에서 설정 에셋을 생성하거나 선택해야 합니다.",
+                    "Custom Symbols 설정 에셋을 찾거나 기본 경로에 생성하지 못했습니다. Console 로그와 `Assets/_Data/_CustomSymbols` 경로를 확인하세요.",
                     "OK");
                 return false;
             }
@@ -1222,7 +1222,7 @@ namespace ActionFit.BuildAutomation.Editor
     internal static class CustomSymbolsBridge
     {
         internal const string PackageId = "com.actionfit.customsymbols";
-        internal const string MinimumVersion = "1.0.5";
+        internal const string MinimumVersion = "1.0.6";
 
         private const string SettingsTypeName = "CustomSymbolsSO, com.actionfit.customsymbols.Editor";
         private const string WindowTypeName = "SymbolsWindow, com.actionfit.customsymbols.Editor";
@@ -1330,7 +1330,7 @@ namespace ActionFit.BuildAutomation.Editor
             ScriptableObject settings = FindSettingsAsset();
             if (settings == null)
             {
-                error = "CustomSymbolsSO was not found. Open Custom Symbols from AutoBuild and create/select its settings asset.";
+                error = "CustomSymbolsSO could not be found or created. Check the default settings path and Unity Console.";
                 return false;
             }
 
@@ -1364,7 +1364,7 @@ namespace ActionFit.BuildAutomation.Editor
         private static ScriptableObject FindSettingsAsset()
         {
             Type settingsType = SettingsType;
-            MethodInfo findMethod = settingsType?.GetMethod("FindSettingsAsset", BindingFlags.Public | BindingFlags.Static);
+            MethodInfo findMethod = settingsType?.GetMethod("FindOrCreateSettingsAsset", BindingFlags.Public | BindingFlags.Static);
             var settings = findMethod?.Invoke(null, null) as ScriptableObject;
             if (settings != null) return settings;
 

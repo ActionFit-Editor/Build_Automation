@@ -41,16 +41,23 @@ namespace ActionFit.BuildAutomation.Editor.Tests
                 error);
         }
 
-        [TestCase("1.0.4", false)]
+        [Test]
+        public void CustomSymbolsSettingsCanBeFoundOrCreated()
+        {
+            Assert.That(CustomSymbolsBridge.HasSettingsAsset(), Is.True);
+        }
+
         [TestCase("1.0.5-preview.1", false)]
-        [TestCase("1.0.5", true)]
-        [TestCase("1.0.6-preview.1", true)]
+        [TestCase("1.0.5", false)]
+        [TestCase("1.0.6-preview.1", false)]
+        [TestCase("1.0.6", true)]
+        [TestCase("1.0.7-preview.1", true)]
         public void CustomSymbolsMinimumVersionUsesStableSemverBoundary(
             string installedVersion,
             bool expected)
         {
             Assert.That(
-                CustomSymbolsBridge.IsVersionAtLeast(installedVersion, "1.0.5"),
+                CustomSymbolsBridge.IsVersionAtLeast(installedVersion, "1.0.6"),
                 Is.EqualTo(expected));
         }
     }

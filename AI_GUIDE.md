@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.36`
+- Current package version at generation time: `1.0.37`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -93,8 +93,8 @@ Read this file when:
 - CI target switch entry method: `ActionFit.BuildAutomation.Editor.CIBuildEntry.SwitchToRequestBuildTarget`.
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.
 - AutoBuild window workflow sync copies `WorkflowTemplates/buildcommit-auto-build.yml` to Git repository root `.github/workflows/buildcommit-auto-build.yml` and package `.github/scripts/*.sh` workflow scripts to repository root `.github/scripts/`. Manual sync asks for confirmation; BuildCommit auto sync runs without confirmation when `Auto Sync Build Files` is enabled.
-- `BuildAutomationSettingsSO.autoConfigureBuildSymbols` defaults to true and is serialized as request `autoConfigureBuildSymbols`. When enabled, `SwitchToRequestBuildTarget` obtains the target-specific build list from `CustomSymbolsSO.GetBuildSymbols(BuildTarget)`, writes scripting define symbols, and exits. The separate `BuildFromRequest` process validates exact symbol-set equality before building. Missing Custom Symbols settings or a mismatch must fail the build; disabled requests skip apply/validation.
-- Build Automation depends on `com.actionfit.buildsetting@1.1.8`, `com.actionfit.customsymbols@1.0.5`, and `com.actionfit.githubauth@1.0.3` or newer. Keep dependency metadata in `package.json` and `Editor/PackageInfo/ActionFitPackageInfo_SO.asset` `_dependenciesOverride`; ActionFit Package Manager must publish that dependency metadata to the catalog CSV and write the resolved Git UPM URLs into the Unity project's `Packages/manifest.json` during install/update. If a dependency is missing, BuildAutomation should compile, show a clear warning, and stop the affected workflow.
+- `BuildAutomationSettingsSO.autoConfigureBuildSymbols` defaults to true and is serialized as request `autoConfigureBuildSymbols`. When enabled, the reflection bridge calls `CustomSymbolsSO.FindOrCreateSettingsAsset()` before obtaining `GetBuildSymbols(BuildTarget)`. Custom Symbols 1.0.6 creates a missing default asset from current Standalone/Android/iOS defines; creation failure or a later symbol mismatch fails the build. `SwitchToRequestBuildTarget` writes scripting define symbols and the separate `BuildFromRequest` process validates exact symbol-set equality. Disabled requests skip apply/validation.
+- Build Automation depends on `com.actionfit.buildsetting@1.1.8`, `com.actionfit.customsymbols@1.0.6`, and `com.actionfit.githubauth@1.0.3` or newer. Keep dependency metadata in `package.json` and `Editor/PackageInfo/ActionFitPackageInfo_SO.asset` `_dependenciesOverride`; ActionFit Package Manager must publish that dependency metadata to the catalog CSV and write the resolved Git UPM URLs into the Unity project's `Packages/manifest.json` during install/update. If a dependency is missing, BuildAutomation should compile, show a clear warning, and stop the affected workflow.
 - The storage commit alone should not trigger CI. The pushed `build/**` tag is the actual CI request.
 - Android and iOS workflow jobs must run `CIBuildEntry.SwitchToRequestBuildTarget` in a separate Unity batchmode process before `CIBuildEntry.BuildFromRequest`. This lets Unity reopen/recompile editor assemblies for the requested platform so Build Setting's `UNITY_ANDROID` or `UNITY_IOS` build process exists before the actual build call.
 - `Platform=Both` is split by the workflow into Android and iOS jobs before calling `CIBuildEntry`.
@@ -121,5 +121,5 @@ Read this file when:
 - Do not manually add `com.actionfit.buildautomation` rows for unpublished versions to local or embedded package catalog CSV files before publish. Leave the catalog latest at the latest already-published version so `Publish Changed` can detect the new local `package.json` version; the user-run publish/catalog append flow must create the new catalog row after the package push and tag succeed.
 - The `Build_Automation` GitHub repository must exist before first publish.
 - Before reusing a version, check the remote Git tags. Published tags are immutable.
-- Publish or catalog-register the required `com.actionfit.buildsetting` version before publishing a Build Automation version that depends on it.
+- Publish or catalog-register the required `com.actionfit.buildsetting` and `com.actionfit.customsymbols` versions before publishing a Build Automation version that depends on them.
 - The package repository should include this `AI_GUIDE.md` so other projects can load the AI package context after installing the package.
