@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.39`
+- Current package version at generation time: `1.0.40`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -94,7 +94,7 @@ Read this file when:
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.
 - AutoBuild window workflow sync copies `WorkflowTemplates/buildcommit-auto-build.yml` to Git repository root `.github/workflows/buildcommit-auto-build.yml` and package `.github/scripts/*.sh` workflow scripts to repository root `.github/scripts/`. Manual sync asks for confirmation; BuildCommit auto sync runs without confirmation when `Auto Sync Build Files` is enabled.
 - `BuildAutomationSettingsSO.autoConfigureBuildSymbols` defaults to true and is serialized as request `autoConfigureBuildSymbols`. When enabled, the reflection bridge calls `CustomSymbolsSO.FindOrCreateSettingsAsset()` before obtaining `GetBuildSymbols(BuildTarget)`. Custom Symbols 1.0.6 creates a missing default asset from current Standalone/Android/iOS defines; creation failure or a later symbol mismatch fails the build. `SwitchToRequestBuildTarget` writes scripting define symbols and the separate `BuildFromRequest` process validates exact symbol-set equality. Disabled requests skip apply/validation.
-- Build Automation depends on `com.actionfit.buildsetting@1.1.8`, `com.actionfit.customsymbols@1.0.6`, and `com.actionfit.githubauth@1.0.6` or newer. Keep dependency metadata in `package.json` and `Editor/PackageInfo/ActionFitPackageInfo_SO.asset` `_dependenciesOverride`; ActionFit Package Manager must publish that dependency metadata to the catalog CSV and write the resolved Git UPM URLs into the Unity project's `Packages/manifest.json` during install/update. If a dependency is missing, BuildAutomation should compile, show a clear warning, and stop the affected workflow.
+- Build Automation depends on `com.actionfit.buildsetting@1.1.9`, `com.actionfit.customsymbols@1.0.6`, and `com.actionfit.githubauth@1.0.6` or newer. Keep dependency metadata in `package.json` and `Editor/PackageInfo/ActionFitPackageInfo_SO.asset` `_dependenciesOverride`; ActionFit Package Manager must publish that dependency metadata to the catalog CSV and write the resolved Git UPM URLs into the Unity project's `Packages/manifest.json` during install/update. If a dependency is missing, BuildAutomation should compile, show a clear warning, and stop the affected workflow.
 - The storage commit alone should not trigger CI. The pushed `build/**` tag is the actual CI request.
 - Android and iOS workflow jobs must run `CIBuildEntry.SwitchToRequestBuildTarget` in a separate Unity batchmode process before `CIBuildEntry.BuildFromRequest`. This lets Unity reopen/recompile editor assemblies for the requested platform so Build Setting's `UNITY_ANDROID` or `UNITY_IOS` build process exists before the actual build call.
 - `Platform=Both` is split by the workflow into Android and iOS jobs before calling `CIBuildEntry`.

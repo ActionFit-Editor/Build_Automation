@@ -21,6 +21,13 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- `com.actionfit.githubauth` 최소 의존성을 `1.0.6`으로 올려 OS별 연결 터미널과 최초 설치 자동 확인 API를 사용하는 배포본을 설치합니다.\n- BuildCommit 인증 실패 시 기존 reflection preflight 흐름이 새 AI GitHub 연결 메뉴와 Windows/macOS/Linux setup 절차로 이어집니다.\n- AI GitHub package ID, namespace, assembly와 `EnsureProjectGitHubPushAccess` API는 유지해 기존 BuildCommit 호출 방식은 변경되지 않습니다.\n- GitHub token은 Build Automation이나 Unity 프로젝트에 저장하지 않고 AI GitHub와 OS credential helper에 계속 위임합니다."
-  _dependenciesOverride: com.actionfit.githubauth@1.0.6, com.actionfit.buildsetting@1.1.8,
+  _releaseNote: "- `com.actionfit.buildsetting` \uCD5C\uC18C \uC758\uC874\uC131\uC744
+    `1.1.9`\uB85C \uC62C\uB824 \uD604\uC7AC \uBC30\uD3EC\uB41C Build Setting \uD328\uD0A4\uC9C0
+    \uD30C\uC77C\uACFC \uB9DE\uCDC4\uC2B5\uB2C8\uB2E4.\n- `package.json`, PackageInfo
+    dependency override, README\uC640 AI guide\uC758 \uC124\uCE58 \uBC84\uC804\uC744
+    \uB3D9\uC77C\uD558\uAC8C \uC815\uB9AC\uD588\uC2B5\uB2C8\uB2E4.\n- `com.actionfit.githubauth@1.0.6`\uACFC
+    `com.actionfit.customsymbols@1.0.6` \uCD5C\uC18C \uBC84\uC804\uC740 \uADF8\uB300\uB85C
+    \uC720\uC9C0\uD569\uB2C8\uB2E4.\n- BuildCommit, workflow template, runner \uC124\uC815\uACFC
+    \uB7F0\uD0C0\uC784 \uBE4C\uB4DC \uB3D9\uC791\uC740 \uBCC0\uACBD\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4."
+  _dependenciesOverride: com.actionfit.githubauth@1.0.6, com.actionfit.buildsetting@1.1.9,
     com.actionfit.customsymbols@1.0.6
