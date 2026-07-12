@@ -25,7 +25,7 @@ namespace ActionFit.BuildAutomation.Editor
         private const string BuildTagPrefix = "build";
         private const string ActionFitPackageManagerMenuPath = "Tools/Package/Custom Package Manager/Package Manager";
         private const string GitHubAuthPackageId = "com.actionfit.githubauth";
-        private const string GitHubAuthMinimumVersion = "1.0.1";
+        private const string GitHubAuthMinimumVersion = "1.0.6";
         private const string GitHubAuthPreflightTypeName = "ActionFit.GitHubAuth.Editor.GitHubAuthPreflight, com.actionfit.githubauth.Editor";
 
         private ScriptableObject _settings; // 빌드 설정 SO
@@ -667,7 +667,7 @@ namespace ActionFit.BuildAutomation.Editor
             Type preflightType = Type.GetType(GitHubAuthPreflightTypeName);
             if (preflightType == null)
             {
-                AddLog($"[ERROR] GitHub Auth package is required. Install {GitHubAuthPackageId}@{GitHubAuthMinimumVersion} through ActionFit Package Manager and reopen Unity.");
+                AddLog($"[ERROR] AI GitHub package is required. Install {GitHubAuthPackageId}@{GitHubAuthMinimumVersion} through ActionFit Package Manager and reopen Unity.");
                 ShowGitHubAuthMissingDialog();
                 return false;
             }
@@ -675,7 +675,7 @@ namespace ActionFit.BuildAutomation.Editor
             MethodInfo method = GetGitHubAuthEnsureMethod(preflightType);
             if (method == null)
             {
-                AddLog($"[ERROR] GitHub Auth preflight API is not available. Update {GitHubAuthPackageId} to {GitHubAuthMinimumVersion} or newer through ActionFit Package Manager.");
+                AddLog($"[ERROR] AI GitHub preflight API is not available. Update {GitHubAuthPackageId} to {GitHubAuthMinimumVersion} or newer through ActionFit Package Manager.");
                 ShowGitHubAuthMissingDialog();
                 return false;
             }
@@ -697,8 +697,8 @@ namespace ActionFit.BuildAutomation.Editor
             }
             catch (System.Exception exception)
             {
-                AddLog($"[ERROR] [GitHub Auth] {exception.Message}");
-                Debug.LogError($"[BuildCommitWindow] GitHub Auth preflight failed: {exception}");
+                AddLog($"[ERROR] [AI GitHub] {exception.Message}");
+                Debug.LogError($"[BuildCommitWindow] AI GitHub preflight failed: {exception}");
                 return false;
             }
 
@@ -708,13 +708,13 @@ namespace ActionFit.BuildAutomation.Editor
 
             if (isReady)
             {
-                AddLog($"[GitHub Auth] {message}");
+                AddLog($"[AI GitHub] {message}");
                 return true;
             }
 
-            AddLog($"[ERROR] [GitHub Auth] {message}");
+            AddLog($"[ERROR] [AI GitHub] {message}");
             if (!string.IsNullOrEmpty(failedCommand))
-                AddLog($"[GitHub Auth] Failed command: {failedCommand}");
+                AddLog($"[AI GitHub] Failed command: {failedCommand}");
             if (!string.IsNullOrEmpty(details))
                 AddLog(details);
             return false;
@@ -723,10 +723,10 @@ namespace ActionFit.BuildAutomation.Editor
         private static void ShowGitHubAuthMissingDialog()
         {
             int result = EditorUtility.DisplayDialogComplex(
-                "GitHub Auth Required",
+                "AI GitHub Required",
                 $"BuildCommit push preflight requires `{GitHubAuthPackageId}@{GitHubAuthMinimumVersion}`.\n\n" +
                 "Install or update Build Automation through ActionFit Package Manager so its declared dependencies are applied.\n\n" +
-                "For GitHub credential setup, read GitHub Auth README or ask AI for the GitHub authentication guide.",
+                "For GitHub credential setup, read AI GitHub README or ask AI for the GitHub authentication guide.",
                 "Open Package Manager",
                 "OK",
                 "");

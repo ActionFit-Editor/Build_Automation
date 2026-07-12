@@ -21,18 +21,6 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- `com.actionfit.customsymbols` \uCD5C\uC18C \uC758\uC874\uC131\uC744
-    `1.0.6`\uC73C\uB85C \uC62C\uB824 \uCD5C\uCD08 \uC124\uC815 SO \uC790\uB3D9 \uC0DD\uC131
-    \uAE30\uB2A5\uC744 AutoBuild\uC5D0 \uC5F0\uACB0\uD588\uC2B5\uB2C8\uB2E4.\n- \uC790\uB3D9
-    \uBE4C\uB4DC \uC2EC\uBCFC \uC124\uC815 \uC2DC `CustomSymbolsSO.FindOrCreateSettingsAsset()`\uC744
-    \uD638\uCD9C\uD574 \uC124\uC815\uC774 \uC5C6\uC73C\uBA74 \uD604\uC7AC \uD504\uB85C\uC81D\uD2B8
-    \uC2EC\uBCFC\uB85C \uAE30\uBCF8 \uC5D0\uC14B\uC744 \uC0DD\uC131\uD569\uB2C8\uB2E4.\n-
-    \uC0DD\uC131\uB41C \uC124\uC815\uC740 \uD604\uC7AC Standalone/Android/iOS \uD50C\uB7AB\uD3FC
-    \uCCB4\uD06C\uC640 `Build=true` \uC0C1\uD0DC\uB97C \uADF8\uB300\uB85C \uC2DC\uC791\uC810\uC73C\uB85C
-    \uC0AC\uC6A9\uD569\uB2C8\uB2E4.\n- \uC124\uC815 \uC0DD\uC131\uC5D0 \uC2E4\uD328\uD558\uBA74
-    \uAE30\uBCF8 \uACBD\uB85C\uC640 Console\uC744 \uD655\uC778\uD560 \uC218 \uC788\uB3C4\uB85D
-    \uC624\uB958 \uC548\uB0B4\uB97C \uAC31\uC2E0\uD588\uC2B5\uB2C8\uB2E4.\n- Custom
-    Symbols \uCD5C\uC18C \uBC84\uC804 \uACBD\uACC4 \uD14C\uC2A4\uD2B8\uB97C `1.0.6`
-    \uAE30\uC900\uC73C\uB85C \uAC31\uC2E0\uD588\uC2B5\uB2C8\uB2E4."
-  _dependenciesOverride: com.actionfit.githubauth@1.0.3, com.actionfit.buildsetting@1.1.8,
+  _releaseNote: "- `com.actionfit.githubauth` 최소 의존성을 `1.0.6`으로 올려 OS별 연결 터미널과 최초 설치 자동 확인 API를 사용하는 배포본을 설치합니다.\n- BuildCommit 인증 실패 시 기존 reflection preflight 흐름이 새 AI GitHub 연결 메뉴와 Windows/macOS/Linux setup 절차로 이어집니다.\n- AI GitHub package ID, namespace, assembly와 `EnsureProjectGitHubPushAccess` API는 유지해 기존 BuildCommit 호출 방식은 변경되지 않습니다.\n- GitHub token은 Build Automation이나 Unity 프로젝트에 저장하지 않고 AI GitHub와 OS credential helper에 계속 위임합니다."
+  _dependenciesOverride: com.actionfit.githubauth@1.0.6, com.actionfit.buildsetting@1.1.8,
     com.actionfit.customsymbols@1.0.6
