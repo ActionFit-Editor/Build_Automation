@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
@@ -1021,33 +1022,25 @@ namespace ActionFit.BuildAutomation.Editor
 
             try
             {
-                var startInfo = new ProcessStartInfo
+                GitCommandResult result = GitProcessRunner.Run(repositoryRoot, args);
+                if (result.TimedOut)
                 {
-                    FileName = "git",
-                    Arguments = args,
-                    WorkingDirectory = repositoryRoot,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
-
-                using (var process = Process.Start(startInfo))
-                {
-                    string output = process.StandardOutput.ReadToEnd();
-                    string error = process.StandardError.ReadToEnd();
-                    process.WaitForExit();
-
-                    if (process.ExitCode != 0)
-                    {
-                        string errorMsg = string.IsNullOrEmpty(error) ? output : error;
-                        AddLog($"[ERROR] git {args}: {errorMsg.Trim()}");
-                        Debug.LogError($"[BuildCommitWindow] git {args} failed: {errorMsg.Trim()}");
-                        return null;
-                    }
-
-                    return string.IsNullOrEmpty(output) ? "OK" : output.Trim();
+                    string timeoutMessage =
+                        $"git {args} timed out after {GitProcessRunner.DefaultTimeoutMilliseconds / 1000} seconds.";
+                    AddLog($"[ERROR] {timeoutMessage}");
+                    Debug.LogError($"[BuildCommitWindow] {timeoutMessage}");
+                    return null;
                 }
+
+                if (result.ExitCode != 0)
+                {
+                    string errorMsg = string.IsNullOrEmpty(result.Error) ? result.Output : result.Error;
+                    AddLog($"[ERROR] git {args}: {errorMsg.Trim()}");
+                    Debug.LogError($"[BuildCommitWindow] git {args} failed: {errorMsg.Trim()}");
+                    return null;
+                }
+
+                return string.IsNullOrEmpty(result.Output) ? "OK" : result.Output.Trim();
             }
             catch (System.Exception e)
             {
@@ -1100,6 +1093,151 @@ namespace ActionFit.BuildAutomation.Editor
         }
 
         #endregion
+    }
+
+    internal readonly struct GitCommandResult
+    {
+        internal readonly int ExitCode;
+        internal readonly string Output;
+        internal readonly string Error;
+        internal readonly bool TimedOut;
+
+        internal GitCommandResult(int exitCode, string output, string error, bool timedOut)
+        {
+            ExitCode = exitCode;
+            Output = output ?? "";
+            Error = error ?? "";
+            TimedOut = timedOut;
+        }
+    }
+
+    internal static class GitProcessRunner
+    {
+        internal const int DefaultTimeoutMilliseconds = 300000;
+        private const int TerminationWaitMilliseconds = 5000;
+
+        internal static GitCommandResult Run(
+            string workingDirectory,
+            string arguments,
+            int timeoutMilliseconds = DefaultTimeoutMilliseconds)
+        {
+            if (timeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(timeoutMilliseconds));
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = arguments,
+                WorkingDirectory = workingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+
+            using (var process = Process.Start(startInfo))
+            {
+                if (process == null)
+                    throw new InvalidOperationException($"Could not start process: {startInfo.FileName}");
+
+                Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+                Task<string> errorTask = process.StandardError.ReadToEndAsync();
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                if (!process.WaitForExit(timeoutMilliseconds))
+                {
+                    TryTerminateProcessTree(process);
+                    return new GitCommandResult(
+                        -1,
+                        GetCompletedOutput(outputTask),
+                        GetCompletedOutput(errorTask),
+                        true);
+                }
+
+                int remainingMilliseconds = Math.Max(
+                    1,
+                    timeoutMilliseconds - (int)Math.Min(stopwatch.ElapsedMilliseconds, timeoutMilliseconds));
+                var drainTasks = new Task[] { outputTask, errorTask };
+                if (!Task.WaitAll(drainTasks, remainingMilliseconds))
+                {
+                    TryTerminateProcessTree(process);
+                    return new GitCommandResult(
+                        -1,
+                        GetCompletedOutput(outputTask),
+                        GetCompletedOutput(errorTask),
+                        true);
+                }
+
+                string output = outputTask.GetAwaiter().GetResult();
+                string error = errorTask.GetAwaiter().GetResult();
+                return new GitCommandResult(process.ExitCode, output, error, false);
+            }
+        }
+
+        private static string GetCompletedOutput(Task<string> task)
+        {
+            if (task == null || !task.IsCompleted) return "";
+
+            try
+            {
+                return task.GetAwaiter().GetResult();
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        private static void TryTerminateProcessTree(Process process)
+        {
+            if (process == null) return;
+
+#if UNITY_EDITOR_WIN
+            try
+            {
+                var taskKillInfo = new ProcessStartInfo
+                {
+                    FileName = "taskkill",
+                    Arguments = $"/PID {process.Id} /T /F",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+
+                using (var taskKill = Process.Start(taskKillInfo))
+                {
+                    bool taskKillFinished = taskKill?.WaitForExit(TerminationWaitMilliseconds) ?? false;
+                    if (!taskKillFinished || taskKill.ExitCode != 0)
+                        TryKillProcess(process);
+                }
+            }
+            catch
+            {
+                TryKillProcess(process);
+            }
+#else
+            TryKillProcess(process);
+#endif
+
+            try
+            {
+                process.WaitForExit(TerminationWaitMilliseconds);
+            }
+            catch
+            {
+                // The original timeout remains the actionable error.
+            }
+        }
+
+        private static void TryKillProcess(Process process)
+        {
+            try
+            {
+                if (!process.HasExited) process.Kill();
+            }
+            catch
+            {
+                // The original timeout remains the actionable error.
+            }
+        }
     }
 
     internal static class BuildSettingBridge

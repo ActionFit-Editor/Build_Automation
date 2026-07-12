@@ -21,13 +21,19 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- `com.actionfit.buildsetting` \uCD5C\uC18C \uC758\uC874\uC131\uC744
-    `1.1.9`\uB85C \uC62C\uB824 \uD604\uC7AC \uBC30\uD3EC\uB41C Build Setting \uD328\uD0A4\uC9C0
-    \uD30C\uC77C\uACFC \uB9DE\uCDC4\uC2B5\uB2C8\uB2E4.\n- `package.json`, PackageInfo
-    dependency override, README\uC640 AI guide\uC758 \uC124\uCE58 \uBC84\uC804\uC744
-    \uB3D9\uC77C\uD558\uAC8C \uC815\uB9AC\uD588\uC2B5\uB2C8\uB2E4.\n- `com.actionfit.githubauth@1.0.6`\uACFC
-    `com.actionfit.customsymbols@1.0.6` \uCD5C\uC18C \uBC84\uC804\uC740 \uADF8\uB300\uB85C
-    \uC720\uC9C0\uD569\uB2C8\uB2E4.\n- BuildCommit, workflow template, runner \uC124\uC815\uACFC
-    \uB7F0\uD0C0\uC784 \uBE4C\uB4DC \uB3D9\uC791\uC740 \uBCC0\uACBD\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4."
+  _releaseNote: "- Git subprocess\uC758 stdout\uACFC stderr\uB97C \uB3D9\uC2DC\uC5D0
+    \uC77D\uC5B4 `core.autocrlf=true`\uC5D0\uC11C \uB300\uB7C9 \uC904\uBC14\uAFC8
+    \uACBD\uACE0\uAC00 \uBC1C\uC0DD\uD574\uB3C4 `git add .`\uAC00 \uAD50\uCC29\uB418\uC9C0
+    \uC54A\uB3C4\uB85D \uC218\uC815\uD588\uC2B5\uB2C8\uB2E4.\n- `BuildCommitWindow`\uC640
+    `BuildRequestUtility`\uC758 Git \uC2E4\uD589\uC744 \uACF5\uD1B5 `GitProcessRunner`\uB85C
+    \uD1B5\uD569\uD574 \uBAA8\uB4E0 \uAD00\uB828 \uD638\uCD9C\uC5D0 \uAC19\uC740
+    \uC548\uC804 \uADDC\uCE59\uC744 \uC801\uC6A9\uD569\uB2C8\uB2E4.\n- \uAC01 Git
+    \uBA85\uB839\uC5D0 5\uBD84 timeout\uC744 \uC801\uC6A9\uD558\uACE0 \uCD08\uACFC
+    \uC2DC \uD504\uB85C\uC138\uC2A4 \uD2B8\uB9AC\uB97C \uC885\uB8CC\uD55C \uB4A4
+    \uBA85\uD655\uD55C \uC624\uB958\uB97C \uB0A8\uAE30\uBA70, \uC2E4\uD589 \uC911\uC778
+    \uD504\uB85C\uC138\uC2A4\uC758 `.git/index.lock`\uC740 \uC784\uC758\uB85C \uC0AD\uC81C\uD558\uC9C0
+    \uC54A\uC2B5\uB2C8\uB2E4.\n- \uC2E4\uC81C \uB300\uB7C9 CRLF \uACBD\uACE0\uB97C
+    \uC0DD\uC131\uD558\uB294 EditMode \uD68C\uADC0 \uD14C\uC2A4\uD2B8\uB97C \uCD94\uAC00\uD574
+    \uBA85\uB839 \uC644\uB8CC\uC640 `index.lock` \uC815\uB9AC\uB97C \uAC80\uC99D\uD569\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.githubauth@1.0.6, com.actionfit.buildsetting@1.1.9,
     com.actionfit.customsymbols@1.0.6

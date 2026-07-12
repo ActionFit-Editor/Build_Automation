@@ -6,8 +6,6 @@ using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
-using Process = System.Diagnostics.Process;
-using ProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 
 namespace ActionFit.BuildAutomation.Editor
 {
@@ -327,23 +325,16 @@ namespace ActionFit.BuildAutomation.Editor
         {
             try
             {
-                var startInfo = new ProcessStartInfo
+                GitCommandResult result = GitProcessRunner.Run(workingDirectory, args);
+                if (result.TimedOut)
                 {
-                    FileName = "git",
-                    Arguments = args,
-                    WorkingDirectory = workingDirectory,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
-
-                using (var process = Process.Start(startInfo))
-                {
-                    string output = process.StandardOutput.ReadToEnd();
-                    process.WaitForExit();
-                    return process.ExitCode == 0 ? output.Trim() : "";
+                    Debug.LogError(
+                        $"[BuildRequestUtility] git {args} timed out after " +
+                        $"{GitProcessRunner.DefaultTimeoutMilliseconds / 1000} seconds.");
+                    return "";
                 }
+
+                return result.ExitCode == 0 ? result.Output.Trim() : "";
             }
             catch (Exception e)
             {
@@ -425,34 +416,29 @@ namespace ActionFit.BuildAutomation.Editor
 
             try
             {
-                var startInfo = new ProcessStartInfo
+                GitCommandResult result = GitProcessRunner.Run(
+                    Path.GetFullPath(startPath),
+                    "rev-parse --show-toplevel");
+                if (result.TimedOut)
                 {
-                    FileName = "git",
-                    Arguments = "rev-parse --show-toplevel",
-                    WorkingDirectory = Path.GetFullPath(startPath),
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
-
-                using (var process = Process.Start(startInfo))
-                {
-                    string output = process.StandardOutput.ReadToEnd().Trim();
-                    string standardError = process.StandardError.ReadToEnd().Trim();
-                    process.WaitForExit();
-
-                    if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
-                    {
-                        error = string.IsNullOrWhiteSpace(standardError)
-                            ? $"Git repository root was not found from: {startPath}"
-                            : $"Git repository root was not found from {startPath}: {standardError}";
-                        return false;
-                    }
-
-                    repositoryRoot = Path.GetFullPath(output);
-                    return true;
+                    error =
+                        $"Git repository root lookup timed out after " +
+                        $"{GitProcessRunner.DefaultTimeoutMilliseconds / 1000} seconds from: {startPath}";
+                    return false;
                 }
+
+                string output = result.Output.Trim();
+                string standardError = result.Error.Trim();
+                if (result.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
+                {
+                    error = string.IsNullOrWhiteSpace(standardError)
+                        ? $"Git repository root was not found from: {startPath}"
+                        : $"Git repository root was not found from {startPath}: {standardError}";
+                    return false;
+                }
+
+                repositoryRoot = Path.GetFullPath(output);
+                return true;
             }
             catch (Exception exception)
             {
