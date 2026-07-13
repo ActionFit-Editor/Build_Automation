@@ -21,19 +21,11 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- Git subprocess\uC758 stdout\uACFC stderr\uB97C \uB3D9\uC2DC\uC5D0
-    \uC77D\uC5B4 `core.autocrlf=true`\uC5D0\uC11C \uB300\uB7C9 \uC904\uBC14\uAFC8
-    \uACBD\uACE0\uAC00 \uBC1C\uC0DD\uD574\uB3C4 `git add .`\uAC00 \uAD50\uCC29\uB418\uC9C0
-    \uC54A\uB3C4\uB85D \uC218\uC815\uD588\uC2B5\uB2C8\uB2E4.\n- `BuildCommitWindow`\uC640
-    `BuildRequestUtility`\uC758 Git \uC2E4\uD589\uC744 \uACF5\uD1B5 `GitProcessRunner`\uB85C
-    \uD1B5\uD569\uD574 \uBAA8\uB4E0 \uAD00\uB828 \uD638\uCD9C\uC5D0 \uAC19\uC740
-    \uC548\uC804 \uADDC\uCE59\uC744 \uC801\uC6A9\uD569\uB2C8\uB2E4.\n- \uAC01 Git
-    \uBA85\uB839\uC5D0 5\uBD84 timeout\uC744 \uC801\uC6A9\uD558\uACE0 \uCD08\uACFC
-    \uC2DC \uD504\uB85C\uC138\uC2A4 \uD2B8\uB9AC\uB97C \uC885\uB8CC\uD55C \uB4A4
-    \uBA85\uD655\uD55C \uC624\uB958\uB97C \uB0A8\uAE30\uBA70, \uC2E4\uD589 \uC911\uC778
-    \uD504\uB85C\uC138\uC2A4\uC758 `.git/index.lock`\uC740 \uC784\uC758\uB85C \uC0AD\uC81C\uD558\uC9C0
-    \uC54A\uC2B5\uB2C8\uB2E4.\n- \uC2E4\uC81C \uB300\uB7C9 CRLF \uACBD\uACE0\uB97C
-    \uC0DD\uC131\uD558\uB294 EditMode \uD68C\uADC0 \uD14C\uC2A4\uD2B8\uB97C \uCD94\uAC00\uD574
-    \uBA85\uB839 \uC644\uB8CC\uC640 `index.lock` \uC815\uB9AC\uB97C \uAC80\uC99D\uD569\uB2C8\uB2E4."
+  _releaseNote: "- Shell fixture\uC758 \uB85C\uCEEC validator \uCF00\uC774\uC2A4\uB97C
+    `GITHUB_ACTIONS=false`\uB85C \uACE0\uC815\uD574 GitHub Actions \uBD80\uBAA8 \uD658\uACBD\uC744
+    \uC0C1\uC18D\uD574\uB3C4 \uACB0\uACFC\uAC00 \uBC14\uB00C\uC9C0 \uC54A\uB3C4\uB85D
+    \uD588\uC2B5\uB2C8\uB2E4.\n- `GITHUB_ACTIONS=true` \uC804\uC6A9 \uCF00\uC774\uC2A4\uC5D0\uC11C
+    fixture credential\uC758 `::add-mask::` \uCD9C\uB825\uACFC mask \uBA85\uB839
+    \uBC16 \uB178\uCD9C \uAE08\uC9C0\uB97C \uAC80\uC99D\uD569\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.githubauth@1.0.6, com.actionfit.buildsetting@1.1.9,
     com.actionfit.customsymbols@1.0.6
