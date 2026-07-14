@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.42`
+- Current package version at generation time: `1.0.43`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -15,6 +15,12 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 Build Automation owns BuildCommit request generation, Git tag based CI triggers, repository/Unity-project path resolution, request JSON parsing, Custom Symbols preparation, CI batchmode entry points, GitHub Actions workflow templates, local runner secret resolution, and macOS self-hosted mobile build guidance.
 
 This package depends on `com.actionfit.buildsetting`, `com.actionfit.customsymbols`, and `com.actionfit.githubauth` (AI GitHub). Keep build/player settings in Build Setting and build symbol selection in Custom Symbols. Keep CI request orchestration and remote build workflow behavior in Build Automation.
+
+## Agent Skills
+
+- `Skills~/manifest.json` registers schema v2 `mobile-build-help` and `mobile-build-preflight` for Codex and Claude.
+- Both skills are read-only. Preflight inspects dependency versions, project paths, workflow synchronization state, settings-asset presence, and an allowlisted subset of an existing BuildRequest.
+- The skills never print signing or credential values and do not create BuildRequests, sync workflows, change settings, commit, tag, push, build, upload, or deploy.
 
 ## Project Router Registration
 

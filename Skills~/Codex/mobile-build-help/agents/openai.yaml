@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mobile Build Help"
+  short_description: "Explain Build Automation workflows and boundaries"
+  default_prompt: "Use $mobile-build-help to explain Build Automation skills, prerequisites, CI flow, and safety boundaries."

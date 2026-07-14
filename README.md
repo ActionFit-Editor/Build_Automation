@@ -12,12 +12,21 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.9",
     "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/AI_GitHub.git#1.0.6",
     "com.actionfit.customsymbols": "https://github.com/ActionFit-Editor/Custom_Symbols.git#1.0.6",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.42"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.43"
   }
 }
 ```
 
 `Build_Automation` 또는 `AI_GitHub` 레포와 태그가 아직 배포되지 않았다면 위 URL은 배포 후 사용할 수 있습니다.
+
+## Agent Skills
+
+Custom Package Manager의 `Install or Refresh Agent Skills`는 Codex와 Claude에 다음 read-only skill을 설치합니다.
+
+- `mobile-build-help`: BuildCommit, workflow, runner 구조와 build request 경계를 설명합니다.
+- `mobile-build-preflight`: 패키지 의존성, Unity 프로젝트 경로, workflow 동기화 상태, 안전한 BuildRequest 필드와 GitHub 준비 상태를 변경 없이 점검합니다.
+
+preflight는 signing 값, keystore Base64, token, webhook, certificate와 keychain 내용을 읽거나 출력하지 않습니다. BuildRequest 생성, workflow sync, settings 변경, commit/tag/push, Unity build, upload와 deploy도 수행하지 않습니다.
 
 ## Unity Menu
 

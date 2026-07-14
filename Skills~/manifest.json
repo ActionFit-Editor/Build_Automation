@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 2,
+  "skillPrefix": "mobile-build",
+  "helpSkill": "mobile-build-help",
+  "skills": [
+    {
+      "name": "mobile-build-help",
+      "agents": ["codex", "claude"],
+      "includeShared": false,
+      "access": "read-only"
+    },
+    {
+      "name": "mobile-build-preflight",
+      "agents": ["codex", "claude"],
+      "includeShared": false,
+      "access": "read-only"
+    }
+  ]
+}

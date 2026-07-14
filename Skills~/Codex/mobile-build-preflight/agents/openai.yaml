@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mobile Build Preflight"
+  short_description: "Audit mobile build readiness without changes"
+  default_prompt: "Use $mobile-build-preflight to inspect Build Automation readiness without creating requests, exposing signing data, or starting a build."
