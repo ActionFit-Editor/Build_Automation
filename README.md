@@ -12,7 +12,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.9",
     "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/AI_GitHub.git#1.0.6",
     "com.actionfit.customsymbols": "https://github.com/ActionFit-Editor/Custom_Symbols.git#1.0.6",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.45"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.46"
   }
 }
 ```
@@ -147,11 +147,11 @@ GitHub Actions workflow는 `PrepareBuildSequence`를 먼저 실행합니다. 단
 
 `AutoBuild` 창의 `Update GitHub Workflow` 버튼은 package template을 Git 저장소 루트의 `.github/workflows/buildcommit-auto-build.yml`, `.github/actions/`, `.github/scripts/`로 복사합니다. 기존 파일이 template과 다르면 확인창을 띄운 뒤 덮어씁니다.
 
-workflow는 먼저 GitHub-hosted `allocate` job에서 조직 runner 목록을 조회합니다. `UNITY_RUNNER_AFFINITY_LABEL` 저장소 variable이 있으면 그 값을 사용하고, 없으면 repository 이름을 소문자 slug로 바꿔 `project-*` 라벨을 만듭니다(예: `Cat_Merge_Cafe` → `project-cat-merge-cafe`). 기존 라벨 매핑이 있으면 online `unity-mobile` runner인지 검증해 재사용하고, 없으면 online·idle이며 `self-hosted`, `macOS`, `unity-mobile`을 모두 갖고 `ci`, `unity-package-ci`가 없는 runner 중 `project-*` 라벨 수가 가장 적은 대상을 선택해 라벨을 추가합니다. 동률은 프로젝트 라벨과 runner id 기반의 결정적 순서로 선택하고, 동시 최초 요청에서 생긴 같은 프로젝트의 중복 라벨은 한 runner로 수렴시킵니다.
+workflow는 먼저 전용 `mobile-build-allocator` runner group과 `runner-allocator` 라벨에서 `allocate` job을 실행합니다. 이 job은 repository를 checkout하지 않고 `/Users/lydia/workspace/runner-allocator/bin/allocate-project-runner`만 호출합니다. `UNITY_RUNNER_AFFINITY_LABEL` 저장소 variable이 있으면 그 값을 사용하고, 없으면 repository 이름을 소문자 slug로 바꿔 `project-*` 라벨을 만듭니다(예: `Cat_Merge_Cafe` → `project-cat-merge-cafe`).
 
-`allocate` job은 repository checkout 없이 Contents API로 `.github/scripts/allocate-unity-mobile-runner.js` 한 파일만 임시 경로에 읽으므로 BuildRequest와 signing blob을 GitHub-hosted runner로 가져오지 않습니다. 조직 runner 조회와 라벨 추가에는 Actions secret `UNITY_RUNNER_ALLOCATOR_TOKEN`이 필요합니다. GitHub App installation token 또는 fine-grained PAT에는 조직 `Self-hosted runners: write` 권한을 부여하고, 가능하면 선택된 private repository에만 노출되는 조직 secret으로 관리합니다. 일반 `GITHUB_TOKEN`은 저장소 범위이므로 조직 runner allocator 권한으로 사용할 수 없습니다. secret, runner API 또는 후보가 준비되지 않으면 `mobile-build`를 대기열에 넣기 전에 명시적으로 실패합니다.
+host-local allocator는 파일 lock으로 조직 전체의 최초 배정을 직렬화합니다. 기존 라벨 매핑이 있으면 online `unity-mobile` runner인지 검증해 재사용하고, 없으면 `unity-mobile`이면서 `ci`, `ci-validation`, `unity-package-ci`, `runner-allocator`가 없는 online runner 중 `project-*` 라벨 수가 가장 적은 대상을 선택합니다. 같은 라벨 수에서는 idle runner를 우선하지만 busy runner도 후보로 유지해 빌드가 대기열에 들어갈 수 있게 합니다. GitHub 인증은 allocator Mac 사용자의 `gh` Keychain 항목에서 읽으므로 Actions secret `UNITY_RUNNER_ALLOCATOR_TOKEN`은 사용하지 않습니다. 전용 runner, 로컬 실행 파일, GitHub 인증, runner API 또는 후보가 준비되지 않으면 `mobile-build`를 예약하기 전에 명시적으로 실패합니다.
 
-allocator가 출력한 라벨로 `mobile-build` job이 `self-hosted`, `macOS`, `unity-mobile`, `project-*` 조합을 요청합니다. 하나의 `mobile-build` job이 같은 Mac과 workspace에서 Android/iOS를 순차 실행합니다.
+allocator가 출력한 라벨로 `mobile-build` job이 `self-hosted`, `macOS`, `unity-mobile`, `project-*` 조합을 요청합니다. 실제 실행 runner가 allocator output과 일치하는지 확인한 뒤 workspace 상위에 `.unity-mobile-affinity.json`을 원자적으로 갱신해 host cleanup의 affinity 보존 정책을 적용합니다. 하나의 `mobile-build` job이 같은 Mac과 workspace에서 Android/iOS를 순차 실행합니다.
 
 checkout 전에는 tracked 파일과 non-ignored untracked 파일만 정리하고, `actions/checkout`은 `clean: false`로 실행합니다. 따라서 runner-local `$UNITY_PROJECT_DIR/Library`가 보존되어 다음 빌드에서 재사용됩니다. `Library/SourceAssetDB`가 없을 때만 원격 `actions/cache/restore`를 cold fallback으로 사용하며 원격 cache save는 실행하지 않습니다. 마지막 cleanup은 working request와 임시 credential 파일만 제거하고 `Library`는 유지합니다.
 

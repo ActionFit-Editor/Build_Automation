@@ -13,24 +13,29 @@ jobs = workflow.fetch("jobs")
 abort("expected allocate then mobile-build jobs") unless jobs.keys == ["allocate", "mobile-build"]
 
 allocate = jobs.fetch("allocate")
-abort("allocator must run before self-hosted scheduling") unless allocate.fetch("runs-on") == "ubuntu-latest"
+abort("allocator job must not receive repository token permissions") unless allocate.fetch("permissions") == {}
+expected_allocator_target = {
+  "group" => "mobile-build-allocator",
+  "labels" => "runner-allocator"
+}
+abort("allocator must use the dedicated runner group") unless allocate.fetch("runs-on") == expected_allocator_target
+abort("allocator timeout must remain bounded") unless allocate.fetch("timeout-minutes") == 5
 allocator_outputs = allocate.fetch("outputs")
-abort("allocator affinity output is missing") unless allocator_outputs.fetch("affinity_label") == "${{ steps.allocator.outputs.affinity_label }}"
+abort("allocator affinity output is missing") unless allocator_outputs.fetch("affinity_label") == "${{ steps.allocator.outputs.project_label }}"
 
 allocator_steps = allocate.fetch("steps")
 abort("allocator job must not checkout BuildRequest or repository objects") if allocator_steps.any? { |step| step["uses"] == "actions/checkout@v4" }
-allocator_source = allocator_steps.find { |step| step["id"] == "allocator_source" }
-github_script_action = "actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b"
-abort("allocator source loader is missing or unpinned") unless allocator_source && allocator_source["uses"] == github_script_action
-source_script = allocator_source.dig("with", "script")
-abort("allocator source loader must fetch one repository file") unless source_script.include?("repos.getContent")
-abort("allocator source path is missing") unless source_script.include?(".github/scripts/allocate-unity-mobile-runner.js")
-abort("allocator source loader must not reference BuildRequest") if source_script.include?(".build")
-
+abort("allocator job must not run repository-provided actions") if allocator_steps.any? { |step| step.key?("uses") }
 allocator = allocator_steps.find { |step| step["id"] == "allocator" }
-abort("runner allocator step is missing or unpinned") unless allocator && allocator["uses"] == github_script_action
-abort("allocator credential is not wired") unless allocator.dig("with", "github-token") == "${{ secrets.UNITY_RUNNER_ALLOCATOR_TOKEN }}"
-abort("allocator must execute the isolated source file") unless allocator.dig("env", "ALLOCATOR_SCRIPT_PATH") == "${{ steps.allocator_source.outputs.path }}"
+abort("runner allocator step is missing") unless allocator
+abort("runner allocator must use bash") unless allocator["shell"] == "bash"
+abort("runner allocator must use the host-local executable") unless allocator.dig("env", "ALLOCATOR_EXECUTABLE") == "/Users/lydia/workspace/runner-allocator/bin/allocate-project-runner"
+allocator_script = allocator.fetch("run")
+abort("allocator repository input is missing") unless allocator_script.include?('--repository "$GITHUB_REPOSITORY"')
+abort("allocator output file is missing") unless allocator_script.include?('--github-output "$GITHUB_OUTPUT"')
+abort("allocator project override is missing") unless allocator_script.include?('--project-label "$CONFIGURED_AFFINITY_LABEL"')
+abort("allocator must not reference the hosted runner token") if allocator.to_s.include?("UNITY_RUNNER_ALLOCATOR_TOKEN")
+abort("workflow must not reference the hosted runner token") if workflow.to_s.include?("UNITY_RUNNER_ALLOCATOR_TOKEN")
 
 mobile_build = jobs.fetch("mobile-build")
 abort("mobile-build must wait for allocator") unless mobile_build.fetch("needs") == "allocate"
@@ -41,6 +46,16 @@ abort("unexpected affinity runner labels: #{runs_on.inspect}") unless runs_on ==
 steps = mobile_build.fetch("steps")
 checkout = steps.find { |step| step["uses"] == "actions/checkout@v4" }
 abort("checkout clean:false is required") unless checkout && checkout.fetch("with").fetch("clean") == false
+
+marker = steps.find { |step| step["name"] == "Refresh affinity workspace retention marker" }
+abort("affinity retention marker step is missing") unless marker
+abort("affinity marker must run before reset and checkout") unless steps.first.equal?(marker)
+abort("marker affinity output is not wired") unless marker.dig("env", "AFFINITY_LABEL") == "${{ needs.allocate.outputs.affinity_label }}"
+abort("marker runner output is not wired") unless marker.dig("env", "ALLOCATED_RUNNER_NAME") == "${{ needs.allocate.outputs.runner_name }}"
+marker_script = marker.fetch("run")
+abort("marker runner verification is missing") unless marker_script.include?("actual_runner == allocated_runner")
+abort("affinity marker path is missing") unless marker_script.include?(".unity-mobile-affinity.json")
+abort("affinity marker schema is missing") unless marker_script.include?('"schema_version" => 1')
 
 sequence = steps.find { |step| step["id"] == "sequence" }
 abort("PrepareBuildSequence entry point is missing") unless sequence.fetch("run").include?("CIBuildEntry.PrepareBuildSequence")

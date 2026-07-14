@@ -24,61 +24,39 @@ env:
 jobs:
   allocate:
     name: Allocate Project Affinity Runner
-    runs-on: ubuntu-latest
+    permissions: {}
+    runs-on:
+      group: mobile-build-allocator
+      labels: runner-allocator
+    timeout-minutes: 5
     outputs:
-      affinity_label: ${{ steps.allocator.outputs.affinity_label }}
+      affinity_label: ${{ steps.allocator.outputs.project_label }}
       runner_id: ${{ steps.allocator.outputs.runner_id }}
       runner_name: ${{ steps.allocator.outputs.runner_name }}
-      allocation_mode: ${{ steps.allocator.outputs.allocation_mode }}
+      allocation_reused: ${{ steps.allocator.outputs.reused }}
     steps:
-      - name: Load allocator source without checkout
-        id: allocator_source
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        with:
-          github-token: ${{ github.token }}
-          script: |
-            const fs = require("fs");
-            const path = require("path");
-            const source = await github.rest.repos.getContent({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path: ".github/scripts/allocate-unity-mobile-runner.js",
-              ref: context.sha
-            });
-            if (Array.isArray(source.data) || source.data.type !== "file" || !source.data.content) {
-              throw new Error("Allocator source was not returned as a repository file.");
-            }
-            const allocatorPath = path.join(process.env.RUNNER_TEMP, "allocate-unity-mobile-runner.js");
-            fs.writeFileSync(allocatorPath, Buffer.from(source.data.content, "base64"), { mode: 0o600 });
-            core.setOutput("path", allocatorPath);
-
-      - name: Validate allocator credential
+      - name: Resolve or allocate project runner
+        id: allocator
         shell: bash
         env:
-          UNITY_RUNNER_ALLOCATOR_TOKEN: ${{ secrets.UNITY_RUNNER_ALLOCATOR_TOKEN }}
+          CONFIGURED_AFFINITY_LABEL: ${{ vars.UNITY_RUNNER_AFFINITY_LABEL }}
+          ALLOCATOR_EXECUTABLE: /Users/lydia/workspace/runner-allocator/bin/allocate-project-runner
         run: |
           set -euo pipefail
-          if [ -z "$UNITY_RUNNER_ALLOCATOR_TOKEN" ]; then
-            echo "::error::UNITY_RUNNER_ALLOCATOR_TOKEN is required and must have organization Self-hosted runners: write permission."
+          if [ ! -x "$ALLOCATOR_EXECUTABLE" ]; then
+            echo "::error::Runner allocator is missing or not executable: $ALLOCATOR_EXECUTABLE"
             exit 1
           fi
 
-      - name: Resolve or allocate project runner
-        id: allocator
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        env:
-          CONFIGURED_AFFINITY_LABEL: ${{ vars.UNITY_RUNNER_AFFINITY_LABEL }}
-          ALLOCATOR_SCRIPT_PATH: ${{ steps.allocator_source.outputs.path }}
-        with:
-          github-token: ${{ secrets.UNITY_RUNNER_ALLOCATOR_TOKEN }}
-          script: |
-            const allocator = require(process.env.ALLOCATOR_SCRIPT_PATH);
-            await allocator.allocate({
-              github,
-              context,
-              core,
-              configuredLabel: process.env.CONFIGURED_AFFINITY_LABEL
-            });
+          allocator_args=(
+            --repository "$GITHUB_REPOSITORY"
+            --github-output "$GITHUB_OUTPUT"
+          )
+          if [ -n "${CONFIGURED_AFFINITY_LABEL:-}" ]; then
+            allocator_args+=(--project-label "$CONFIGURED_AFFINITY_LABEL")
+          fi
+
+          "$ALLOCATOR_EXECUTABLE" "${allocator_args[@]}"
 
   mobile-build:
     name: Mobile Build & Deploy
@@ -89,6 +67,50 @@ jobs:
       - unity-mobile
       - ${{ needs.allocate.outputs.affinity_label }}
     steps:
+      - name: Refresh affinity workspace retention marker
+        shell: bash
+        env:
+          AFFINITY_LABEL: ${{ needs.allocate.outputs.affinity_label }}
+          ALLOCATED_RUNNER_NAME: ${{ needs.allocate.outputs.runner_name }}
+        run: |
+          set -euo pipefail
+          /usr/bin/ruby <<'RUBY'
+          require "fileutils"
+          require "json"
+
+          repository = ENV.fetch("GITHUB_REPOSITORY")
+          affinity_label = ENV.fetch("AFFINITY_LABEL")
+          allocated_runner = ENV.fetch("ALLOCATED_RUNNER_NAME")
+          actual_runner = ENV.fetch("RUNNER_NAME")
+          abort("Invalid repository for affinity marker") unless repository.match?(%r{\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\z})
+          abort("Invalid project affinity label") unless affinity_label.match?(/\Aproject-[a-z0-9](?:[a-z0-9-]{0,53}[a-z0-9])?\z/)
+          abort("Allocated runner mismatch: expected #{allocated_runner}, got #{actual_runner}") unless actual_runner == allocated_runner
+
+          marker_path = File.join(
+            File.expand_path("..", ENV.fetch("GITHUB_WORKSPACE")),
+            ".unity-mobile-affinity.json"
+          )
+          temporary_path = "#{marker_path}.tmp-#{Process.pid}"
+          marker = {
+            "schema_version" => 1,
+            "repository" => repository,
+            "project_label" => affinity_label,
+            "runner_name" => actual_runner
+          }
+
+          begin
+            File.open(temporary_path, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |file|
+              file.write(JSON.pretty_generate(marker))
+              file.write("\n")
+              file.flush
+              file.fsync
+            end
+            File.rename(temporary_path, marker_path)
+          ensure
+            FileUtils.rm_f(temporary_path)
+          end
+          RUBY
+
       - name: Reset tracked state while preserving Unity cache
         shell: bash
         run: |

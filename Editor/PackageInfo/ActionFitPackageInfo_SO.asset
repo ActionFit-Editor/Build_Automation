@@ -21,13 +21,11 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- `allocate` job\uC774 \uC870\uC9C1 `unity-mobile` runner\uC758
-    \uAE30\uC874 \uD504\uB85C\uC81D\uD2B8 \uB77C\uBCA8\uC744 \uC7AC\uC0AC\uC6A9\uD558\uAC70\uB098
-    \uCD5C\uC18C \uBD80\uD558 runner\uC5D0 \uC0C8 affinity \uB77C\uBCA8\uC744 \uCD94\uAC00\uD569\uB2C8\uB2E4.\n-
-    `mobile-build`\uB294 allocator output\uC744 `runs-on` \uB77C\uBCA8\uB85C \uC0AC\uC6A9\uD574
-    \uB77C\uBCA8 \uB204\uB77D \uC2DC \uBB34\uD55C \uB300\uAE30\uD558\uC9C0 \uC54A\uACE0
-    \uD560\uB2F9 \uC2E4\uD328\uB97C \uBA3C\uC800 \uBCF4\uACE0\uD569\uB2C8\uB2E4.\n-
-    BuildRequest\uB97C \uC81C\uC678\uD55C allocator source-only API fetch\uC640 \uC870\uC9C1
-    runner write \uC804\uC6A9 secret \uACBD\uACC4\uB97C \uCD94\uAC00\uD588\uC2B5\uB2C8\uB2E4."
+  _releaseNote: "- `allocate` job\uC744 \uC804\uC6A9 `mobile-build-allocator` runner\uC640
+    host-local \uC9C1\uB82C allocator\uB85C \uC804\uD658\uD588\uC2B5\uB2C8\uB2E4.\n-
+    Actions runner-write secret \uC758\uC874\uC131\uC744 \uC81C\uAC70\uD558\uACE0
+    \uAE30\uC874 `gh` Keychain \uC778\uC99D\uC744 \uC0AC\uC6A9\uD569\uB2C8\uB2E4.\n-
+    `mobile-build`\uAC00 affinity workspace \uBCF4\uC874 \uB9C8\uCEE4\uB97C \uAC31\uC2E0\uD574
+    14\uC77C cleanup \uC815\uCC45\uC744 \uC720\uC9C0\uD569\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.githubauth@1.0.6, com.actionfit.buildsetting@1.1.9,
     com.actionfit.customsymbols@1.0.6
