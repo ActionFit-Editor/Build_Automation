@@ -12,6 +12,7 @@ namespace ActionFit.BuildAutomation.Editor
         internal const string WorkflowRelativePath = ".github/workflows/buildcommit-auto-build.yml";
         internal const string AndroidBuildActionRelativePath = ".github/actions/build-android/action.yml";
         internal const string IosBuildActionRelativePath = ".github/actions/build-ios/action.yml";
+        internal const string AllocateRunnerScriptRelativePath = ".github/scripts/allocate-unity-mobile-runner.js";
         internal const string ValidateSecretsScriptRelativePath = ".github/scripts/validate-local-runner-secrets.sh";
         internal const string ResolveUnityProjectScriptRelativePath = ".github/scripts/resolve-unity-project.sh";
         internal const string ResolveUnityScriptRelativePath = ".github/scripts/resolve-unity-editor.sh";
@@ -26,6 +27,7 @@ namespace ActionFit.BuildAutomation.Editor
             TemplateRelativePath,
             AndroidBuildActionRelativePath,
             IosBuildActionRelativePath,
+            AllocateRunnerScriptRelativePath,
             ValidateSecretsScriptRelativePath,
             ResolveUnityProjectScriptRelativePath,
             ResolveUnityScriptRelativePath,
@@ -40,6 +42,7 @@ namespace ActionFit.BuildAutomation.Editor
             WorkflowRelativePath,
             AndroidBuildActionRelativePath,
             IosBuildActionRelativePath,
+            AllocateRunnerScriptRelativePath,
             ValidateSecretsScriptRelativePath,
             ResolveUnityProjectScriptRelativePath,
             ResolveUnityScriptRelativePath,
@@ -121,7 +124,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static string GetWorkflowAssetSummary()
         {
-            return $"{WorkflowRelativePath}, {AndroidBuildActionRelativePath}, {IosBuildActionRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {ResolveUnityScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}";
+            return $"{WorkflowRelativePath}, {AndroidBuildActionRelativePath}, {IosBuildActionRelativePath}, {AllocateRunnerScriptRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {ResolveUnityScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}";
         }
 
         private static bool PackageFileMatchesProjectFile(string packageRelativePath, string projectRelativePath)

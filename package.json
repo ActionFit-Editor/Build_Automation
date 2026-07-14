@@ -1,6 +1,6 @@
 {
     "name": "com.actionfit.buildautomation",
-    "version": "1.0.44",
+    "version": "1.0.45",
     "displayName": "Build Automation",
     "description": "BuildCommit request creation, Git tag based CI triggers, GitHub Actions workflow templates, and macOS self-hosted mobile build guidance for ActionFit Unity projects.",
     "unity": "6000.2",
