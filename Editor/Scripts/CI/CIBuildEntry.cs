@@ -23,6 +23,12 @@ namespace ActionFit.BuildAutomation.Editor
             EditorApplication.Exit(exitCode);
         }
 
+        public static void PrepareBuildSequence()
+        {
+            int exitCode = ExecutePrepareBuildSequence();
+            EditorApplication.Exit(exitCode);
+        }
+
         private static int ExecuteBuildFromRequest()
         {
             BuildRequest request = BuildRequestUtility.Load();
@@ -146,6 +152,130 @@ namespace ActionFit.BuildAutomation.Editor
                 return 1;
             }
 
+            return PrepareBuildTarget(request);
+        }
+
+        private static int ExecutePrepareBuildSequence()
+        {
+            BuildRequest request = BuildRequestUtility.Load();
+            if (request == null) return 1;
+
+            if (request.triggerSource != BuildRequest.BuildCommitTriggerSource)
+            {
+                Debug.LogError($"[CIBuildEntry] Unsupported trigger source: {request.triggerSource}");
+                return 1;
+            }
+
+            if (!TryResolveBuildSequence(
+                    request.platform,
+                    EditorUserBuildSettings.activeBuildTarget,
+                    out BuildRequestPlatform first,
+                    out BuildRequestPlatform second))
+            {
+                Debug.LogError($"[CIBuildEntry] Unsupported build sequence platform: {request.platform}");
+                return 1;
+            }
+
+            if (!BuildRequestUtility.TrySaveWorkingRequest(
+                    request,
+                    first,
+                    out BuildRequest firstRequest,
+                    out string firstRequestPath,
+                    out string firstRequestError))
+            {
+                Debug.LogError($"[CIBuildEntry] {firstRequestError}");
+                return 1;
+            }
+
+            string secondRequestPath = "";
+            if (second != BuildRequestPlatform.None &&
+                !BuildRequestUtility.TrySaveWorkingRequest(
+                    request,
+                    second,
+                    out _,
+                    out secondRequestPath,
+                    out string secondRequestError))
+            {
+                Debug.LogError($"[CIBuildEntry] {secondRequestError}");
+                return 1;
+            }
+
+            if (PrepareBuildTarget(firstRequest) != 0)
+                return 1;
+
+            string androidRequestPath = first == BuildRequestPlatform.Android
+                ? firstRequestPath
+                : second == BuildRequestPlatform.Android ? secondRequestPath : "";
+            string iosRequestPath = first == BuildRequestPlatform.iOS
+                ? firstRequestPath
+                : second == BuildRequestPlatform.iOS ? secondRequestPath : "";
+
+            string outputPath = Environment.GetEnvironmentVariable("BUILD_SEQUENCE_OUTPUT_PATH")?.Trim();
+            if (string.IsNullOrEmpty(outputPath))
+            {
+                Debug.LogError("[CIBuildEntry] BUILD_SEQUENCE_OUTPUT_PATH is required");
+                return 1;
+            }
+
+            File.AppendAllLines(
+                outputPath,
+                new[]
+                {
+                    $"first={first}",
+                    $"second={(second == BuildRequestPlatform.None ? "" : second.ToString())}",
+                    $"android_request_path={androidRequestPath}",
+                    $"ios_request_path={iosRequestPath}"
+                });
+
+            Debug.Log(
+                $"[CIBuildEntry] Build sequence prepared: request={request.platform}, " +
+                $"active={EditorUserBuildSettings.activeBuildTarget}, first={first}, second={second}");
+            return 0;
+        }
+
+        internal static bool TryResolveBuildSequence(
+            BuildRequestPlatform requestedPlatform,
+            BuildTarget activeBuildTarget,
+            out BuildRequestPlatform first,
+            out BuildRequestPlatform second)
+        {
+            first = BuildRequestPlatform.None;
+            second = BuildRequestPlatform.None;
+
+            switch (requestedPlatform)
+            {
+                case BuildRequestPlatform.Current:
+                    first = activeBuildTarget switch
+                    {
+                        BuildTarget.Android => BuildRequestPlatform.Android,
+                        BuildTarget.iOS => BuildRequestPlatform.iOS,
+                        _ => BuildRequestPlatform.None
+                    };
+                    return first != BuildRequestPlatform.None;
+                case BuildRequestPlatform.Android:
+                case BuildRequestPlatform.iOS:
+                    first = requestedPlatform;
+                    return true;
+                case BuildRequestPlatform.Both:
+                    if (activeBuildTarget == BuildTarget.iOS)
+                    {
+                        first = BuildRequestPlatform.iOS;
+                        second = BuildRequestPlatform.Android;
+                    }
+                    else
+                    {
+                        first = BuildRequestPlatform.Android;
+                        second = BuildRequestPlatform.iOS;
+                    }
+
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static int PrepareBuildTarget(BuildRequest request)
+        {
             BuildRequestPlatform platform = ResolvePlatform(request.platform);
             if (!TryGetBuildTarget(platform, out BuildTargetGroup group, out BuildTarget target))
             {

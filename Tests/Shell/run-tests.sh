@@ -5,6 +5,7 @@ package_root="$(cd "$(dirname "$0")/../.." && pwd -P)"
 
 bash "$package_root/Tests/Shell/test-unity-project-paths.sh"
 bash "$package_root/Tests/Shell/test-runner-secrets.sh"
+bash "$package_root/Tests/Shell/test-affinity-workflow.sh"
 
 cmp \
   "$package_root/.github/scripts/validate-local-runner-secrets.sh" \

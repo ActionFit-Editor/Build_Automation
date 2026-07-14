@@ -22,35 +22,36 @@ env:
   BUILD_CLEANUP_RETENTION_DAYS: 5
 
 jobs:
-  detect:
-    name: Detect BuildCommit Request
-    runs-on: [self-hosted, macOS, unity-mobile]
-    outputs:
-      should_build: ${{ steps.detect.outputs.should_build }}
-      platform: ${{ steps.detect.outputs.platform }}
-      build_kind: ${{ steps.detect.outputs.build_kind }}
-      upload_target: ${{ steps.detect.outputs.upload_target }}
-      distribution_profile: ${{ steps.detect.outputs.distribution_profile }}
-      android_package_name: ${{ steps.detect.outputs.android_package_name }}
-      ios_bundle_id: ${{ steps.detect.outputs.ios_bundle_id }}
-      build_version: ${{ steps.detect.outputs.build_version }}
-      bundle_no: ${{ steps.detect.outputs.bundle_no }}
-      slack_mentions: ${{ steps.detect.outputs.slack_mentions }}
-      unity_project_path: ${{ steps.paths.outputs.unity_project_path }}
+  mobile-build:
+    name: Mobile Build & Deploy
+    runs-on:
+      - self-hosted
+      - macOS
+      - unity-mobile
+      - ${{ vars.UNITY_RUNNER_AFFINITY_LABEL }}
     steps:
-      - name: Checkout
+      - name: Reset tracked state while preserving Unity cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git -C "$GITHUB_WORKSPACE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            git -C "$GITHUB_WORKSPACE" reset --hard
+            git -C "$GITHUB_WORKSPACE" clean -ffd
+          fi
+
+      - name: Checkout without deleting ignored Unity cache
         uses: actions/checkout@v4
         with:
+          clean: false
           persist-credentials: false
           lfs: true
 
       - name: Resolve Unity project
         id: paths
         shell: bash
-        run: |
-          bash "$GITHUB_WORKSPACE/.github/scripts/resolve-unity-project.sh"
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/resolve-unity-project.sh"
 
-      - name: Detect request
+      - name: Detect BuildCommit request
         id: detect
         shell: bash
         env:
@@ -147,91 +148,58 @@ jobs:
           File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |output|
             outputs.each { |name, value| output.puts("#{name}=#{value}") }
           end
-
-          puts "should_build=#{should_build}"
-          puts "ref_type=#{ref_type}"
-          puts "ref_name=#{ref_name}"
-          puts "platform=#{platform}"
-          puts "build_kind=#{build_kind}"
-          puts "upload_target=#{upload_target}"
-          puts "distribution_profile=#{distribution_profile}"
-          puts "android_package_name=#{android_package_name}"
-          puts "ios_bundle_id=#{ios_bundle_id}"
-          puts "build_version=#{build_version}"
-          puts "bundle_no=#{bundle_no}"
           RUBY
 
-  android-build:
-    name: Android Build & Deploy
-    needs: detect
-    if: needs.detect.outputs.should_build == 'true' && (needs.detect.outputs.platform == 'Android' || needs.detect.outputs.platform == 'Both')
-    runs-on: [self-hosted, macOS, unity-mobile]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          lfs: true
-
-      - name: Resolve Unity project
-        id: paths
-        shell: bash
-        env:
-          UNITY_PROJECT_PATH: ${{ needs.detect.outputs.unity_project_path }}
-        run: |
-          bash "$GITHUB_WORKSPACE/.github/scripts/resolve-unity-project.sh"
-
-      - name: Mark Android build start
-        id: build_timer
-        shell: bash
-        run: |
-          echo "started_at_epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
-
-      - name: Notify Slack Android start
-        shell: bash
-        env:
-          BUILD_JOB_STATUS: start
-          BUILD_PLATFORM: AOS
-          BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
-          BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
-          BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
-          BUILD_DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
-          SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
-          BUILD_SHORT_SHA: ${{ github.sha }}
-          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
-        run: |
-          if [ ! -f "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh" ]; then
-            echo "::warning::Slack notification script not found; skipping."
-            exit 0
-          fi
-
-          bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"
-
       - name: Prepare private package access
+        if: steps.detect.outputs.should_build == 'true'
         shell: bash
-        run: |
-          bash "$REPOSITORY_ROOT/.github/scripts/prepare-actionfit-private-package-access.sh"
+        run: bash "$REPOSITORY_ROOT/.github/scripts/prepare-actionfit-private-package-access.sh"
 
       - name: Ensure Unity editor and Android modules
+        if: steps.detect.outputs.should_build == 'true' && (steps.detect.outputs.platform == 'Android' || steps.detect.outputs.platform == 'Both')
         shell: bash
         env:
           BUILD_PLATFORM: AOS
           BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
-          BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
-          BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
-          SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
+          BUILD_VERSION: ${{ steps.detect.outputs.build_version }}
+          BUILD_BUNDLE_NO: ${{ steps.detect.outputs.bundle_no }}
+          SLACK_BUILD_MENTIONS: ${{ steps.detect.outputs.slack_mentions }}
           BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          bash "$REPOSITORY_ROOT/.github/scripts/ensure-unity-editor-modules.sh" Android
+        run: bash "$REPOSITORY_ROOT/.github/scripts/ensure-unity-editor-modules.sh" Android
+
+      - name: Ensure Unity editor and iOS modules
+        if: steps.detect.outputs.should_build == 'true' && (steps.detect.outputs.platform == 'iOS' || steps.detect.outputs.platform == 'Both')
+        shell: bash
+        env:
+          BUILD_PLATFORM: iOS
+          BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
+          BUILD_VERSION: ${{ steps.detect.outputs.build_version }}
+          BUILD_BUNDLE_NO: ${{ steps.detect.outputs.bundle_no }}
+          SLACK_BUILD_MENTIONS: ${{ steps.detect.outputs.slack_mentions }}
+          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash "$REPOSITORY_ROOT/.github/scripts/ensure-unity-editor-modules.sh" iOS
 
       - name: Resolve Unity editor
         id: unity
+        if: steps.detect.outputs.should_build == 'true'
+        shell: bash
+        run: bash "$REPOSITORY_ROOT/.github/scripts/resolve-unity-editor.sh"
+
+      - name: Check runner-local Unity Library
+        id: local_library
+        if: steps.detect.outputs.should_build == 'true'
         shell: bash
         run: |
-          bash "$REPOSITORY_ROOT/.github/scripts/resolve-unity-editor.sh"
+          if [ -f "$UNITY_LIBRARY_DIR/SourceAssetDB" ]; then
+            echo "restore=false" >> "$GITHUB_OUTPUT"
+            echo "Using runner-local Unity Library: $UNITY_LIBRARY_DIR"
+          else
+            echo "restore=true" >> "$GITHUB_OUTPUT"
+            echo "Runner-local Unity Library is cold; trying remote cache fallback."
+          fi
 
-      - name: Restore Unity Library cache
+      - name: Restore Android Unity Library cold cache
+        if: steps.local_library.outputs.restore == 'true' && steps.detect.outputs.platform == 'Android'
         uses: actions/cache/restore@v4
         with:
           path: ${{ steps.paths.outputs.unity_library_dir }}
@@ -239,307 +207,8 @@ jobs:
           restore-keys: |
             Library-${{ steps.paths.outputs.unity_project_key }}-macOS-Android-${{ steps.unity.outputs.unity_version }}-
 
-      - name: Prepare Android BuildCommit request
-        shell: bash
-        run: |
-          ruby <<'RUBY'
-          require "json"
-
-          path = ENV.fetch("BUILD_REQUEST_PATH")
-          request = JSON.parse(File.read(path))
-          request["platform"] = 1
-          %w[
-            iosDevelopmentTeamId
-            googlePlayServiceAccountJson
-            appStoreConnectApiKeyId
-            appStoreConnectIssuerId
-            appStoreConnectApiKeyP8
-          ].each { |field| request.delete(field) }
-
-          kind = request["buildKind"].to_s
-          if ["", "0", "3", "4", "Default", "iOSXcodeProject", "AndroidAabAndiOSXcodeProject"].include?(kind)
-            request["buildKind"] = 2
-          end
-
-          File.write(path, JSON.pretty_generate(request))
-          puts "Prepared Android BuildCommit request: platform=#{request["platform"]}, buildKind=#{request["buildKind"]}"
-          RUBY
-
-      - name: Resolve local runner secrets
-        id: local_secrets
-        shell: bash
-        env:
-          DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
-          UPLOAD_TARGET: ${{ needs.detect.outputs.upload_target }}
-          IOS_BUNDLE_ID_FROM_REQUEST: ${{ needs.detect.outputs.ios_bundle_id }}
-        run: |
-          set -euo pipefail
-
-          bash "$REPOSITORY_ROOT/.github/scripts/validate-local-runner-secrets.sh" \
-            "$DISTRIBUTION_PROFILE" \
-            Android \
-            "$UPLOAD_TARGET"
-
-      - name: Prepare Android target and build symbols
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$UNITY_LOG_DIR"
-
-          unity_status=0
-          "$UNITY_EXECUTABLE" \
-            -batchmode \
-            -quit \
-            -projectPath "$UNITY_PROJECT_DIR" \
-            -buildTarget Android \
-            -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.SwitchToRequestBuildTarget \
-            -logFile "$UNITY_LOG_DIR/unity-android-switch.log" || unity_status=$?
-
-          if [ "$unity_status" -ne 0 ]; then
-            echo "::group::Unity Android target switch log tail"
-            tail -n 400 "$UNITY_LOG_DIR/unity-android-switch.log" || true
-            echo "::endgroup::"
-            exit "$unity_status"
-          fi
-
-      - name: Build signed Android from BuildCommit request
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$UNITY_LOG_DIR"
-
-          unity_status=0
-          "$UNITY_EXECUTABLE" \
-            -batchmode \
-            -quit \
-            -projectPath "$UNITY_PROJECT_DIR" \
-            -buildTarget Android \
-            -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest \
-            -logFile "$UNITY_LOG_DIR/unity-android.log" || unity_status=$?
-
-          if [ "$unity_status" -ne 0 ]; then
-            echo "::group::Unity Android log tail"
-            tail -n 400 "$UNITY_LOG_DIR/unity-android.log" || true
-            echo "::endgroup::"
-            exit "$unity_status"
-          fi
-
-      - name: Locate AAB for upload
-        id: aab
-        if: needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
-        shell: bash
-        run: |
-          set -euo pipefail
-          aab_path="$(find "$UNITY_BUILD_DIR" -name '*.aab' -print -quit)"
-          if [ -z "$aab_path" ]; then
-            echo "::error::No .aab found under $UNITY_BUILD_DIR. Google Play upload requires an AAB build (buildKind must not be AndroidApk)."
-            exit 1
-          fi
-          upload_dir="$ANDROID_UPLOAD_DIR"
-          upload_path="$upload_dir/upload.aab"
-          mkdir -p "$upload_dir"
-          cp "$aab_path" "$upload_path"
-          echo "path=$upload_path" >> "$GITHUB_OUTPUT"
-          echo "Found AAB: $aab_path"
-          echo "Prepared upload AAB: $upload_path"
-
-          aab_dir="$(dirname "$aab_path")"
-          debug_symbols_path="$(find "$aab_dir" -maxdepth 1 -type f \( -iname '*symbols*.zip' -o -iname '*symbol*.zip' \) -print -quit)"
-          if [ -z "$debug_symbols_path" ]; then
-            debug_symbols_path="$(find "$UNITY_LIBRARY_DIR/Bee/Android/Prj/IL2CPP/Gradle/launcher/build/outputs/native-debug-symbols" -name '*.zip' -print -quit 2>/dev/null || true)"
-          fi
-
-          if [ -n "$debug_symbols_path" ]; then
-            debug_symbols_upload_path="$upload_dir/native-debug-symbols.zip"
-            cp "$debug_symbols_path" "$debug_symbols_upload_path"
-            echo "debug_symbols_path=$debug_symbols_upload_path" >> "$GITHUB_OUTPUT"
-            echo "Found debug symbols: $debug_symbols_path"
-            echo "Prepared debug symbols: $debug_symbols_upload_path"
-          else
-            echo "debug_symbols_path=" >> "$GITHUB_OUTPUT"
-            echo "::warning::No Android debug symbols zip found near the AAB or in Unity's Gradle native-debug-symbols output."
-          fi
-
-          mapping_path="$(find "$aab_dir" -maxdepth 1 -type f \( -name '*mapping.txt' -o -name 'mapping.txt' \) -print -quit)"
-          if [ -n "$mapping_path" ]; then
-            mapping_upload_path="$upload_dir/mapping.txt"
-            cp "$mapping_path" "$mapping_upload_path"
-            echo "mapping_path=$mapping_upload_path" >> "$GITHUB_OUTPUT"
-            echo "Found mapping file: $mapping_path"
-            echo "Prepared mapping file: $mapping_upload_path"
-          else
-            echo "mapping_path=" >> "$GITHUB_OUTPUT"
-            echo "::warning::No Android mapping.txt found near the AAB."
-          fi
-
-      - name: Prepare Google Play profile config
-        id: google_play_config
-        if: needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
-        shell: bash
-        env:
-          ANDROID_PACKAGE_NAME: ${{ needs.detect.outputs.android_package_name }}
-        run: |
-          set -euo pipefail
-          if [ -z "${ANDROID_PACKAGE_NAME:-}" ]; then
-            echo "::error::Missing Google Play package name from BuildCommit request androidPackageName"
-            exit 1
-          fi
-
-          test -r "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH" || {
-            echo "::error::Google Play service account JSON is not readable: $GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH"
-            exit 1
-          }
-          echo "service_account_json_path=$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH" >> "$GITHUB_OUTPUT"
-          echo "Using Google Play package name from BuildCommit request: $ANDROID_PACKAGE_NAME"
-          echo "Using Google Play service account from local runner secret bundle"
-
-      - name: Upload to Google Play (internal track)
-        if: needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
-        uses: r0adkll/upload-google-play@v1
-        with:
-          serviceAccountJson: ${{ steps.google_play_config.outputs.service_account_json_path }}
-          packageName: ${{ needs.detect.outputs.android_package_name }}
-          releaseFiles: ${{ steps.aab.outputs.path }}
-          mappingFile: ${{ steps.aab.outputs.mapping_path }}
-          debugSymbols: ${{ steps.aab.outputs.debug_symbols_path }}
-          tracks: internal
-          status: completed
-
-      - name: Upload Android AAB artifact
-        if: always() && steps.paths.outcome == 'success'
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: Android-BuildCommit-AAB
-          path: |
-            ${{ steps.paths.outputs.android_upload_dir }}/*.aab
-            ${{ steps.paths.outputs.android_upload_dir }}/*.zip
-            ${{ steps.paths.outputs.android_upload_dir }}/mapping.txt
-            ${{ steps.paths.outputs.unity_build_dir }}/**/*.aab
-            ${{ steps.paths.outputs.unity_build_dir }}/**/*.zip
-            ${{ steps.paths.outputs.unity_build_dir }}/**/*mapping.txt
-          if-no-files-found: warn
-          compression-level: 0
-
-      - name: Cleanup old Android build artifacts
-        if: success() && (needs.detect.outputs.upload_target == 'GooglePlayInternal' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight')
-        continue-on-error: true
-        shell: bash
-        env:
-          BUILD_CLEANUP_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
-          BUILD_CLEANUP_BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
-          BUILD_CLEANUP_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
-        run: |
-          if [ ! -f "$REPOSITORY_ROOT/.github/scripts/cleanup-old-build-artifacts.sh" ]; then
-            echo "::warning::Build cleanup script not found; skipping."
-            exit 0
-          fi
-
-          bash "$REPOSITORY_ROOT/.github/scripts/cleanup-old-build-artifacts.sh"
-
-      - name: Upload Android logs
-        if: always() && steps.paths.outcome == 'success'
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: Android-BuildCommit-Logs
-          path: |
-            ${{ steps.paths.outputs.unity_log_dir }}/**
-          if-no-files-found: warn
-
-      - name: Notify Slack Android result
-        if: always()
-        shell: bash
-        env:
-          BUILD_JOB_STATUS: ${{ job.status }}
-          BUILD_PLATFORM: AOS
-          BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
-          BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
-          BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
-          BUILD_DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
-          SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
-          BUILD_SHORT_SHA: ${{ github.sha }}
-          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
-        run: |
-          if [ ! -f "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh" ]; then
-            echo "::warning::Slack notification script not found; skipping."
-            exit 0
-          fi
-
-          bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"
-
-  ios-build:
-    name: iOS Build & Deploy
-    needs: detect
-    if: needs.detect.outputs.should_build == 'true' && (needs.detect.outputs.platform == 'iOS' || needs.detect.outputs.platform == 'Both')
-    runs-on: [self-hosted, macOS, unity-mobile]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          lfs: true
-
-      - name: Resolve Unity project
-        id: paths
-        shell: bash
-        env:
-          UNITY_PROJECT_PATH: ${{ needs.detect.outputs.unity_project_path }}
-        run: |
-          bash "$GITHUB_WORKSPACE/.github/scripts/resolve-unity-project.sh"
-
-      - name: Mark iOS build start
-        id: build_timer
-        shell: bash
-        run: |
-          echo "started_at_epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
-
-      - name: Notify Slack iOS start
-        shell: bash
-        env:
-          BUILD_JOB_STATUS: start
-          BUILD_PLATFORM: iOS
-          BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
-          BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
-          BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
-          BUILD_DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
-          SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
-          BUILD_SHORT_SHA: ${{ github.sha }}
-          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
-        run: |
-          if [ ! -f "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh" ]; then
-            echo "::warning::Slack notification script not found; skipping."
-            exit 0
-          fi
-
-          bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"
-
-      - name: Prepare private package access
-        shell: bash
-        run: |
-          bash "$REPOSITORY_ROOT/.github/scripts/prepare-actionfit-private-package-access.sh"
-
-      - name: Ensure Unity editor and iOS modules
-        shell: bash
-        env:
-          BUILD_PLATFORM: iOS
-          BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
-          BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
-          BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
-          SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
-          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          bash "$REPOSITORY_ROOT/.github/scripts/ensure-unity-editor-modules.sh" iOS
-
-      - name: Resolve Unity editor
-        id: unity
-        shell: bash
-        run: |
-          bash "$REPOSITORY_ROOT/.github/scripts/resolve-unity-editor.sh"
-
-      - name: Restore Unity Library cache
+      - name: Restore iOS Unity Library cold cache
+        if: steps.local_library.outputs.restore == 'true' && steps.detect.outputs.platform == 'iOS'
         uses: actions/cache/restore@v4
         with:
           path: ${{ steps.paths.outputs.unity_library_dir }}
@@ -547,640 +216,148 @@ jobs:
           restore-keys: |
             Library-${{ steps.paths.outputs.unity_project_key }}-macOS-iOS-${{ steps.unity.outputs.unity_version }}-
 
-      - name: Prepare iOS BuildCommit request
-        shell: bash
-        run: |
-          ruby <<'RUBY'
-          require "json"
+      - name: Restore latest mobile Unity Library cold cache
+        if: steps.local_library.outputs.restore == 'true' && (steps.detect.outputs.platform == 'Both' || steps.detect.outputs.platform == 'Current')
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.paths.outputs.unity_library_dir }}
+          key: Library-${{ steps.paths.outputs.unity_project_key }}-macOS-Affinity-${{ steps.unity.outputs.unity_version }}-${{ steps.paths.outputs.unity_cache_input_hash }}
+          restore-keys: |
+            Library-${{ steps.paths.outputs.unity_project_key }}-macOS-
 
-          path = ENV.fetch("BUILD_REQUEST_PATH")
-          request = JSON.parse(File.read(path))
-          request["platform"] = 2
-          request["buildKind"] = 3
-          %w[
-            iosDevelopmentTeamId
-            googlePlayServiceAccountJson
-            appStoreConnectApiKeyId
-            appStoreConnectIssuerId
-            appStoreConnectApiKeyP8
-          ].each { |field| request.delete(field) }
-
-          File.write(path, JSON.pretty_generate(request))
-          puts "Prepared iOS BuildCommit request: platform=#{request["platform"]}, buildKind=#{request["buildKind"]}"
-          RUBY
-
-      - name: Check Xcode tools
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcodebuild -version
-          xcodebuild -showsdks | grep -q "iphoneos" || {
-            echo "::error::iOS SDK is not available in DEVELOPER_DIR=$DEVELOPER_DIR"
-            exit 1
-          }
-
-      - name: Resolve local runner secrets
-        id: local_secrets
-        shell: bash
-        env:
-          DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
-          UPLOAD_TARGET: ${{ needs.detect.outputs.upload_target }}
-        run: |
-          set -euo pipefail
-
-          bash "$REPOSITORY_ROOT/.github/scripts/validate-local-runner-secrets.sh" \
-            "$DISTRIBUTION_PROFILE" \
-            iOS \
-            "$UPLOAD_TARGET"
-
-      - name: Prepare iOS target and build symbols
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$UNITY_LOG_DIR"
-
-          unity_status=0
-          "$UNITY_EXECUTABLE" \
-            -batchmode \
-            -quit \
-            -projectPath "$UNITY_PROJECT_DIR" \
-            -buildTarget iOS \
-            -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.SwitchToRequestBuildTarget \
-            -logFile "$UNITY_LOG_DIR/unity-ios-switch.log" || unity_status=$?
-
-          if [ "$unity_status" -ne 0 ]; then
-            echo "::group::Unity iOS target switch log tail"
-            tail -n 400 "$UNITY_LOG_DIR/unity-ios-switch.log" || true
-            echo "::endgroup::"
-            exit "$unity_status"
-          fi
-
-      - name: Clear iOS Scriptable Build Pipeline cache
-        shell: bash
-        run: |
-          set -euo pipefail
-          cache_path="$UNITY_LIBRARY_DIR/BuildCache"
-          if [ -d "$cache_path" ]; then
-            du -sh "$cache_path" || true
-            rm -rf "$cache_path"
-            echo "Cleared Unity Scriptable Build Pipeline cache: $cache_path"
-          else
-            echo "No Unity Scriptable Build Pipeline cache found at: $cache_path"
-          fi
-
-      - name: Build iOS Xcode project from BuildCommit request
+      - name: Prepare build sequence and first target
+        id: sequence
+        if: steps.detect.outputs.should_build == 'true'
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$UNITY_LOG_DIR"
           unity_status=0
-          "$UNITY_EXECUTABLE" \
-            -batchmode \
-            -quit \
-            -projectPath "$UNITY_PROJECT_DIR" \
-            -buildTarget iOS \
-            -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest \
-            -logFile "$UNITY_LOG_DIR/unity-ios.log" || unity_status=$?
+          BUILD_SEQUENCE_OUTPUT_PATH="$GITHUB_OUTPUT" \
+            "$UNITY_EXECUTABLE" \
+              -batchmode \
+              -quit \
+              -projectPath "$UNITY_PROJECT_DIR" \
+              -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.PrepareBuildSequence \
+              -logFile "$UNITY_LOG_DIR/unity-build-sequence.log" || unity_status=$?
 
           if [ "$unity_status" -ne 0 ]; then
-            echo "::group::Unity iOS log tail"
-            tail -n 400 "$UNITY_LOG_DIR/unity-ios.log" || true
+            echo "::group::Unity build sequence log tail"
+            tail -n 400 "$UNITY_LOG_DIR/unity-build-sequence.log" || true
             echo "::endgroup::"
             exit "$unity_status"
           fi
 
-      - name: Install iOS CocoaPods dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ ! -f "$IOS_XCODE_BUILD_PATH/Podfile" ]; then
-            echo "No Podfile found under $IOS_XCODE_BUILD_PATH; skipping CocoaPods install."
-            exit 0
-          fi
-
-          ensure_pod() {
-            if command -v pod >/dev/null && pod --version >/dev/null 2>&1; then
-              return 0
-            fi
-
-            if [ ! -x /opt/homebrew/opt/ruby/bin/gem ]; then
-              echo "::error::CocoaPods is not working and Homebrew Ruby gem was not found."
-              return 1
-            fi
-
-            local pod_bin=""
-            local pod_gem_home=""
-            pod_bin="$(command -v pod || true)"
-            if [ -n "$pod_bin" ] && [ -f "$pod_bin" ]; then
-              pod_gem_home="$(sed -n 's/^GEM_HOME="\([^"]*\)".*/\1/p' "$pod_bin" | head -1)"
-            fi
-
-            if [ -z "$pod_gem_home" ]; then
-              echo "::error::CocoaPods is not working and its GEM_HOME could not be resolved."
-              return 1
-            fi
-
-            echo "::warning::CocoaPods is installed but not executable. Installing missing ffi gem into $pod_gem_home."
-            GEM_HOME="$pod_gem_home" /opt/homebrew/opt/ruby/bin/gem install ffi --no-document
-            pod --version >/dev/null
-          }
-
-          ensure_pod
-          pod --version
-
-          (
-            cd "$IOS_XCODE_BUILD_PATH"
-            pod install --repo-update
-          )
-
-          test -d "$IOS_XCODE_BUILD_PATH/Unity-iPhone.xcworkspace" || {
-            echo "::error::CocoaPods did not create Unity-iPhone.xcworkspace"
-            exit 1
-          }
-
-      - name: Prepare App Store Connect API key
-        id: asc_key
-        if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
-        shell: bash
-        env:
-          IOS_BUNDLE_ID_FROM_REQUEST: ${{ needs.detect.outputs.ios_bundle_id }}
-        run: |
-          set -euo pipefail
-          ruby <<'RUBY'
-          require "json"
-
-          api_key_id = ENV.fetch("APP_STORE_CONNECT_API_KEY_ID", "").strip
-          issuer_id = ENV.fetch("APP_STORE_CONNECT_ISSUER_ID", "").strip
-          p8_path = ENV.fetch("APP_STORE_CONNECT_API_KEY_P8_PATH", "").strip
-          bundle_id = ENV.fetch("IOS_BUNDLE_ID_FROM_REQUEST", "").strip
-          team_id = ENV.fetch("IOS_DEVELOPMENT_TEAM_ID", "").strip
-
-          missing = []
-          missing << "APP_STORE_CONNECT_API_KEY_ID" if api_key_id.empty?
-          missing << "APP_STORE_CONNECT_ISSUER_ID" if issuer_id.empty?
-          missing << "APP_STORE_CONNECT_API_KEY_P8_PATH" if p8_path.empty?
-          missing << "IOS_BUNDLE_ID" if bundle_id.empty?
-          missing << "IOS_DEVELOPMENT_TEAM_ID" if team_id.empty?
-
-          unless missing.empty?
-            puts "::error::Missing iOS/TestFlight local runner configuration: #{missing.join(", ")}"
-            exit 1
-          end
-
-          unless File.readable?(p8_path)
-            puts "::error::App Store Connect .p8 is not readable: #{p8_path}"
-            exit 1
-          end
-
-          key = File.read(p8_path)
-          api_key_json_path = File.join(ENV.fetch("RUNNER_TEMP"), "app_store_connect_api_key.json")
-
-          File.write(
-            api_key_json_path,
-            JSON.pretty_generate(
-              {
-                key_id: api_key_id,
-                issuer_id: issuer_id,
-                key: key,
-                duration: 1200,
-                in_house: false
-              }
-            )
-          )
-          File.chmod(0600, api_key_json_path)
-
-          File.open(ENV.fetch("GITHUB_ENV"), "a") do |env|
-            env.puts("APP_STORE_CONNECT_API_KEY_ID=#{api_key_id}")
-            env.puts("APP_STORE_CONNECT_ISSUER_ID=#{issuer_id}")
-            env.puts("IOS_BUNDLE_ID=#{bundle_id}")
-            env.puts("IOS_DEVELOPMENT_TEAM_ID=#{team_id}")
-          end
-
-          File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |output|
-            output.puts("p8_path=#{p8_path}")
-            output.puts("api_key_json_path=#{api_key_json_path}")
-          end
-
-          puts "Using App Store Connect credentials from local runner secret bundle"
-          RUBY
-
-      - name: Resolve fastlane
-        if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if command -v fastlane >/dev/null; then
-            fastlane_cmd="$(command -v fastlane)"
-          elif [ -x /opt/homebrew/bin/fastlane ]; then
-            fastlane_cmd="/opt/homebrew/bin/fastlane"
-          elif [ -x /usr/local/bin/fastlane ]; then
-            fastlane_cmd="/usr/local/bin/fastlane"
-          else
-            echo "::error::fastlane is required on the self-hosted macOS runner"
-            exit 1
-          fi
-
-          "$fastlane_cmd" --version
-          echo "FASTLANE_CMD=$fastlane_cmd" >> "$GITHUB_ENV"
-
-      - name: Prepare iOS signing assets
-        if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
-        shell: bash
-        run: |
-          set -euo pipefail
-          keychain_is_temp=false
-          if [ -n "${IOS_KEYCHAIN_PATH:-}" ]; then
-            keychain_path="$IOS_KEYCHAIN_PATH"
-            if [ -z "${IOS_KEYCHAIN_PASSWORD:-}" ]; then
-              echo "::error::IOS_KEYCHAIN_PASSWORD is required when IOS_KEYCHAIN_PATH is set"
-              exit 1
-            fi
-            keychain_password="$IOS_KEYCHAIN_PASSWORD"
-          else
-            keychain_is_temp=true
-            keychain_path="$RUNNER_TEMP/ios-signing.keychain-db"
-            keychain_password="${IOS_KEYCHAIN_PASSWORD:-$(uuidgen)-$(uuidgen)}"
-          fi
-
-          if [ -z "${IOS_DISTRIBUTION_CERTIFICATE_P12_PATH:-}" ] || [ ! -r "$IOS_DISTRIBUTION_CERTIFICATE_P12_PATH" ]; then
-            echo "::error::IOS_DISTRIBUTION_CERTIFICATE_P12_PATH is not readable: ${IOS_DISTRIBUTION_CERTIFICATE_P12_PATH:-}"
-            exit 1
-          fi
-
-          if [ -z "${IOS_DISTRIBUTION_CERTIFICATE_PASSWORD:-}" ]; then
-            echo "::error::IOS_DISTRIBUTION_CERTIFICATE_PASSWORD is required in the local runner secret bundle"
-            exit 1
-          fi
-
-          previous_default_keychain_file="$RUNNER_TEMP/ios-previous-default-keychain.txt"
-          previous_keychains_file="$RUNNER_TEMP/ios-previous-keychains.txt"
-          security default-keychain -d user | sed -E 's/^ *"?//; s/"?$//' > "$previous_default_keychain_file" || true
-          security list-keychains -d user | sed -E 's/^ *"?//; s/"?$//' > "$previous_keychains_file" || true
-
-          {
-            echo "IOS_KEYCHAIN_PATH=$keychain_path"
-            echo "IOS_SIGNING_KEYCHAIN_IS_TEMP=$keychain_is_temp"
-            echo "IOS_PREVIOUS_DEFAULT_KEYCHAIN_FILE=$previous_default_keychain_file"
-            echo "IOS_PREVIOUS_KEYCHAINS_FILE=$previous_keychains_file"
-          } >> "$GITHUB_ENV"
-
-          echo "::add-mask::$keychain_password"
-          echo "::add-mask::$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD"
-
-          if [ "$keychain_is_temp" = true ]; then
-            rm -f "$keychain_path"
-            security create-keychain -p "$keychain_password" "$keychain_path"
-          elif [ ! -f "$keychain_path" ]; then
-            security create-keychain -p "$keychain_password" "$keychain_path"
-          fi
-
-          previous_keychains=()
-          if [ -r "$previous_keychains_file" ]; then
-            while IFS= read -r previous_keychain; do
-              if [ -n "$previous_keychain" ] && [ "$previous_keychain" != "$keychain_path" ]; then
-                previous_keychains+=("$previous_keychain")
-              fi
-            done < "$previous_keychains_file"
-          fi
-
-          security default-keychain -d user -s "$keychain_path"
-          security list-keychains -d user -s "$keychain_path" "${previous_keychains[@]}"
-          security unlock-keychain -p "$keychain_password" "$keychain_path"
-          security set-keychain-settings -lut 21600 "$keychain_path"
-
-          security import "$IOS_DISTRIBUTION_CERTIFICATE_P12_PATH" \
-            -k "$keychain_path" \
-            -P "$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign \
-            -T /usr/bin/security \
-            -T /usr/bin/xcodebuild >/dev/null
-
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s \
-            -k "$keychain_password" \
-            "$keychain_path" >/dev/null
-
-          identity_line="$(security find-identity -v -p codesigning "$keychain_path" | grep -F "Apple Distribution:" | grep -F "($IOS_DEVELOPMENT_TEAM_ID)" | head -1 || true)"
-          if [ -z "$identity_line" ]; then
-            echo "::error::Apple Distribution signing identity for team ${IOS_DEVELOPMENT_TEAM_ID} is required in IOS_DISTRIBUTION_CERTIFICATE_P12_PATH"
-            security find-identity -v -p codesigning "$keychain_path" || true
-            exit 1
-          fi
-
-          identity_sha="$(printf '%s\n' "$identity_line" | awk '{print $2}')"
-          identity_name="$(printf '%s\n' "$identity_line" | sed -E 's/^.*"([^"]+)".*$/\1/')"
-
-          if [ -z "${IOS_APP_STORE_PROVISIONING_PROFILE_PATH:-}" ]; then
-            echo "::error::IOS_APP_STORE_PROVISIONING_PROFILE_PATH was not resolved from the local runner secret bundle"
-            exit 1
-          fi
-
-          if [ ! -r "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH" ]; then
-            if [ "${IOS_PROVISIONING_PROFILE_AUTO_GENERATE:-true}" != "true" ]; then
-              echo "::error::IOS_APP_STORE_PROVISIONING_PROFILE_PATH is not readable and auto generation is disabled: $IOS_APP_STORE_PROVISIONING_PROFILE_PATH"
-              exit 1
-            fi
-
-            profile_output_dir="$(dirname "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH")"
-            profile_output_file="$(basename "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH")"
-            portal_profile_name="${IOS_APP_STORE_PROVISIONING_PROFILE_NAME:-AppStore_${IOS_BUNDLE_ID}}"
-            mkdir -p "$profile_output_dir"
-
-            echo "::warning::App Store provisioning profile is missing. Attempting fastlane sigh generation: $IOS_APP_STORE_PROVISIONING_PROFILE_PATH"
-            "$FASTLANE_CMD" sigh \
-              --api_key_path "${{ steps.asc_key.outputs.api_key_json_path }}" \
-              --app_identifier "$IOS_BUNDLE_ID" \
-              --team_id "$IOS_DEVELOPMENT_TEAM_ID" \
-              --provisioning_name "$portal_profile_name" \
-              --output_path "$profile_output_dir" \
-              --filename "$profile_output_file" \
-              --skip_install true \
-              --platform ios
-          fi
-
-          if [ ! -r "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH" ]; then
-            echo "::error::App Store provisioning profile is still not readable after local lookup/generation: $IOS_APP_STORE_PROVISIONING_PROFILE_PATH"
-            exit 1
-          fi
-
-          profile_plist="$RUNNER_TEMP/ios-app-store-profile.plist"
-          security cms -D -i "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH" > "$profile_plist"
-          profile_uuid="$(/usr/libexec/PlistBuddy -c 'Print UUID' "$profile_plist")"
-          profile_name="$(/usr/libexec/PlistBuddy -c 'Print Name' "$profile_plist")"
-          profile_app_id="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "$profile_plist")"
-          expected_app_id="${IOS_DEVELOPMENT_TEAM_ID}.${IOS_BUNDLE_ID}"
-
-          if [ "$profile_app_id" != "$expected_app_id" ]; then
-            echo "::error::App Store provisioning profile application-identifier mismatch. expected=${expected_app_id}, actual=${profile_app_id}"
-            exit 1
-          fi
-
-          ruby -ropenssl -rbase64 -rrexml/document -e '
-            plist = File.read(ARGV.fetch(0))
-            expected_sha = ARGV.fetch(1).delete(":").upcase
-            doc = REXML::Document.new(plist)
-            certs = nil
-            REXML::XPath.each(doc, "/plist/dict/key") do |key|
-              if key.text == "DeveloperCertificates"
-                certs = key.next_element
-                break
-              end
-            end
-            abort("DeveloperCertificates not found in provisioning profile") unless certs
-            matched = false
-            certs.elements.each("data") do |node|
-              der = Base64.decode64(node.text.to_s)
-              sha = OpenSSL::Digest::SHA1.hexdigest(OpenSSL::X509::Certificate.new(der).to_der).upcase
-              matched ||= sha == expected_sha
-            end
-            exit(matched ? 0 : 1)
-          ' "$profile_plist" "$identity_sha" || {
-            echo "::error::App Store provisioning profile does not include signing certificate: $identity_name ($identity_sha)"
-            exit 1
-          }
-
-          profile_install_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "$profile_install_dir"
-          installed_profile_path="$profile_install_dir/$profile_uuid.mobileprovision"
-          cp "$IOS_APP_STORE_PROVISIONING_PROFILE_PATH" "$installed_profile_path"
-
-          {
-            echo "IOS_DISTRIBUTION_SIGNING_IDENTITY_SHA=$identity_sha"
-            echo "IOS_DISTRIBUTION_SIGNING_IDENTITY_NAME=$identity_name"
-            echo "IOS_APP_STORE_PROFILE_UUID=$profile_uuid"
-            echo "IOS_APP_STORE_PROFILE_NAME=$profile_name"
-            echo "IOS_APP_STORE_PROVISIONING_PROFILE_INSTALLED_PATH=$installed_profile_path"
-          } >> "$GITHUB_ENV"
-
-          echo "Installed Apple Distribution identity: $identity_name"
-          echo "Installed App Store provisioning profile: $profile_name ($profile_uuid)"
-          security find-identity -v -p codesigning "$keychain_path"
-
-      - name: Archive and export IPA
-        id: ipa
-        if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$UNITY_LOG_DIR" "$IOS_EXPORT_PATH" "$(dirname "$IOS_EXPORT_OPTIONS_PATH")"
-
-          if [ -d "$IOS_XCODE_BUILD_PATH/Unity-iPhone.xcworkspace" ]; then
-            xcode_container=(-workspace "$IOS_XCODE_BUILD_PATH/Unity-iPhone.xcworkspace")
-          else
-            xcode_container=(-project "$IOS_XCODE_BUILD_PATH/Unity-iPhone.xcodeproj")
-          fi
-
-          if ! security find-identity -v -p codesigning "$IOS_KEYCHAIN_PATH" | grep -F "$IOS_DISTRIBUTION_SIGNING_IDENTITY_SHA" >/dev/null; then
-            echo "::error::Apple Distribution signing identity for team ${IOS_DEVELOPMENT_TEAM_ID} is required on the runner"
-            security find-identity -v -p codesigning "$IOS_KEYCHAIN_PATH" || true
-            exit 1
-          fi
-
-          archive_once() {
-            local attempt="$1"
-            echo "xcodebuild archive attempt ${attempt}/2" | tee -a "$UNITY_LOG_DIR/xcode-archive.log"
-            xcodebuild "${xcode_container[@]}" \
-              -scheme Unity-iPhone \
-              -configuration Release \
-              -sdk iphoneos \
-              -destination "generic/platform=iOS" \
-              -archivePath "$IOS_ARCHIVE_PATH" \
-              DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM_ID" \
-              CODE_SIGN_STYLE=Manual \
-              CODE_SIGN_IDENTITY="$IOS_DISTRIBUTION_SIGNING_IDENTITY_NAME" \
-              PROVISIONING_PROFILE_APP="$IOS_APP_STORE_PROFILE_UUID" \
-              PROVISIONING_PROFILE_SPECIFIER_APP="$IOS_APP_STORE_PROFILE_NAME" \
-              OTHER_CODE_SIGN_FLAGS="--keychain $IOS_KEYCHAIN_PATH" \
-              archive 2>&1 | tee -a "$UNITY_LOG_DIR/xcode-archive.log"
-          }
-
-          reset_interface_builder() {
-            xcrun simctl list runtimes >/dev/null 2>&1 || true
-            pkill -x ibtoold >/dev/null 2>&1 || true
-          }
-
-          : > "$UNITY_LOG_DIR/xcode-archive.log"
-          archive_status=0
-          archive_once 1 || archive_status=$?
-
-          if [ "$archive_status" -ne 0 ] && grep -Eq "Command CompileXIB failed|ibtoold|Interface Builder" "$UNITY_LOG_DIR/xcode-archive.log"; then
-            echo "::warning::xcodebuild archive failed in the Interface Builder/XIB path. Resetting ibtoold and retrying once."
-            reset_interface_builder
-            rm -rf "$IOS_ARCHIVE_PATH"
-            archive_status=0
-            archive_once 2 || archive_status=$?
-          fi
-
-          if [ "$archive_status" -ne 0 ]; then
-            exit "$archive_status"
-          fi
-
-          rm -f "$IOS_EXPORT_OPTIONS_PATH"
-          /usr/libexec/PlistBuddy -c "Clear dict" "$IOS_EXPORT_OPTIONS_PATH"
-          /usr/libexec/PlistBuddy -c "Add :method string app-store-connect" "$IOS_EXPORT_OPTIONS_PATH"
-          /usr/libexec/PlistBuddy -c "Add :signingStyle string manual" "$IOS_EXPORT_OPTIONS_PATH"
-          /usr/libexec/PlistBuddy -c "Add :signingCertificate string $IOS_DISTRIBUTION_SIGNING_IDENTITY_NAME" "$IOS_EXPORT_OPTIONS_PATH"
-          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict" "$IOS_EXPORT_OPTIONS_PATH"
-          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$IOS_BUNDLE_ID string $IOS_APP_STORE_PROFILE_NAME" "$IOS_EXPORT_OPTIONS_PATH"
-          /usr/libexec/PlistBuddy -c "Add :stripSwiftSymbols bool true" "$IOS_EXPORT_OPTIONS_PATH"
-          /usr/libexec/PlistBuddy -c "Add :teamID string $IOS_DEVELOPMENT_TEAM_ID" "$IOS_EXPORT_OPTIONS_PATH"
-
-          copy_distribution_logs() {
-            local latest_logs=""
-            latest_logs="$(find "${TMPDIR:-/tmp}" -name '*.xcdistributionlogs' -type d -mmin -30 -print 2>/dev/null | sort | tail -1 || true)"
-            if [ -n "$latest_logs" ]; then
-              rm -rf "$UNITY_LOG_DIR/xcdistributionlogs"
-              cp -R "$latest_logs" "$UNITY_LOG_DIR/xcdistributionlogs"
-              echo "Copied Xcode distribution logs: $latest_logs"
-            fi
-          }
-
-          set +e
-          xcodebuild -exportArchive \
-            -archivePath "$IOS_ARCHIVE_PATH" \
-            -exportPath "$IOS_EXPORT_PATH" \
-            -exportOptionsPlist "$IOS_EXPORT_OPTIONS_PATH" \
-            2>&1 | tee "$UNITY_LOG_DIR/xcode-export.log"
-          export_status="${PIPESTATUS[0]}"
-          set -e
-          copy_distribution_logs
-
-          if [ "$export_status" -ne 0 ]; then
-            exit "$export_status"
-          fi
-
-          ipa_path="$(find "$IOS_EXPORT_PATH" -name '*.ipa' -print -quit)"
-          if [ -z "$ipa_path" ]; then
-            echo "::error::No .ipa found under $IOS_EXPORT_PATH"
-            exit 1
-          fi
-
-          echo "path=$ipa_path" >> "$GITHUB_OUTPUT"
-          echo "Found IPA: $ipa_path"
-
-      - name: Upload to TestFlight
-        if: needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          "$FASTLANE_CMD" pilot upload \
-            --api_key_path "${{ steps.asc_key.outputs.api_key_json_path }}" \
-            --app_identifier "$IOS_BUNDLE_ID" \
-            --ipa "${{ steps.ipa.outputs.path }}" \
-            --skip_waiting_for_build_processing
-
-      - name: Cleanup iOS signing assets
-        if: always() && (needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight')
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -n "${IOS_APP_STORE_PROVISIONING_PROFILE_INSTALLED_PATH:-}" ]; then
-            rm -f "$IOS_APP_STORE_PROVISIONING_PROFILE_INSTALLED_PATH"
-          fi
-          if [ "${IOS_SIGNING_KEYCHAIN_IS_TEMP:-false}" = "true" ] && [ -n "${IOS_KEYCHAIN_PATH:-}" ]; then
-            restored_keychains=()
-            if [ -n "${IOS_PREVIOUS_KEYCHAINS_FILE:-}" ] && [ -r "$IOS_PREVIOUS_KEYCHAINS_FILE" ]; then
-              while IFS= read -r previous_keychain; do
-                if [ -n "$previous_keychain" ] && [ -e "$previous_keychain" ]; then
-                  restored_keychains+=("$previous_keychain")
-                fi
-              done < "$IOS_PREVIOUS_KEYCHAINS_FILE"
-            fi
-
-            if [ "${#restored_keychains[@]}" -eq 0 ]; then
-              for fallback_keychain in \
-                "$HOME/Library/Keychains/login.keychain-db" \
-                "$HOME/Library/Keychains/login_renamed_1.keychain-db"; do
-                if [ -e "$fallback_keychain" ]; then
-                  restored_keychains+=("$fallback_keychain")
-                  break
-                fi
-              done
-            fi
-
-            if [ "${#restored_keychains[@]}" -gt 0 ]; then
-              security list-keychains -d user -s "${restored_keychains[@]}" >/dev/null 2>&1 || true
-            fi
-
-            if [ -n "${IOS_PREVIOUS_DEFAULT_KEYCHAIN_FILE:-}" ] && [ -r "$IOS_PREVIOUS_DEFAULT_KEYCHAIN_FILE" ]; then
-              previous_default_keychain="$(sed -n '1p' "$IOS_PREVIOUS_DEFAULT_KEYCHAIN_FILE")"
-              if [ -n "$previous_default_keychain" ] && [ -e "$previous_default_keychain" ]; then
-                security default-keychain -d user -s "$previous_default_keychain" >/dev/null 2>&1 || true
-              elif [ "${#restored_keychains[@]}" -gt 0 ]; then
-                security default-keychain -d user -s "${restored_keychains[0]}" >/dev/null 2>&1 || true
-              fi
-            elif [ "${#restored_keychains[@]}" -gt 0 ]; then
-              security default-keychain -d user -s "${restored_keychains[0]}" >/dev/null 2>&1 || true
-            fi
-
-            security delete-keychain "$IOS_KEYCHAIN_PATH" >/dev/null 2>&1 || true
-          fi
-
-      - name: Upload iOS app artifact
-        if: success()
+      - name: Build Android first
+        id: android_first
+        if: steps.sequence.outputs.first == 'Android'
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/build-android
         with:
-          name: iOS-BuildCommit-App
-          path: |
-            ${{ steps.paths.outputs.ios_export_path }}/**/*.ipa
-            ${{ steps.paths.outputs.ios_export_path }}/*.plist
-            ${{ steps.paths.outputs.unity_log_dir }}/**
-            ${{ steps.paths.outputs.ios_export_options_path }}
-          if-no-files-found: warn
-          retention-days: 7
+          request-path: ${{ steps.sequence.outputs.android_request_path }}
+          prepare-target: "false"
+          upload-target: ${{ steps.detect.outputs.upload_target }}
+          distribution-profile: ${{ steps.detect.outputs.distribution_profile }}
+          android-package-name: ${{ steps.detect.outputs.android_package_name }}
+          ios-bundle-id: ${{ steps.detect.outputs.ios_bundle_id }}
+          build-version: ${{ steps.detect.outputs.build_version }}
+          bundle-no: ${{ steps.detect.outputs.bundle_no }}
+          slack-mentions: ${{ steps.detect.outputs.slack_mentions }}
+          project-name: ${{ steps.paths.outputs.unity_project_name }}
 
-      - name: Cleanup old iOS build artifacts
-        if: success() && (needs.detect.outputs.upload_target == 'TestFlight' || needs.detect.outputs.upload_target == 'GooglePlayInternalAndTestFlight')
+      - name: Build iOS first
+        id: ios_first
+        if: steps.sequence.outputs.first == 'iOS'
         continue-on-error: true
-        shell: bash
-        env:
-          BUILD_CLEANUP_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
-          BUILD_CLEANUP_BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
-          BUILD_CLEANUP_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
-        run: |
-          if [ ! -f "$REPOSITORY_ROOT/.github/scripts/cleanup-old-build-artifacts.sh" ]; then
-            echo "::warning::Build cleanup script not found; skipping."
-            exit 0
-          fi
-
-          bash "$REPOSITORY_ROOT/.github/scripts/cleanup-old-build-artifacts.sh"
-
-      - name: Upload iOS diagnostic artifact
-        if: failure() && steps.paths.outcome == 'success'
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/build-ios
         with:
-          name: iOS-BuildCommit-Diagnostics
-          path: |
-            ${{ steps.paths.outputs.unity_log_dir }}/**
-            ${{ steps.paths.outputs.ios_export_options_path }}
-            ${{ steps.paths.outputs.ios_export_path }}/**
-          if-no-files-found: warn
-          retention-days: 7
+          request-path: ${{ steps.sequence.outputs.ios_request_path }}
+          prepare-target: "false"
+          upload-target: ${{ steps.detect.outputs.upload_target }}
+          distribution-profile: ${{ steps.detect.outputs.distribution_profile }}
+          ios-bundle-id: ${{ steps.detect.outputs.ios_bundle_id }}
+          build-version: ${{ steps.detect.outputs.build_version }}
+          bundle-no: ${{ steps.detect.outputs.bundle_no }}
+          slack-mentions: ${{ steps.detect.outputs.slack_mentions }}
+          project-name: ${{ steps.paths.outputs.unity_project_name }}
 
-      - name: Notify Slack iOS result
+      - name: Build Android second
+        id: android_second
+        if: always() && steps.sequence.outputs.second == 'Android'
+        continue-on-error: true
+        uses: ./.github/actions/build-android
+        with:
+          request-path: ${{ steps.sequence.outputs.android_request_path }}
+          prepare-target: "true"
+          upload-target: ${{ steps.detect.outputs.upload_target }}
+          distribution-profile: ${{ steps.detect.outputs.distribution_profile }}
+          android-package-name: ${{ steps.detect.outputs.android_package_name }}
+          ios-bundle-id: ${{ steps.detect.outputs.ios_bundle_id }}
+          build-version: ${{ steps.detect.outputs.build_version }}
+          bundle-no: ${{ steps.detect.outputs.bundle_no }}
+          slack-mentions: ${{ steps.detect.outputs.slack_mentions }}
+          project-name: ${{ steps.paths.outputs.unity_project_name }}
+
+      - name: Build iOS second
+        id: ios_second
+        if: always() && steps.sequence.outputs.second == 'iOS'
+        continue-on-error: true
+        uses: ./.github/actions/build-ios
+        with:
+          request-path: ${{ steps.sequence.outputs.ios_request_path }}
+          prepare-target: "true"
+          upload-target: ${{ steps.detect.outputs.upload_target }}
+          distribution-profile: ${{ steps.detect.outputs.distribution_profile }}
+          ios-bundle-id: ${{ steps.detect.outputs.ios_bundle_id }}
+          build-version: ${{ steps.detect.outputs.build_version }}
+          bundle-no: ${{ steps.detect.outputs.bundle_no }}
+          slack-mentions: ${{ steps.detect.outputs.slack_mentions }}
+          project-name: ${{ steps.paths.outputs.unity_project_name }}
+
+      - name: Final cleanup while preserving Unity Library
         if: always()
         shell: bash
-        env:
-          BUILD_JOB_STATUS: ${{ job.status }}
-          BUILD_PLATFORM: iOS
-          BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
-          BUILD_VERSION: ${{ needs.detect.outputs.build_version }}
-          BUILD_BUNDLE_NO: ${{ needs.detect.outputs.bundle_no }}
-          BUILD_DISTRIBUTION_PROFILE: ${{ needs.detect.outputs.distribution_profile }}
-          SLACK_BUILD_MENTIONS: ${{ needs.detect.outputs.slack_mentions }}
-          BUILD_SHORT_SHA: ${{ github.sha }}
-          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
         run: |
-          if [ ! -f "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh" ]; then
-            echo "::warning::Slack notification script not found; skipping."
-            exit 0
+          set -euo pipefail
+          if [ -n "${REPOSITORY_ROOT:-}" ]; then
+            find "$REPOSITORY_ROOT/.build/ci" -maxdepth 1 -type f -name 'build_request_*.json' -delete 2>/dev/null || true
+            rmdir "$REPOSITORY_ROOT/.build/ci" 2>/dev/null || true
           fi
+          if [ -n "${UNITY_PROJECT_DIR:-}" ]; then
+            find "$UNITY_PROJECT_DIR/.build/ci-keystore" -maxdepth 1 -type f -delete 2>/dev/null || true
+            rmdir "$UNITY_PROJECT_DIR/.build/ci-keystore" 2>/dev/null || true
+          fi
+          rm -f \
+            "${RUNNER_TEMP:-/tmp}/buildcommit-android-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.marker" \
+            "${RUNNER_TEMP:-/tmp}/app_store_connect_api_key.json" \
+            "${RUNNER_TEMP:-/tmp}/ios-app-store-profile.plist" \
+            "${RUNNER_TEMP:-/tmp}/ios-previous-default-keychain.txt" \
+            "${RUNNER_TEMP:-/tmp}/ios-previous-keychains.txt"
 
-          bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"
+      - name: Fail when a requested platform failed
+        if: always() && steps.detect.outputs.should_build == 'true'
+        shell: bash
+        env:
+          SEQUENCE_OUTCOME: ${{ steps.sequence.outcome }}
+          ANDROID_FIRST_OUTCOME: ${{ steps.android_first.outcome }}
+          IOS_FIRST_OUTCOME: ${{ steps.ios_first.outcome }}
+          ANDROID_SECOND_OUTCOME: ${{ steps.android_second.outcome }}
+          IOS_SECOND_OUTCOME: ${{ steps.ios_second.outcome }}
+        run: |
+          set -euo pipefail
+          failed=false
+          for outcome in \
+            "$SEQUENCE_OUTCOME" \
+            "$ANDROID_FIRST_OUTCOME" \
+            "$IOS_FIRST_OUTCOME" \
+            "$ANDROID_SECOND_OUTCOME" \
+            "$IOS_SECOND_OUTCOME"; do
+            if [ "$outcome" = "failure" ]; then
+              failed=true
+            fi
+          done
+
+          if [ "$failed" = true ]; then
+            echo "::error::One or more requested mobile build phases failed."
+            exit 1
+          fi

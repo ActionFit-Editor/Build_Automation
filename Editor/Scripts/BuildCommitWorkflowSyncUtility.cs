@@ -10,6 +10,8 @@ namespace ActionFit.BuildAutomation.Editor
     {
         internal const string TemplateRelativePath = "WorkflowTemplates/buildcommit-auto-build.yml";
         internal const string WorkflowRelativePath = ".github/workflows/buildcommit-auto-build.yml";
+        internal const string AndroidBuildActionRelativePath = ".github/actions/build-android/action.yml";
+        internal const string IosBuildActionRelativePath = ".github/actions/build-ios/action.yml";
         internal const string ValidateSecretsScriptRelativePath = ".github/scripts/validate-local-runner-secrets.sh";
         internal const string ResolveUnityProjectScriptRelativePath = ".github/scripts/resolve-unity-project.sh";
         internal const string ResolveUnityScriptRelativePath = ".github/scripts/resolve-unity-editor.sh";
@@ -22,6 +24,8 @@ namespace ActionFit.BuildAutomation.Editor
         private static readonly string[] PackageAssetRelativePaths =
         {
             TemplateRelativePath,
+            AndroidBuildActionRelativePath,
+            IosBuildActionRelativePath,
             ValidateSecretsScriptRelativePath,
             ResolveUnityProjectScriptRelativePath,
             ResolveUnityScriptRelativePath,
@@ -34,6 +38,8 @@ namespace ActionFit.BuildAutomation.Editor
         private static readonly string[] ProjectAssetRelativePaths =
         {
             WorkflowRelativePath,
+            AndroidBuildActionRelativePath,
+            IosBuildActionRelativePath,
             ValidateSecretsScriptRelativePath,
             ResolveUnityProjectScriptRelativePath,
             ResolveUnityScriptRelativePath,
@@ -115,7 +121,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static string GetWorkflowAssetSummary()
         {
-            return $"{WorkflowRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {ResolveUnityScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}";
+            return $"{WorkflowRelativePath}, {AndroidBuildActionRelativePath}, {IosBuildActionRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {ResolveUnityScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}";
         }
 
         private static bool PackageFileMatchesProjectFile(string packageRelativePath, string projectRelativePath)
@@ -224,6 +230,9 @@ namespace ActionFit.BuildAutomation.Editor
             }
 
             DeleteDirectoryIfEmpty(Path.Combine(unityProjectRoot, ".github", "workflows"));
+            DeleteDirectoryIfEmpty(Path.Combine(unityProjectRoot, ".github", "actions", "build-android"));
+            DeleteDirectoryIfEmpty(Path.Combine(unityProjectRoot, ".github", "actions", "build-ios"));
+            DeleteDirectoryIfEmpty(Path.Combine(unityProjectRoot, ".github", "actions"));
             DeleteDirectoryIfEmpty(Path.Combine(unityProjectRoot, ".github", "scripts"));
             DeleteDirectoryIfEmpty(Path.Combine(unityProjectRoot, ".github"));
             return removed;

@@ -12,7 +12,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.9",
     "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/AI_GitHub.git#1.0.6",
     "com.actionfit.customsymbols": "https://github.com/ActionFit-Editor/Custom_Symbols.git#1.0.6",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.43"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.44"
   }
 }
 ```
@@ -57,7 +57,7 @@ BuildCommit의 Git 명령은 stdout과 stderr를 동시에 읽어 `core.autocrlf
 
 `CS0103: The name 'BuildSettingBridge' does not exist in the current context`가 발생하면 `com.actionfit.buildautomation`을 `1.0.25` 이상으로 업데이트한 뒤 `AssetDatabase.Refresh` 또는 Unity 재시작으로 스크립트 컴파일 목록을 갱신합니다. 이 버전부터 bridge 타입은 Unity가 이미 컴파일하는 소스에 포함되어 부분 refresh 상태에서도 BuildAutomation 참조가 깨지지 않도록 되어 있습니다.
 
-`Auto Sync Build Files`는 기본값이 켜짐입니다. 켜져 있으면 `Commit, Tag & Push` 실행 시 Build Automation 패키지의 workflow/template scripts를 Git 저장소 루트 `.github/`로 먼저 동기화하고, 그 변경분도 같은 저장 커밋에 포함합니다. GitHub 제약상 workflow 위치는 항상 저장소 루트 `.github/workflows`이고 Unity 프로젝트가 nested인지와 무관합니다.
+`Auto Sync Build Files`는 기본값이 켜짐입니다. 켜져 있으면 `Commit, Tag & Push` 실행 시 Build Automation 패키지의 workflow, composite actions, scripts를 Git 저장소 루트 `.github/`로 먼저 동기화하고, 그 변경분도 같은 저장 커밋에 포함합니다. GitHub 제약상 workflow 위치는 항상 저장소 루트 `.github/workflows`이고 Unity 프로젝트가 nested인지와 무관합니다.
 
 `AutoBuild` 창 본문은 세로 스크롤 영역입니다. 창 높이가 낮아져도 Version Info, CI Build Request, GitHub Workflow, 버튼, Log 순서가 유지되며 Log 영역은 별도 스크롤을 사용합니다.
 
@@ -112,7 +112,7 @@ Schema 11은 저장소 루트 기준 Unity 프로젝트 경로와 자동 심볼 
    - Current
 7. `Build Kind`, `Upload Target`, `Distribution Profile`을 확인합니다. Platform 선택 시 기본값이 자동 세팅됩니다.
 8. `자동 빌드 심볼 세팅`을 확인합니다. 기본 ON이며 `Custom Symbols 열기`에서 플랫폼 및 Build 체크를 설정합니다.
-9. `Auto Sync Build Files`는 기본 ON입니다. ON이면 `Commit, Tag & Push` 실행 시 Git 저장소 루트 `.github/workflows`와 `.github/scripts`가 자동 동기화됩니다.
+9. `Auto Sync Build Files`는 기본 ON입니다. ON이면 `Commit, Tag & Push` 실행 시 Git 저장소 루트 `.github/workflows`, `.github/actions`, `.github/scripts`가 자동 동기화됩니다.
 10. Slack 알림이 필요하면 Mac runner 로컬 시크릿 번들에 `shared/slack-webhook-url`을 설정합니다.
 11. 사람 태그가 필요하면 AutoBuild 창의 `Slack Mentions`에서 `+` 버튼으로 행을 추가하고 `Mention` 체크박스, `Member ID`, `Memo`를 설정합니다. 이 목록은 `BuildAutomationSettingsSO`에 저장되어 프로젝트에서 공유됩니다. 기본 에셋 경로는 `Assets/_Data/_BuildAutomation/BuildAutomationSettingsSO.asset`입니다. `Member ID` 예: `U12345678`, `<@U23456789>`. 표시 이름 `@송제우`는 실제 멘션 알림으로 동작하지 않을 수 있습니다.
 12. GitHub 인증 팝업이 표시되면 `Packages/com.actionfit.githubauth/README.md`의 연결 확인 절차를 따르거나 AI에게 GitHub 인증 가이드를 문의합니다.
@@ -139,13 +139,19 @@ Schema 11은 저장소 루트 기준 Unity 프로젝트 경로와 자동 심볼 
 Unity -batchmode -quit -projectPath "$UNITY_PROJECT_DIR" -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest
 ```
 
-GitHub Actions workflow는 Android/iOS 실제 빌드 실행 전에 Unity를 같은 target으로 한 번 더 실행해 `SwitchToRequestBuildTarget`만 호출합니다. 이 단계는 `.build/build_request.json`의 `platform`을 읽고 `EditorUserBuildSettings.SwitchActiveBuildTarget(...)`으로 active build target을 맞춘 뒤 종료합니다. 그 다음 별도 Unity 실행에서 `BuildFromRequest`를 호출하므로, Editor assembly가 Android/iOS 심볼로 재컴파일된 상태에서 Build Setting의 플랫폼별 build process를 찾을 수 있습니다.
+GitHub Actions workflow는 `PrepareBuildSequence`를 먼저 실행합니다. 단일 플랫폼 요청은 해당 플랫폼만 선택하고, Both 요청은 현재 active build target이 Android면 Android → iOS, iOS면 iOS → Android, 그 외에는 Android → iOS 순서로 정합니다. 이 프로세스는 원본 `.build/build_request.json`을 수정하지 않고 `.build/ci/build_request_android.json`, `.build/ci/build_request_ios.json` working copy를 만든 뒤 첫 target과 심볼을 준비합니다. working request는 고정 경로만 허용하며 repository 밖 경로, 다른 파일명, symbolic link 경로는 거부합니다.
 
-기본 GitHub Actions workflow template은 `WorkflowTemplates/buildcommit-auto-build.yml`에 있고, workflow가 호출하는 script 원본은 패키지의 `.github/scripts/`에 있습니다. `resolve-unity-project.sh`는 request의 `unityProjectPath`로 Unity 프로젝트 디렉터리와 모든 파생 경로를 결정하고, `resolve-unity-editor.sh`는 해당 프로젝트의 `ProjectSettings/ProjectVersion.txt`에서 Unity 버전을 읽습니다. `prepare-actionfit-private-package-access.sh`는 해당 프로젝트의 `Packages/manifest.json`에 필요한 private package 접근을 준비하고, `validate-local-runner-secrets.sh`는 Mac runner secret bundle을 검증합니다. `notify-slack-build-result.sh`와 cleanup script도 resolve 단계에서 받은 경로를 사용합니다.
+첫 플랫폼은 별도 Unity 실행에서 바로 `BuildFromRequest`를 호출합니다. Both의 두 번째 플랫폼은 다시 별도 Unity 실행에서 `SwitchToRequestBuildTarget`을 호출한 뒤 별도 `BuildFromRequest`를 실행합니다. 따라서 기존처럼 플랫폼별 Editor assembly 재컴파일 경계를 유지하면서 정상 Both 빌드의 플랫폼 전환은 1회로 제한됩니다. 첫 플랫폼이 실패해도 두 번째 플랫폼을 시도하고, 마지막 집계 단계에서 전체 workflow를 실패 처리합니다.
 
-`AutoBuild` 창의 `Update GitHub Workflow` 버튼은 package template을 Git 저장소 루트의 `.github/workflows/buildcommit-auto-build.yml`, `.github/scripts/`로 복사합니다. 기존 파일이 template과 다르면 확인창을 띄운 뒤 덮어씁니다.
+기본 GitHub Actions workflow template은 `WorkflowTemplates/buildcommit-auto-build.yml`에 있고, 플랫폼 단계 원본은 `.github/actions/build-android/action.yml`, `.github/actions/build-ios/action.yml`, workflow가 호출하는 script 원본은 패키지의 `.github/scripts/`에 있습니다. `resolve-unity-project.sh`는 request의 `unityProjectPath`로 Unity 프로젝트 디렉터리와 모든 파생 경로를 결정하고, `resolve-unity-editor.sh`는 해당 프로젝트의 `ProjectSettings/ProjectVersion.txt`에서 Unity 버전을 읽습니다. `prepare-actionfit-private-package-access.sh`는 해당 프로젝트의 `Packages/manifest.json`에 필요한 private package 접근을 준비하고, `validate-local-runner-secrets.sh`는 Mac runner secret bundle을 검증합니다. `notify-slack-build-result.sh`와 cleanup script도 resolve 단계에서 받은 경로를 사용합니다.
 
-workflow는 macOS self-hosted runner 기준입니다. runner에는 `self-hosted`, `macOS`, `unity-mobile` 라벨이 있어야 하며, 같은 Mac에서 Unity CLI로 Android/iOS를 빌드합니다. `Platform=Both` 요청은 workflow가 Android job과 iOS job으로 나눠 `.build/build_request.json`의 platform 값을 임시 변환한 뒤, 각 job에서 `SwitchToRequestBuildTarget`와 `BuildFromRequest`를 별도 Unity 실행으로 순서대로 호출합니다.
+`AutoBuild` 창의 `Update GitHub Workflow` 버튼은 package template을 Git 저장소 루트의 `.github/workflows/buildcommit-auto-build.yml`, `.github/actions/`, `.github/scripts/`로 복사합니다. 기존 파일이 template과 다르면 확인창을 띄운 뒤 덮어씁니다.
+
+workflow는 macOS self-hosted affinity runner 기준입니다. runner에는 `self-hosted`, `macOS`, `unity-mobile`과 프로젝트 전용 `project-*` 라벨이 있어야 합니다. 저장소 Actions variable `UNITY_RUNNER_AFFINITY_LABEL`에는 allocator가 배정한 라벨(예: `project-cat-merge-cafe`)을 설정합니다. 하나의 `mobile-build` job이 같은 Mac과 workspace에서 Android/iOS를 순차 실행합니다.
+
+checkout 전에는 tracked 파일과 non-ignored untracked 파일만 정리하고, `actions/checkout`은 `clean: false`로 실행합니다. 따라서 runner-local `$UNITY_PROJECT_DIR/Library`가 보존되어 다음 빌드에서 재사용됩니다. `Library/SourceAssetDB`가 없을 때만 원격 `actions/cache/restore`를 cold fallback으로 사용하며 원격 cache save는 실행하지 않습니다. 마지막 cleanup은 working request와 임시 credential 파일만 제거하고 `Library`는 유지합니다.
+
+ignored build output도 checkout에서 보존되므로 Android 업로드 대상은 현재 phase 시작 marker 이후 생성된 AAB만 선택합니다. iOS는 재빌드 전에 고정된 Xcode project/archive/export 경로만 비우며, versioned build 보존 루트와 `Library` 전체를 초기화하지 않습니다.
 
 Android keystore와 signing 비밀번호는 BuildRequest 값을 우선 사용하고, 값이 없을 때 Mac runner의 로컬 시크릿 번들로 fallback합니다. Google Play service account, iOS team id, App Store Connect API key, certificate, keychain password, Slack webhook URL은 runner 로컬 번들에서 읽습니다. 기본 workflow template은 기존 ActionFit runner bundle을 계속 사용하도록 `CI_SECRET_ROOT=/Users/lydia/workspace/build-automation`을 명시하며, setup/validation script를 workflow 밖에서 직접 실행해 이 환경변수가 없으면 `$HOME/ci-secrets/build-automation`으로 fallback합니다. 수동 validator 실행은 credential 값을 출력하지 않으며, GitHub `::add-mask::` 명령은 `GITHUB_ACTIONS=true`일 때만 출력합니다.
 

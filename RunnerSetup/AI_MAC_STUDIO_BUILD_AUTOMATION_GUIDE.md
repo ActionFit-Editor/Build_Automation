@@ -15,6 +15,7 @@ BuildRequest carries the project-specific Android keystore Base64 and signing pa
 ## Files In This Package
 
 - `WorkflowTemplates/buildcommit-auto-build.yml`: source workflow template.
+- `.github/actions/build-android/action.yml` and `.github/actions/build-ios/action.yml`: platform build/deploy composite actions synchronized with the workflow.
 - `.github/scripts/resolve-unity-project.sh`: validates schema 11 `unityProjectPath` and exports repository/project-derived paths.
 - `RunnerSetup/setup-local-runner-secrets.sh`: creates local directory and `.env` templates.
 - `RunnerSetup/validate-local-runner-secrets.sh`: validates local files and exports env vars for GitHub Actions.
@@ -55,10 +56,14 @@ bash "$UNITY_PROJECT_DIR/Packages/com.actionfit.buildautomation/RunnerSetup/vali
 
 7. Test Android first, then iOS, then Both.
 
+The consuming repository must set `UNITY_RUNNER_AFFINITY_LABEL` to its allocator-managed `project-*` runner label. The workflow uses one `mobile-build` job so Both stays on that runner, preserves its local Unity `Library`, and performs only the required platform switch.
+
 ## Diagnosis Rules
 
 - If Android Unity signing fails, verify the request's keystore Base64 and signing fields first, then check runner fallback values `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASS`, and `ANDROID_KEYALIAS_PASS` for any missing request value.
 - If Unity files are not found, inspect repository-root request `unityProjectPath` and the `Resolve Unity project` output. Workflow/scripts stay in repository-root `.github`, while `Packages`, `ProjectSettings`, `Library`, `Builds`, and `Logs` are under `$UNITY_PROJECT_DIR`.
+- If the workflow remains queued, compare repository variable `UNITY_RUNNER_AFFINITY_LABEL` with the online runner's `project-*` label and confirm the runner also has `unity-mobile` but not a CI-only role.
+- If Both performs a full reimport, confirm checkout uses `clean: false`, the pre-checkout reset does not pass `-x` to `git clean`, and runner-local `Library/SourceAssetDB` exists. Remote cache restore is only a cold fallback and is not saved by this workflow.
 - If automatic build symbols fail, verify `autoConfigureBuildSymbols`, `com.actionfit.customsymbols@1.0.6`, and `CustomSymbolsSO` platform/Build checks. Missing settings are created from the current project defines before the target-switch process prepares symbols; the separate build process then verifies them.
 - If Unity package resolution fails for private GitHub packages, check the `Prepare private package access` step, `gh auth status --hostname github.com`, and `shared/github-package-read-token`.
 - If Slack notifications do not arrive, check the `Notify Slack ... start/result` steps and `shared/slack-webhook-url`. Missing or invalid webhook files are treated as notification skip, not build failure. If notifications arrive without mentions, check `.build/build_request.json` `slackMentions` and use Slack member IDs such as `U12345678`, not display names.

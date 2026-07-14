@@ -12,6 +12,8 @@ namespace ActionFit.BuildAutomation.Editor
     public static class BuildRequestUtility
     {
         public const string RelativePath = ".build/build_request.json";
+        internal const string AndroidWorkingRelativePath = ".build/ci/build_request_android.json";
+        internal const string IosWorkingRelativePath = ".build/ci/build_request_ios.json";
         private const string EmptyAndroidPackagePlaceholder = "[Enter Android Package Name]";
         private const string EmptyIosBundlePlaceholder = "[Enter iOS Bundle ID]";
         private const string EmptyKeystorePathPlaceholder = "[Enter Keystore Path]";
@@ -214,7 +216,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         public static BuildRequest Load()
         {
-            if (!TryGetRequestPath(out string requestPath, out string pathError))
+            if (!TryGetLoadRequestPath(out string requestPath, out string pathError))
             {
                 Debug.LogError($"[BuildRequestUtility] {pathError}");
                 return null;
@@ -273,6 +275,68 @@ namespace ActionFit.BuildAutomation.Editor
             return request;
         }
 
+        internal static bool TrySaveWorkingRequest(
+            BuildRequest source,
+            BuildRequestPlatform platform,
+            out BuildRequest workingRequest,
+            out string requestPath,
+            out string error)
+        {
+            workingRequest = null;
+            requestPath = null;
+            error = null;
+
+            if (source == null)
+            {
+                error = "BuildRequest is required.";
+                return false;
+            }
+
+            string relativePath;
+            switch (platform)
+            {
+                case BuildRequestPlatform.Android:
+                    relativePath = AndroidWorkingRelativePath;
+                    break;
+                case BuildRequestPlatform.iOS:
+                    relativePath = IosWorkingRelativePath;
+                    break;
+                default:
+                    error = $"Working BuildRequest platform must be Android or iOS: {platform}";
+                    return false;
+            }
+
+            if (!TryGetRepositoryRoot(out string repositoryRoot, out error) ||
+                !TryValidateWorkingRequestPath(repositoryRoot, relativePath, false, out requestPath, out error))
+            {
+                return false;
+            }
+
+            workingRequest = JsonUtility.FromJson<BuildRequest>(JsonUtility.ToJson(source));
+            if (workingRequest == null)
+            {
+                error = "Failed to clone BuildRequest for the platform working copy.";
+                return false;
+            }
+
+            PrepareWorkingRequest(workingRequest, platform);
+
+            string directory = Path.GetDirectoryName(requestPath);
+            if (string.IsNullOrEmpty(directory))
+            {
+                error = $"Working BuildRequest directory could not be resolved: {requestPath}";
+                return false;
+            }
+
+            Directory.CreateDirectory(directory);
+            if (!TryValidateWorkingRequestPath(repositoryRoot, requestPath, false, out requestPath, out error))
+                return false;
+
+            File.WriteAllText(requestPath, JsonUtility.ToJson(workingRequest, true));
+            Debug.Log($"[BuildRequestUtility] Working BuildRequest saved: platform={platform}, path={requestPath}");
+            return true;
+        }
+
         internal static bool TryGetRepositoryRoot(out string repositoryRoot, out string error)
         {
             return BuildAutomationProjectPaths.TryGetCurrentLayout(
@@ -289,6 +353,122 @@ namespace ActionFit.BuildAutomation.Editor
 
             requestPath = Path.GetFullPath(Path.Combine(repositoryRoot, RelativePath));
             return true;
+        }
+
+        private static bool TryGetLoadRequestPath(out string requestPath, out string error)
+        {
+            requestPath = null;
+            if (!TryGetRepositoryRoot(out string repositoryRoot, out error))
+                return false;
+
+            string configuredPath = Environment.GetEnvironmentVariable("BUILD_REQUEST_PATH")?.Trim();
+            if (string.IsNullOrEmpty(configuredPath))
+            {
+                requestPath = Path.GetFullPath(Path.Combine(repositoryRoot, RelativePath));
+                return true;
+            }
+
+            string candidatePath = Path.IsPathRooted(configuredPath)
+                ? configuredPath
+                : Path.Combine(repositoryRoot, configuredPath);
+            string originalPath = Path.GetFullPath(Path.Combine(repositoryRoot, RelativePath));
+            candidatePath = Path.GetFullPath(candidatePath);
+            if (string.Equals(candidatePath, originalPath, StringComparison.Ordinal))
+            {
+                requestPath = originalPath;
+                return true;
+            }
+
+            return TryValidateWorkingRequestPath(repositoryRoot, candidatePath, true, out requestPath, out error);
+        }
+
+        internal static bool TryValidateWorkingRequestPath(
+            string repositoryRoot,
+            string candidatePath,
+            bool requireExistingFile,
+            out string validatedPath,
+            out string error)
+        {
+            validatedPath = null;
+            error = null;
+
+            if (string.IsNullOrWhiteSpace(repositoryRoot) || string.IsNullOrWhiteSpace(candidatePath))
+            {
+                error = "Repository root and working BuildRequest path are required.";
+                return false;
+            }
+
+            string normalizedRepositoryRoot = Path.GetFullPath(repositoryRoot);
+            string normalizedCandidatePath = Path.IsPathRooted(candidatePath)
+                ? Path.GetFullPath(candidatePath)
+                : Path.GetFullPath(Path.Combine(normalizedRepositoryRoot, candidatePath));
+            string originalPath = Path.GetFullPath(Path.Combine(normalizedRepositoryRoot, RelativePath));
+            string androidPath = Path.GetFullPath(Path.Combine(normalizedRepositoryRoot, AndroidWorkingRelativePath));
+            string iosPath = Path.GetFullPath(Path.Combine(normalizedRepositoryRoot, IosWorkingRelativePath));
+
+            if (string.Equals(normalizedCandidatePath, originalPath, StringComparison.Ordinal))
+            {
+                error = "The original BuildRequest cannot be used as a writable platform working request.";
+                return false;
+            }
+
+            if (!string.Equals(normalizedCandidatePath, androidPath, StringComparison.Ordinal) &&
+                !string.Equals(normalizedCandidatePath, iosPath, StringComparison.Ordinal))
+            {
+                error = $"Working BuildRequest path is not allowlisted under .build/ci: {normalizedCandidatePath}";
+                return false;
+            }
+
+            string currentPath = normalizedRepositoryRoot;
+            string relativePath = Path.GetRelativePath(normalizedRepositoryRoot, normalizedCandidatePath);
+            foreach (string segment in relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+            {
+                if (string.IsNullOrEmpty(segment)) continue;
+                currentPath = Path.Combine(currentPath, segment);
+                if (!File.Exists(currentPath) && !Directory.Exists(currentPath)) continue;
+
+                FileAttributes attributes = File.GetAttributes(currentPath);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    error = $"Working BuildRequest path contains a symbolic link: {currentPath}";
+                    return false;
+                }
+            }
+
+            if (requireExistingFile && !File.Exists(normalizedCandidatePath))
+            {
+                error = $"Working BuildRequest does not exist: {normalizedCandidatePath}";
+                return false;
+            }
+
+            validatedPath = normalizedCandidatePath;
+            return true;
+        }
+
+        internal static void PrepareWorkingRequest(BuildRequest request, BuildRequestPlatform platform)
+        {
+            request.platform = platform;
+
+            if (platform == BuildRequestPlatform.Android)
+            {
+                if (request.buildKind == BuildRequestKind.Default ||
+                    request.buildKind == BuildRequestKind.iOSXcodeProject ||
+                    request.buildKind == BuildRequestKind.AndroidAabAndiOSXcodeProject)
+                {
+                    request.buildKind = BuildRequestKind.AndroidAab;
+                }
+
+                request.iosBundleId = "";
+                return;
+            }
+
+            request.buildKind = BuildRequestKind.iOSXcodeProject;
+            request.androidPackageName = "";
+            request.androidKeystoreFileName = "";
+            request.androidKeystoreBase64 = "";
+            request.androidKeystorePassword = "";
+            request.androidAliasPassword = "";
+            request.androidKeyaliasName = "";
         }
 
         private static void RemoveLegacyUnityProjectRequest(string requestPath)

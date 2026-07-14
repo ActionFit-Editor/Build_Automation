@@ -1,0 +1,286 @@
+name: Build Android from BuildCommit request
+description: Build and optionally deploy Android on the prepared affinity runner workspace.
+
+inputs:
+  request-path:
+    description: Absolute path to the Android working BuildRequest.
+    required: true
+  prepare-target:
+    description: Run the Unity target switch before building.
+    required: false
+    default: "false"
+  upload-target:
+    description: BuildRequest upload target.
+    required: true
+  distribution-profile:
+    description: Local runner distribution profile.
+    required: true
+  android-package-name:
+    description: Google Play package name from the original BuildRequest.
+    required: false
+    default: ""
+  ios-bundle-id:
+    description: iOS bundle ID used while resolving the shared local secret bundle.
+    required: false
+    default: ""
+  build-version:
+    description: Build version used in notifications and cleanup metadata.
+    required: false
+    default: ""
+  bundle-no:
+    description: Bundle number used in notifications and cleanup metadata.
+    required: false
+    default: ""
+  slack-mentions:
+    description: Normalized Slack mentions.
+    required: false
+    default: ""
+  project-name:
+    description: Resolved Unity project name.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Mark Android build start
+      id: build_timer
+      shell: bash
+      run: |
+        marker_path="$RUNNER_TEMP/buildcommit-android-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.marker"
+        rm -f "$marker_path"
+        touch "$marker_path"
+        echo "started_at_epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
+        echo "marker_path=$marker_path" >> "$GITHUB_OUTPUT"
+
+    - name: Prepare Android transient output
+      shell: bash
+      run: rm -rf "$ANDROID_UPLOAD_DIR"
+
+    - name: Notify Slack Android start
+      shell: bash
+      env:
+        BUILD_JOB_STATUS: start
+        BUILD_PLATFORM: AOS
+        BUILD_PROJECT_NAME: ${{ inputs.project-name }}
+        BUILD_VERSION: ${{ inputs.build-version }}
+        BUILD_BUNDLE_NO: ${{ inputs.bundle-no }}
+        BUILD_DISTRIBUTION_PROFILE: ${{ inputs.distribution-profile }}
+        SLACK_BUILD_MENTIONS: ${{ inputs.slack-mentions }}
+        BUILD_SHORT_SHA: ${{ github.sha }}
+        BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
+      run: |
+        if [ ! -f "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh" ]; then
+          echo "::warning::Slack notification script not found; skipping."
+          exit 0
+        fi
+
+        bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"
+
+    - name: Resolve Android local runner secrets
+      id: local_secrets
+      shell: bash
+      env:
+        BUILD_REQUEST_PATH: ${{ inputs.request-path }}
+        DISTRIBUTION_PROFILE: ${{ inputs.distribution-profile }}
+        IOS_BUNDLE_ID_FROM_REQUEST: ${{ inputs.ios-bundle-id }}
+        REQUEST_UPLOAD_TARGET: ${{ inputs.upload-target }}
+      run: |
+        set -euo pipefail
+        case "$REQUEST_UPLOAD_TARGET" in
+          GooglePlayInternal|GooglePlayInternalAndTestFlight)
+            platform_upload_target=GooglePlayInternal
+            ;;
+          *)
+            platform_upload_target=None
+            ;;
+        esac
+        bash "$REPOSITORY_ROOT/.github/scripts/validate-local-runner-secrets.sh" \
+          "$DISTRIBUTION_PROFILE" \
+          Android \
+          "$platform_upload_target"
+
+    - name: Prepare Android target and build symbols
+      if: inputs.prepare-target == 'true'
+      shell: bash
+      env:
+        BUILD_REQUEST_PATH: ${{ inputs.request-path }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$UNITY_LOG_DIR"
+
+        unity_status=0
+        "$UNITY_EXECUTABLE" \
+          -batchmode \
+          -quit \
+          -projectPath "$UNITY_PROJECT_DIR" \
+          -buildTarget Android \
+          -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.SwitchToRequestBuildTarget \
+          -logFile "$UNITY_LOG_DIR/unity-android-switch.log" || unity_status=$?
+
+        if [ "$unity_status" -ne 0 ]; then
+          echo "::group::Unity Android target switch log tail"
+          tail -n 400 "$UNITY_LOG_DIR/unity-android-switch.log" || true
+          echo "::endgroup::"
+          exit "$unity_status"
+        fi
+
+    - name: Build signed Android from BuildCommit request
+      shell: bash
+      env:
+        BUILD_REQUEST_PATH: ${{ inputs.request-path }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$UNITY_LOG_DIR"
+
+        unity_status=0
+        "$UNITY_EXECUTABLE" \
+          -batchmode \
+          -quit \
+          -projectPath "$UNITY_PROJECT_DIR" \
+          -buildTarget Android \
+          -executeMethod ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest \
+          -logFile "$UNITY_LOG_DIR/unity-android.log" || unity_status=$?
+
+        if [ "$unity_status" -ne 0 ]; then
+          echo "::group::Unity Android log tail"
+          tail -n 400 "$UNITY_LOG_DIR/unity-android.log" || true
+          echo "::endgroup::"
+          exit "$unity_status"
+        fi
+
+    - name: Locate AAB for upload
+      id: aab
+      if: inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight'
+      shell: bash
+      run: |
+        set -euo pipefail
+        aab_path="$(find "$UNITY_BUILD_DIR" -name '*.aab' -newer "${{ steps.build_timer.outputs.marker_path }}" -print -quit)"
+        if [ -z "$aab_path" ]; then
+          echo "::error::No .aab found under $UNITY_BUILD_DIR. Google Play upload requires an AAB build."
+          exit 1
+        fi
+        upload_dir="$ANDROID_UPLOAD_DIR"
+        upload_path="$upload_dir/upload.aab"
+        mkdir -p "$upload_dir"
+        cp "$aab_path" "$upload_path"
+        echo "path=$upload_path" >> "$GITHUB_OUTPUT"
+
+        aab_dir="$(dirname "$aab_path")"
+        debug_symbols_path="$(find "$aab_dir" -maxdepth 1 -type f \( -iname '*symbols*.zip' -o -iname '*symbol*.zip' \) -print -quit)"
+        if [ -z "$debug_symbols_path" ]; then
+          debug_symbols_path="$(find "$UNITY_LIBRARY_DIR/Bee/Android/Prj/IL2CPP/Gradle/launcher/build/outputs/native-debug-symbols" -name '*.zip' -print -quit 2>/dev/null || true)"
+        fi
+
+        if [ -n "$debug_symbols_path" ]; then
+          debug_symbols_upload_path="$upload_dir/native-debug-symbols.zip"
+          cp "$debug_symbols_path" "$debug_symbols_upload_path"
+          echo "debug_symbols_path=$debug_symbols_upload_path" >> "$GITHUB_OUTPUT"
+        else
+          echo "debug_symbols_path=" >> "$GITHUB_OUTPUT"
+          echo "::warning::No Android debug symbols zip found."
+        fi
+
+        mapping_path="$(find "$aab_dir" -maxdepth 1 -type f \( -name '*mapping.txt' -o -name 'mapping.txt' \) -print -quit)"
+        if [ -n "$mapping_path" ]; then
+          mapping_upload_path="$upload_dir/mapping.txt"
+          cp "$mapping_path" "$mapping_upload_path"
+          echo "mapping_path=$mapping_upload_path" >> "$GITHUB_OUTPUT"
+        else
+          echo "mapping_path=" >> "$GITHUB_OUTPUT"
+          echo "::warning::No Android mapping.txt found near the AAB."
+        fi
+
+    - name: Prepare Google Play profile config
+      id: google_play_config
+      if: inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight'
+      shell: bash
+      env:
+        ANDROID_PACKAGE_NAME: ${{ inputs.android-package-name }}
+      run: |
+        set -euo pipefail
+        if [ -z "${ANDROID_PACKAGE_NAME:-}" ]; then
+          echo "::error::Missing Google Play package name from BuildCommit request androidPackageName"
+          exit 1
+        fi
+
+        test -r "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH" || {
+          echo "::error::Google Play service account JSON is not readable: $GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH"
+          exit 1
+        }
+        echo "service_account_json_path=$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH" >> "$GITHUB_OUTPUT"
+
+    - name: Upload to Google Play internal track
+      if: inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight'
+      uses: r0adkll/upload-google-play@v1
+      with:
+        serviceAccountJson: ${{ steps.google_play_config.outputs.service_account_json_path }}
+        packageName: ${{ inputs.android-package-name }}
+        releaseFiles: ${{ steps.aab.outputs.path }}
+        mappingFile: ${{ steps.aab.outputs.mapping_path }}
+        debugSymbols: ${{ steps.aab.outputs.debug_symbols_path }}
+        tracks: internal
+        status: completed
+
+    - name: Upload Android AAB artifact
+      if: always()
+      continue-on-error: true
+      uses: actions/upload-artifact@v4
+      with:
+        name: Android-BuildCommit-AAB
+        path: |
+          ${{ env.ANDROID_UPLOAD_DIR }}/*.aab
+          ${{ env.ANDROID_UPLOAD_DIR }}/*.zip
+          ${{ env.ANDROID_UPLOAD_DIR }}/mapping.txt
+          ${{ env.UNITY_BUILD_DIR }}/**/*.aab
+          ${{ env.UNITY_BUILD_DIR }}/**/*.zip
+          ${{ env.UNITY_BUILD_DIR }}/**/*mapping.txt
+        if-no-files-found: warn
+        compression-level: 0
+
+    - name: Cleanup old Android build artifacts
+      if: success() && (inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
+      continue-on-error: true
+      shell: bash
+      env:
+        BUILD_CLEANUP_PROJECT_NAME: ${{ inputs.project-name }}
+        BUILD_CLEANUP_BUILD_VERSION: ${{ inputs.build-version }}
+        BUILD_CLEANUP_BUNDLE_NO: ${{ inputs.bundle-no }}
+      run: |
+        if [ ! -f "$REPOSITORY_ROOT/.github/scripts/cleanup-old-build-artifacts.sh" ]; then
+          echo "::warning::Build cleanup script not found; skipping."
+          exit 0
+        fi
+
+        bash "$REPOSITORY_ROOT/.github/scripts/cleanup-old-build-artifacts.sh"
+
+    - name: Upload Android logs
+      if: always()
+      continue-on-error: true
+      uses: actions/upload-artifact@v4
+      with:
+        name: Android-BuildCommit-Logs
+        path: ${{ env.UNITY_LOG_DIR }}/**
+        if-no-files-found: warn
+
+    - name: Notify Slack Android result
+      if: always()
+      shell: bash
+      env:
+        BUILD_JOB_STATUS: ${{ job.status }}
+        BUILD_PLATFORM: AOS
+        BUILD_PROJECT_NAME: ${{ inputs.project-name }}
+        BUILD_VERSION: ${{ inputs.build-version }}
+        BUILD_BUNDLE_NO: ${{ inputs.bundle-no }}
+        BUILD_DISTRIBUTION_PROFILE: ${{ inputs.distribution-profile }}
+        SLACK_BUILD_MENTIONS: ${{ inputs.slack-mentions }}
+        BUILD_SHORT_SHA: ${{ github.sha }}
+        BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
+      run: |
+        if [ ! -f "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh" ]; then
+          echo "::warning::Slack notification script not found; skipping."
+          exit 0
+        fi
+
+        bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"
