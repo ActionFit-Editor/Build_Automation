@@ -16,17 +16,11 @@ MonoBehaviour:
   _displayName: Build Automation
   _repoName: Build_Automation
   _repositoryVisibility: 0
-  _owner: "\uC1A1\uC81C\uC6B0"
+  _owner: 
   _status: verified
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- Development Android\uB97C APK\uB85C \uBE4C\uB4DC\uD558\uACE0 Slack
-    Bot \uC9C1\uC811 \uCCA8\uBD80\uC640 GitHub Artifact fallback\uC744 \uC801\uC6A9\uD569\uB2C8\uB2E4.\n-
-    Development iOS\uB294 \uB9C8\uCF00\uD305 \uBC84\uC804\uC744 \uC720\uC9C0\uD55C
-    \uCC44 TestFlight \uBE4C\uB4DC \uBC88\uD638\uB97C 1\uB85C \uACE0\uC815\uD558\uACE0
-    \uCDA9\uB3CC\uC744 \uC0AC\uC804 \uAC80\uC0AC\uD569\uB2C8\uB2E4.\n- \uC6D0\uBCF8
-    BuildRequest\uC640 BuildSettingsSO\uB97C \uBCF4\uC874\uD558\uACE0 \uBE44\uAC1C\uBC1C
-    \uBE4C\uB4DC \uB3D9\uC791\uC740 \uC720\uC9C0\uD569\uB2C8\uB2E4."
-  _dependenciesOverride: com.actionfit.githubauth@1.0.6, com.actionfit.buildsetting@1.1.11,
-    com.actionfit.customsymbols@1.0.6
+  _releaseNote: "\uCE74\uD0C8\uB85C\uADF8 \uBA54\uD0C0\uB370\uC774\uD130 \uAC31\uC2E0
+    \uB9B4\uB9AC\uC988."
+  _dependenciesOverride: 

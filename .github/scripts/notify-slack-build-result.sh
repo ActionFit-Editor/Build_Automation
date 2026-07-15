@@ -155,20 +155,18 @@ development_build = ENV.fetch("DEVELOPMENT_BUILD", "false") == "true"
 short_sha = ENV.fetch("SHORT_SHA", "")
 run_url = ENV.fetch("RUN_URL", "")
 raw_mentions = ENV.fetch("SLACK_MENTIONS", "")
+escape_mrkdwn = lambda do |value|
+  value.gsub("&", "&amp;").gsub("<", "&lt;").gsub(">", "&gt;")
+end
+
+version_label = escape_mrkdwn.call(version_label)
 
 mentions = raw_mentions
   .split(/[,\s]+/)
   .map(&:strip)
   .reject(&:empty?)
-  .map do |token|
-    if token.match?(/\A<(@|!)[^>]+>\z/)
-      token
-    elsif token.match?(/\A[UW][A-Z0-9]+\z/)
-      "<@#{token}>"
-    else
-      token
-    end
-  end
+  .select { |token| token.match?(/\A[UW][A-Z0-9]+\z/) }
+  .map { |token| "<@#{token}>" }
   .uniq
   .join(" ")
 

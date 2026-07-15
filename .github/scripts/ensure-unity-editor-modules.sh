@@ -26,76 +26,6 @@ append_github_output() {
   fi
 }
 
-read_first_value() {
-  local path="$1"
-  if [ ! -r "$path" ]; then
-    return 0
-  fi
-
-  sed -n \
-    -e '/^[[:space:]]*#/d' \
-    -e '/^[[:space:]]*$/d' \
-    -e 's/^[[:space:]]*//' \
-    -e 's/[[:space:]]*$//' \
-    -e 'p' \
-    -e 'q' \
-    "$path"
-}
-
-slack_webhook_url() {
-  local secret_root="${CI_SECRET_ROOT:-$HOME/ci-secrets/build-automation}"
-  local webhook_file="${SLACK_WEBHOOK_URL_FILE:-$secret_root/shared/slack-webhook-url}"
-  local webhook_url="${SLACK_BUILD_WEBHOOK_URL:-${SLACK_WEBHOOK_URL:-}}"
-
-  if [ -z "$webhook_url" ]; then
-    webhook_url="$(read_first_value "$webhook_file")"
-  fi
-
-  printf '%s\n' "$webhook_url"
-}
-
-send_slack_message() {
-  local text="$1"
-  local webhook_url
-  webhook_url="$(slack_webhook_url)"
-
-  if [ -z "$webhook_url" ]; then
-    echo "Slack webhook URL is not configured; skipping environment notification."
-    return 0
-  fi
-
-  if [[ "$webhook_url" != https://hooks.slack.com/services/* ]]; then
-    echo "::warning::Slack webhook URL is not a Slack Incoming Webhook URL; skipping environment notification."
-    return 0
-  fi
-
-  echo "::add-mask::$webhook_url"
-
-  if ! TEXT="$text" ruby -rjson -e 'puts JSON.generate({ text: ENV.fetch("TEXT", "") })' |
-    curl --fail --silent --show-error \
-      -X POST \
-      -H "Content-type: application/json" \
-      --data @- \
-      "$webhook_url" >/dev/null; then
-    echo "::warning::Slack environment notification failed."
-  fi
-}
-
-format_context_line() {
-  local repository="${GITHUB_REPOSITORY:-}"
-  local project_name="${BUILD_PROJECT_NAME:-${repository##*/}}"
-  local platform="${BUILD_PLATFORM:-${requested_platform:-Build}}"
-  local run_url="${BUILD_RUN_URL:-${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-}}"
-  local mentions="${SLACK_BUILD_MENTIONS:-${SLACK_MENTIONS:-}}"
-  local prefix=""
-
-  if [ -n "$mentions" ]; then
-    prefix="$mentions"$'\n'
-  fi
-
-  printf '%s[%s] %s\nRun: %s\n' "$prefix" "$platform" "$project_name" "$run_url"
-}
-
 if [ ! -r "$project_version_file" ]; then
   echo "::error::Unity ProjectVersion file is not readable: $project_version_file"
   exit 1
@@ -235,10 +165,6 @@ release_lock() {
 
 trap release_lock EXIT
 
-context_line="$(format_context_line)"
-send_slack_message "$context_line Missing Unity environment: $(join_by_comma "${missing_items[@]}").
-Installing the missing editor/modules on this runner, then the build will continue."
-
 lock_started_at="$(date +%s)"
 while ! mkdir "$lock_dir" 2>/dev/null; do
   waited=true
@@ -266,18 +192,11 @@ while ! mkdir "$lock_dir" 2>/dev/null; do
     exit 1
   fi
 
-  if [ ! -f "$installer_root/.wait-notified-$safe_version" ]; then
-    touch "$installer_root/.wait-notified-$safe_version" || true
-    send_slack_message "$context_line Unity $unity_version install is already running on this runner.
-This build is waiting for the existing install to finish, then it will continue."
-  fi
-
   echo "Waiting for Unity installer lock: $lock_dir"
   sleep "$wait_interval_seconds"
 done
 
 lock_acquired=true
-rm -f "$installer_root/.wait-notified-$safe_version" 2>/dev/null || true
 {
   echo "$$" > "$lock_dir/pid"
   date +%s > "$lock_dir/heartbeat"
@@ -300,8 +219,6 @@ if [ "${#missing_items[@]}" -eq 0 ]; then
   echo "Unity environment was installed by another job while waiting."
   append_github_output "installed" "false"
   append_github_output "waited" "$waited"
-  send_slack_message "$context_line Unity $unity_version environment is now available.
-Continuing the build."
   exit 0
 fi
 
@@ -347,15 +264,10 @@ collect_missing
 
 if [ "$install_status" -ne 0 ] || [ "${#missing_items[@]}" -ne 0 ]; then
   echo "::error::Unity environment install failed. Missing after install: $(join_by_comma "${missing_items[@]}"). See $log_path"
-  send_slack_message "$context_line Failed to install Unity environment: $(join_by_comma "${missing_items[@]}").
-Log: $log_path"
   exit 1
 fi
 
 append_github_output "installed" "true"
 append_github_output "waited" "$waited"
-
-send_slack_message "$context_line Installed Unity environment for $unity_version: $(join_by_comma "${required_modules[@]}").
-Continuing the build."
 
 echo "Unity environment is ready for $unity_version."

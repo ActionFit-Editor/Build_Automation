@@ -28,15 +28,11 @@ inputs:
     required: false
     default: ""
   build-version:
-    description: Build version used in notifications and cleanup metadata.
+    description: Build version used in store validation and cleanup metadata.
     required: false
     default: ""
   bundle-no:
-    description: Bundle number used in notifications and cleanup metadata.
-    required: false
-    default: ""
-  slack-mentions:
-    description: Normalized Slack mentions.
+    description: Bundle number used in store validation and cleanup metadata.
     required: false
     default: ""
   project-name:
@@ -51,11 +47,6 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Mark iOS build start
-      id: build_timer
-      shell: bash
-      run: echo "started_at_epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
-
     - name: Resolve iOS store upload mode
       id: upload_mode
       shell: bash
@@ -95,28 +86,6 @@ runs:
       run: |
         rm -rf "$IOS_XCODE_BUILD_PATH" "$IOS_ARCHIVE_PATH" "$IOS_EXPORT_PATH"
         rm -f "$IOS_EXPORT_OPTIONS_PATH"
-
-    - name: Notify Slack iOS start
-      shell: bash
-      env:
-        BUILD_JOB_STATUS: start
-        BUILD_PLATFORM: iOS
-        BUILD_PROJECT_NAME: ${{ inputs.project-name }}
-        BUILD_VERSION: ${{ inputs.build-version }}
-        BUILD_BUNDLE_NO: ${{ inputs.bundle-no }}
-        BUILD_DEVELOPMENT_BUILD: ${{ inputs.development-build }}
-        BUILD_DISTRIBUTION_PROFILE: ${{ inputs.distribution-profile }}
-        SLACK_BUILD_MENTIONS: ${{ inputs.slack-mentions }}
-        BUILD_SHORT_SHA: ${{ github.sha }}
-        BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
-      run: |
-        if [ ! -f "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh" ]; then
-          echo "::warning::Slack notification script not found; skipping."
-          exit 0
-        fi
-
-        bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"
 
     - name: Check Xcode tools
       shell: bash
@@ -726,25 +695,3 @@ runs:
           ${{ env.IOS_EXPORT_PATH }}/**
         if-no-files-found: warn
         retention-days: 7
-
-    - name: Notify Slack iOS result
-      if: always() && steps.upload_mode.outputs.deferred != 'true'
-      shell: bash
-      env:
-        BUILD_JOB_STATUS: ${{ job.status }}
-        BUILD_PLATFORM: iOS
-        BUILD_PROJECT_NAME: ${{ inputs.project-name }}
-        BUILD_VERSION: ${{ inputs.build-version }}
-        BUILD_BUNDLE_NO: ${{ inputs.bundle-no }}
-        BUILD_DEVELOPMENT_BUILD: ${{ inputs.development-build }}
-        BUILD_DISTRIBUTION_PROFILE: ${{ inputs.distribution-profile }}
-        SLACK_BUILD_MENTIONS: ${{ inputs.slack-mentions }}
-        BUILD_SHORT_SHA: ${{ github.sha }}
-        BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
-      run: |
-        if [ ! -f "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh" ]; then
-          echo "::warning::Slack notification script not found; skipping."
-          exit 0
-        fi
-        bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"

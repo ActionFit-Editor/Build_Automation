@@ -10,6 +10,8 @@ namespace ActionFit.BuildAutomation.Editor
     {
         internal const string TemplateRelativePath = "WorkflowTemplates/buildcommit-auto-build.yml";
         internal const string WorkflowRelativePath = ".github/workflows/buildcommit-auto-build.yml";
+        internal const string SlackDeliveryTemplateRelativePath = "WorkflowTemplates/buildcommit-slack-delivery.yml";
+        internal const string SlackDeliveryWorkflowRelativePath = ".github/workflows/buildcommit-slack-delivery.yml";
         internal const string AndroidBuildActionRelativePath = ".github/actions/build-android/action.yml";
         internal const string IosBuildActionRelativePath = ".github/actions/build-ios/action.yml";
         internal const string AllocateRunnerScriptRelativePath = ".github/scripts/allocate-unity-mobile-runner.js";
@@ -18,18 +20,17 @@ namespace ActionFit.BuildAutomation.Editor
         internal const string ResolveUnityScriptRelativePath = ".github/scripts/resolve-unity-editor.sh";
         internal const string EnsureUnityModulesScriptRelativePath = ".github/scripts/ensure-unity-editor-modules.sh";
         internal const string PreparePrivatePackageAccessScriptRelativePath = ".github/scripts/prepare-actionfit-private-package-access.sh";
-        internal const string NotifySlackScriptRelativePath = ".github/scripts/notify-slack-build-result.sh";
         internal const string CleanupOldBuildArtifactsScriptRelativePath = ".github/scripts/cleanup-old-build-artifacts.sh";
         internal const string StoreUploadWorkerScriptRelativePath = ".github/scripts/store-upload-worker.rb";
         internal const string UploadGooglePlayScriptRelativePath = ".github/scripts/upload-google-play.sh";
         internal const string UploadTestFlightScriptRelativePath = ".github/scripts/upload-testflight.rb";
         internal const string CheckTestFlightBuildNumberScriptRelativePath = ".github/scripts/check-testflight-build-number.rb";
-        internal const string UploadSlackFileScriptRelativePath = ".github/scripts/upload-slack-file.sh";
 
         private const string PackageName = "com.actionfit.buildautomation";
         private static readonly string[] PackageAssetRelativePaths =
         {
             TemplateRelativePath,
+            SlackDeliveryTemplateRelativePath,
             AndroidBuildActionRelativePath,
             IosBuildActionRelativePath,
             AllocateRunnerScriptRelativePath,
@@ -38,18 +39,17 @@ namespace ActionFit.BuildAutomation.Editor
             ResolveUnityScriptRelativePath,
             EnsureUnityModulesScriptRelativePath,
             PreparePrivatePackageAccessScriptRelativePath,
-            NotifySlackScriptRelativePath,
             CleanupOldBuildArtifactsScriptRelativePath,
             StoreUploadWorkerScriptRelativePath,
             UploadGooglePlayScriptRelativePath,
             UploadTestFlightScriptRelativePath,
-            CheckTestFlightBuildNumberScriptRelativePath,
-            UploadSlackFileScriptRelativePath
+            CheckTestFlightBuildNumberScriptRelativePath
         };
 
         private static readonly string[] ProjectAssetRelativePaths =
         {
             WorkflowRelativePath,
+            SlackDeliveryWorkflowRelativePath,
             AndroidBuildActionRelativePath,
             IosBuildActionRelativePath,
             AllocateRunnerScriptRelativePath,
@@ -58,13 +58,17 @@ namespace ActionFit.BuildAutomation.Editor
             ResolveUnityScriptRelativePath,
             EnsureUnityModulesScriptRelativePath,
             PreparePrivatePackageAccessScriptRelativePath,
-            NotifySlackScriptRelativePath,
             CleanupOldBuildArtifactsScriptRelativePath,
             StoreUploadWorkerScriptRelativePath,
             UploadGooglePlayScriptRelativePath,
             UploadTestFlightScriptRelativePath,
-            CheckTestFlightBuildNumberScriptRelativePath,
-            UploadSlackFileScriptRelativePath
+            CheckTestFlightBuildNumberScriptRelativePath
+        };
+
+        private static readonly string[] ObsoleteProjectAssetRelativePaths =
+        {
+            ".github/scripts/notify-slack-build-result.sh",
+            ".github/scripts/upload-slack-file.sh"
         };
 
         internal static bool IsWorkflowCurrent()
@@ -80,7 +84,8 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static bool WorkflowExists()
         {
-            return File.Exists(GetWorkflowPath());
+            return File.Exists(GetProjectPath(WorkflowRelativePath)) &&
+                   File.Exists(GetProjectPath(SlackDeliveryWorkflowRelativePath));
         }
 
         internal static string GetStatusMessage()
@@ -130,6 +135,10 @@ namespace ActionFit.BuildAutomation.Editor
                 message += assetMessage;
             }
 
+            int removedObsoleteAssets = RemoveObsoleteRepositoryAssets();
+            if (removedObsoleteAssets > 0)
+                message += $"; Removed {removedObsoleteAssets} obsolete repository Slack script(s)";
+
             int removedLegacyAssets = RemoveLegacyUnityProjectAssets();
             if (removedLegacyAssets > 0)
                 message += $"; Removed {removedLegacyAssets} legacy Unity-project workflow asset(s)";
@@ -139,7 +148,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static string GetWorkflowAssetSummary()
         {
-            return $"{WorkflowRelativePath}, {AndroidBuildActionRelativePath}, {IosBuildActionRelativePath}, {AllocateRunnerScriptRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}, {StoreUploadWorkerScriptRelativePath}, {UploadGooglePlayScriptRelativePath}, {UploadTestFlightScriptRelativePath}, {CheckTestFlightBuildNumberScriptRelativePath}, {UploadSlackFileScriptRelativePath}";
+            return $"{WorkflowRelativePath}, {SlackDeliveryWorkflowRelativePath}, {AndroidBuildActionRelativePath}, {IosBuildActionRelativePath}, {AllocateRunnerScriptRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}, {StoreUploadWorkerScriptRelativePath}, {UploadGooglePlayScriptRelativePath}, {UploadTestFlightScriptRelativePath}, {CheckTestFlightBuildNumberScriptRelativePath}";
         }
 
         private static bool PackageFileMatchesProjectFile(string packageRelativePath, string projectRelativePath)
@@ -190,11 +199,6 @@ namespace ActionFit.BuildAutomation.Editor
             return string.IsNullOrEmpty(packageRoot)
                 ? null
                 : CombineRootPath(packageRoot, relativePath);
-        }
-
-        private static string GetWorkflowPath()
-        {
-            return GetProjectPath(WorkflowRelativePath);
         }
 
         private static string GetProjectPath(string relativePath)
@@ -253,6 +257,21 @@ namespace ActionFit.BuildAutomation.Editor
             DeleteDirectoryIfEmpty(Path.Combine(unityProjectRoot, ".github", "actions"));
             DeleteDirectoryIfEmpty(Path.Combine(unityProjectRoot, ".github", "scripts"));
             DeleteDirectoryIfEmpty(Path.Combine(unityProjectRoot, ".github"));
+            return removed;
+        }
+
+        private static int RemoveObsoleteRepositoryAssets()
+        {
+            int removed = 0;
+            foreach (string relativePath in ObsoleteProjectAssetRelativePaths)
+            {
+                string path = GetProjectPath(relativePath);
+                if (string.IsNullOrEmpty(path) || !File.Exists(path)) continue;
+
+                File.Delete(path);
+                removed++;
+            }
+
             return removed;
         }
 

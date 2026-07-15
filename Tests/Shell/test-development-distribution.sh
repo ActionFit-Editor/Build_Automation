@@ -47,7 +47,7 @@ slack_output="$(
   BUILD_BUNDLE_NO="555" \
   BUILD_SHORT_SHA="0123456789" \
   BUILD_RUN_URL="https://example.invalid/run" \
-  SLACK_BUILD_MENTIONS="U12345678" \
+  SLACK_BUILD_MENTIONS="U12345678 <!channel> <@U99999999>" \
     bash "$slack_uploader"
 )"
 if printf '%s\n' "$slack_output" | grep -v '^::add-mask::' | grep -F 'xoxb-fixture-token' >/dev/null; then
@@ -56,8 +56,28 @@ if printf '%s\n' "$slack_output" | grep -v '^::add-mask::' | grep -F 'xoxb-fixtu
 fi
 grep -F 'files.getUploadURLExternal' "$fixture_root/curl.log" >/dev/null
 grep -F 'files.completeUploadExternal' "$fixture_root/curl.log" >/dev/null
-grep -F '[DEVELOPMENT BUILD] FixtureProject Android v5.5.5(555)' "$fixture_root/curl.log" >/dev/null
+grep -F '[DEVELOPMENT BUILD] [OK] FixtureProject Android BuildCommit SUCCESS - v5.5.5(555)' "$fixture_root/curl.log" >/dev/null
 grep -F '"channel_id":"C12345678"' "$fixture_root/curl.log" >/dev/null
+grep -F '<@U12345678>' "$fixture_root/curl.log" >/dev/null
+if grep -E '<!channel>|<@U99999999>' "$fixture_root/curl.log" >/dev/null; then
+  echo "Slack uploader must discard values outside the raw member ID allowlist" >&2
+  exit 1
+fi
+
+PATH="$fixture_root/bin:$PATH" \
+FAKE_CURL_LOG="$fixture_root/hostile-upload.log" \
+SLACK_BUILD_BOT_TOKEN="xoxb-fixture-token" \
+SLACK_BUILD_CHANNEL_ID="C12345678" \
+SLACK_FILE_PATH="$apk_path" \
+BUILD_PROJECT_NAME="FixtureProject" \
+BUILD_VERSION='5.5.5<!channel>&' \
+BUILD_BUNDLE_NO='555<@U99999999>' \
+  bash "$slack_uploader" >/dev/null
+grep -F 'v5.5.5&lt;!channel&gt;&amp;(555&lt;@U99999999&gt;)' "$fixture_root/hostile-upload.log" >/dev/null
+if grep -E '<!channel>|<@U99999999>' "$fixture_root/hostile-upload.log" >/dev/null; then
+  echo "Slack uploader must escape markup in version metadata" >&2
+  exit 1
+fi
 
 PATH="$fixture_root/bin:$PATH" \
 FAKE_CURL_LOG="$fixture_root/curl.log" \
@@ -68,8 +88,30 @@ BUILD_PROJECT_NAME="FixtureProject" \
 BUILD_VERSION="5.5.5" \
 BUILD_BUNDLE_NO="1" \
 BUILD_DEVELOPMENT_BUILD=true \
+SLACK_BUILD_MENTIONS="W87654321 <!channel>" \
   bash "$slack_notifier" >/dev/null
 grep -F '[DEVELOPMENT BUILD] [OK] FixtureProject iOS BuildCommit SUCCESS - v5.5.5(1)' "$fixture_root/curl.log" >/dev/null
+grep -F '<@W87654321>' "$fixture_root/curl.log" >/dev/null
+if grep -F '<!channel>' "$fixture_root/curl.log" >/dev/null; then
+  echo "Slack notifier must discard values outside the raw member ID allowlist" >&2
+  exit 1
+fi
+
+
+PATH="$fixture_root/bin:$PATH" \
+FAKE_CURL_LOG="$fixture_root/hostile-notify.log" \
+SLACK_BUILD_WEBHOOK_URL="https://hooks.slack.com/services/fixture" \
+BUILD_JOB_STATUS=success \
+BUILD_PLATFORM=Android \
+BUILD_PROJECT_NAME="FixtureProject" \
+BUILD_VERSION='5.5.5<!channel>&' \
+BUILD_BUNDLE_NO='555<@U99999999>' \
+  bash "$slack_notifier" >/dev/null
+grep -F 'v5.5.5&lt;!channel&gt;&amp;(555&lt;@U99999999&gt;)' "$fixture_root/hostile-notify.log" >/dev/null
+if grep -E '<!channel>|<@U99999999>' "$fixture_root/hostile-notify.log" >/dev/null; then
+  echo "Slack notifier must escape markup in version metadata" >&2
+  exit 1
+fi
 
 set +e
 missing_config_output="$(

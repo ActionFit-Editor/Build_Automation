@@ -169,7 +169,6 @@ jobs:
           ios_bundle_id = ""
           build_version = ""
           bundle_no = ""
-          slack_mentions = ""
 
           if should_build && File.exist?(request_path)
             request = JSON.parse(File.read(request_path))
@@ -203,13 +202,6 @@ jobs:
             ios_bundle_id = request["iosBundleId"].to_s.strip
             build_version = request["buildVersion"].to_s.strip
             bundle_no = request["bundleNo"].to_s.strip
-            raw_slack_mentions = request["slackMentions"]
-            slack_mentions = case raw_slack_mentions
-                             when Array
-                               raw_slack_mentions.map(&:to_s).join(" ")
-                             else
-                               raw_slack_mentions.to_s
-                             end.strip.gsub(/[,\s]+/, " ")
             should_build = false if platform == "None"
           else
             should_build = false
@@ -224,8 +216,7 @@ jobs:
             "android_package_name" => android_package_name,
             "ios_bundle_id" => ios_bundle_id,
             "build_version" => build_version,
-            "bundle_no" => bundle_no,
-            "slack_mentions" => slack_mentions
+            "bundle_no" => bundle_no
           }
           outputs.each do |name, value|
             abort("BuildRequest field for #{name} contains control characters") if value.to_s.match?(/[[:cntrl:]]/)
@@ -244,25 +235,11 @@ jobs:
       - name: Ensure Unity editor and Android modules
         if: steps.detect.outputs.should_build == 'true' && (steps.detect.outputs.platform == 'Android' || steps.detect.outputs.platform == 'Both')
         shell: bash
-        env:
-          BUILD_PLATFORM: AOS
-          BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
-          BUILD_VERSION: ${{ steps.detect.outputs.build_version }}
-          BUILD_BUNDLE_NO: ${{ steps.detect.outputs.bundle_no }}
-          SLACK_BUILD_MENTIONS: ${{ steps.detect.outputs.slack_mentions }}
-          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: bash "$REPOSITORY_ROOT/.github/scripts/ensure-unity-editor-modules.sh" Android
 
       - name: Ensure Unity editor and iOS modules
         if: steps.detect.outputs.should_build == 'true' && (steps.detect.outputs.platform == 'iOS' || steps.detect.outputs.platform == 'Both')
         shell: bash
-        env:
-          BUILD_PLATFORM: iOS
-          BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
-          BUILD_VERSION: ${{ steps.detect.outputs.build_version }}
-          BUILD_BUNDLE_NO: ${{ steps.detect.outputs.bundle_no }}
-          SLACK_BUILD_MENTIONS: ${{ steps.detect.outputs.slack_mentions }}
-          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: bash "$REPOSITORY_ROOT/.github/scripts/ensure-unity-editor-modules.sh" iOS
 
       - name: Resolve Unity editor
@@ -350,7 +327,6 @@ jobs:
           ios-bundle-id: ${{ steps.detect.outputs.ios_bundle_id }}
           build-version: ${{ steps.detect.outputs.build_version }}
           bundle-no: ${{ steps.sequence.outputs.android_bundle_no }}
-          slack-mentions: ${{ steps.detect.outputs.slack_mentions }}
           project-name: ${{ steps.paths.outputs.unity_project_name }}
 
       - name: Build iOS first
@@ -368,7 +344,6 @@ jobs:
           ios-bundle-id: ${{ steps.detect.outputs.ios_bundle_id }}
           build-version: ${{ steps.detect.outputs.build_version }}
           bundle-no: ${{ steps.sequence.outputs.ios_bundle_no }}
-          slack-mentions: ${{ steps.detect.outputs.slack_mentions }}
           project-name: ${{ steps.paths.outputs.unity_project_name }}
 
       - name: Build Android second
@@ -387,7 +362,6 @@ jobs:
           ios-bundle-id: ${{ steps.detect.outputs.ios_bundle_id }}
           build-version: ${{ steps.detect.outputs.build_version }}
           bundle-no: ${{ steps.sequence.outputs.android_bundle_no }}
-          slack-mentions: ${{ steps.detect.outputs.slack_mentions }}
           project-name: ${{ steps.paths.outputs.unity_project_name }}
 
       - name: Build iOS second
@@ -405,7 +379,6 @@ jobs:
           ios-bundle-id: ${{ steps.detect.outputs.ios_bundle_id }}
           build-version: ${{ steps.detect.outputs.build_version }}
           bundle-no: ${{ steps.sequence.outputs.ios_bundle_no }}
-          slack-mentions: ${{ steps.detect.outputs.slack_mentions }}
           project-name: ${{ steps.paths.outputs.unity_project_name }}
 
       - name: Finalize deferred first store upload
@@ -500,40 +473,6 @@ jobs:
           BUILD_CLEANUP_BUILD_VERSION: ${{ steps.detect.outputs.build_version }}
           BUILD_CLEANUP_BUNDLE_NO: ${{ steps.android_first.outputs.store-upload-deferred == 'true' && steps.sequence.outputs.android_bundle_no || steps.sequence.outputs.ios_bundle_no }}
         run: bash "$REPOSITORY_ROOT/.github/scripts/cleanup-old-build-artifacts.sh"
-
-      - name: Notify deferred first platform result
-        if: always() && (steps.android_first.outputs.store-upload-deferred == 'true' || steps.ios_first.outputs.store-upload-deferred == 'true')
-        shell: bash
-        env:
-          ANDROID_FIRST_OUTCOME: ${{ steps.android_first.outcome }}
-          IOS_FIRST_OUTCOME: ${{ steps.ios_first.outcome }}
-          FIRST_STORE_UPLOAD_OUTCOME: ${{ steps.first_store_upload.outcome }}
-          ANDROID_UPLOAD_DEFERRED: ${{ steps.android_first.outputs.store-upload-deferred }}
-          IOS_UPLOAD_DEFERRED: ${{ steps.ios_first.outputs.store-upload-deferred }}
-          BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
-          BUILD_VERSION: ${{ steps.detect.outputs.build_version }}
-          BUILD_BUNDLE_NO: ${{ steps.android_first.outputs.store-upload-deferred == 'true' && steps.sequence.outputs.android_bundle_no || steps.sequence.outputs.ios_bundle_no }}
-          BUILD_DEVELOPMENT_BUILD: ${{ steps.android_first.outputs.store-upload-deferred == 'true' && steps.sequence.outputs.android_development_build || steps.sequence.outputs.ios_development_build }}
-          BUILD_DISTRIBUTION_PROFILE: ${{ steps.detect.outputs.distribution_profile }}
-          SLACK_BUILD_MENTIONS: ${{ steps.detect.outputs.slack_mentions }}
-          BUILD_SHORT_SHA: ${{ github.sha }}
-          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          if [ "$ANDROID_UPLOAD_DEFERRED" = true ]; then
-            export BUILD_PLATFORM=AOS
-            build_outcome="$ANDROID_FIRST_OUTCOME"
-          else
-            export BUILD_PLATFORM=iOS
-            build_outcome="$IOS_FIRST_OUTCOME"
-          fi
-
-          export BUILD_JOB_STATUS=success
-          if [ "$build_outcome" != success ] || [ "$FIRST_STORE_UPLOAD_OUTCOME" != success ]; then
-            export BUILD_JOB_STATUS=failure
-          fi
-
-          bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"
 
       - name: Final cleanup while preserving Unity Library
         if: always()

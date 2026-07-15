@@ -1,0 +1,370 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+delivery_root="${SLACK_DELIVERY_ROOT:-$(cd "$script_dir/.." && pwd -P)}"
+notify_script="${SLACK_NOTIFY_SCRIPT:-$script_dir/notify-slack-build-result.sh}"
+upload_script="${SLACK_UPLOAD_SCRIPT:-$script_dir/upload-slack-file.sh}"
+request_path="${BUILD_REQUEST_PATH:-}"
+mode="${1:-}"
+
+export CI_SECRET_ROOT="${CI_SECRET_ROOT:-$delivery_root/secrets}"
+
+usage() {
+  echo "Usage: deliver-buildcommit-slack inspect|start|complete" >&2
+}
+
+write_output() {
+  local name="$1"
+  local value="$2"
+  if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    printf '%s=%s\n' "$name" "$value" >> "$GITHUB_OUTPUT"
+  fi
+}
+
+warning() {
+  printf '::warning::%s\n' "$1"
+}
+
+validate_source_context() {
+  SOURCE_REPOSITORY="${SOURCE_REPOSITORY:-}" \
+  SOURCE_SHA="${SOURCE_SHA:-}" \
+  SOURCE_RUN_URL="${SOURCE_RUN_URL:-}" \
+  SOURCE_RUN_ID="${SOURCE_RUN_ID:-}" \
+  SOURCE_RUN_ATTEMPT="${SOURCE_RUN_ATTEMPT:-}" \
+  SOURCE_EVENT="${SOURCE_EVENT:-}" \
+  SOURCE_RUN_STARTED_AT="${SOURCE_RUN_STARTED_AT:-}" \
+  ruby -rtime <<'RUBY'
+repository = ENV.fetch("SOURCE_REPOSITORY", "")
+sha = ENV.fetch("SOURCE_SHA", "")
+run_url = ENV.fetch("SOURCE_RUN_URL", "")
+run_id = ENV.fetch("SOURCE_RUN_ID", "")
+run_attempt = ENV.fetch("SOURCE_RUN_ATTEMPT", "")
+source_event = ENV.fetch("SOURCE_EVENT", "")
+started_at = ENV.fetch("SOURCE_RUN_STARTED_AT", "")
+
+abort("SOURCE_REPOSITORY is invalid") unless repository.match?(%r{\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\z})
+abort("SOURCE_SHA is invalid") unless sha.match?(/\A[0-9a-fA-F]{40}\z/)
+abort("SOURCE_RUN_ID is invalid") unless run_id.match?(/\A[1-9][0-9]*\z/)
+abort("SOURCE_RUN_ATTEMPT is invalid") unless run_attempt.match?(/\A[1-9][0-9]*\z/)
+abort("SOURCE_EVENT is not an approved BuildCommit source event") unless ["push", "workflow_dispatch"].include?(source_event)
+abort("SOURCE_RUN_URL is invalid") unless run_url.match?(%r{\Ahttps://[^[:space:]/]+/[^[:space:]]+\z})
+abort("SOURCE_RUN_URL does not identify the source run") unless run_url.end_with?("/actions/runs/#{run_id}")
+abort("SOURCE_RUN_STARTED_AT is invalid") unless Time.iso8601(started_at)
+RUBY
+}
+
+parse_request() {
+  local output_path="$1"
+
+  REQUEST_PATH="$request_path" REQUEST_OUTPUT_PATH="$output_path" ruby -rjson <<'RUBY'
+class InvalidRequest < StandardError; end
+
+path = ENV.fetch("REQUEST_PATH", "")
+output_path = ENV.fetch("REQUEST_OUTPUT_PATH")
+result = {
+  "request_state" => "invalid",
+  "reason" => "BuildRequest validation did not complete",
+  "platform" => "",
+  "development_android" => false,
+  "development_build" => false,
+  "distribution_profile" => "",
+  "build_version" => "",
+  "bundle_no" => "",
+  "slack_mentions" => ""
+}
+
+begin
+  if path.empty? || !File.exist?(path)
+    result["request_state"] = "ignored"
+    result["reason"] = "BuildRequest is not present at the source revision"
+  elsif File.symlink?(path) || !File.file?(path)
+    raise InvalidRequest, "BuildRequest must be a regular, non-symbolic-link file"
+  elsif File.size(path) > 2 * 1024 * 1024
+    raise InvalidRequest, "BuildRequest exceeds the 2 MiB validation limit"
+  else
+    request = JSON.parse(File.binread(path), max_nesting: 32)
+    raise InvalidRequest, "BuildRequest root must be a JSON object" unless request.is_a?(Hash)
+
+    allowed_keys = %w[
+      schemaVersion triggerSource unityProjectPath autoConfigureBuildSymbols developmentBuild
+      platform buildKind uploadTarget distributionProfile buildVersion bundleNo buildFileName
+      androidPackageName iosBundleId androidKeystoreFileName androidKeystoreBase64
+      androidKeystorePassword androidAliasPassword androidKeyaliasName slackMentions
+      sourceBranch sourceCommit createdAtUtc
+    ]
+    unknown_keys = request.keys - allowed_keys
+    raise InvalidRequest, "BuildRequest contains fields outside schema 12" unless unknown_keys.empty?
+
+    unless request["schemaVersion"].is_a?(Integer) && request["schemaVersion"] == 12
+      raise InvalidRequest, "BuildRequest schemaVersion must be 12"
+    end
+    unless request["triggerSource"].is_a?(String)
+      raise InvalidRequest, "BuildRequest triggerSource must be a string"
+    end
+
+    if request["triggerSource"] != "BuildCommit"
+      result["request_state"] = "ignored"
+      result["reason"] = "Request triggerSource is not BuildCommit"
+    else
+      required_booleans = %w[autoConfigureBuildSymbols developmentBuild]
+      required_booleans.each do |key|
+        value = request[key]
+        raise InvalidRequest, "BuildRequest #{key} must be a boolean" unless value == true || value == false
+      end
+
+      enum_values = {
+        "platform" => [0, 1, 2, 3],
+        "buildKind" => [0, 1, 2, 3, 4],
+        "uploadTarget" => [0, 1, 2, 3],
+        "distributionProfile" => [0, 1]
+      }
+      enum_values.each do |key, allowed|
+        value = request[key]
+        raise InvalidRequest, "BuildRequest #{key} is invalid" unless value.is_a?(Integer) && allowed.include?(value)
+      end
+
+      string_fields = %w[
+        unityProjectPath buildVersion bundleNo buildFileName androidPackageName iosBundleId
+        androidKeystoreFileName androidKeystoreBase64 androidKeystorePassword
+        androidAliasPassword androidKeyaliasName sourceBranch sourceCommit createdAtUtc
+      ]
+      string_fields.each do |key|
+        value = request[key]
+        raise InvalidRequest, "BuildRequest #{key} must be a string" unless value.is_a?(String)
+        raise InvalidRequest, "BuildRequest #{key} is too long" if value.bytesize > (key == "androidKeystoreBase64" ? 1024 * 1024 : 4096)
+        raise InvalidRequest, "BuildRequest #{key} contains control characters" if value.match?(/[[:cntrl:]]/)
+      end
+      unless request["sourceCommit"].empty? || request["sourceCommit"].match?(/\A[0-9a-fA-F]{40}\z/)
+        raise InvalidRequest, "BuildRequest sourceCommit is invalid"
+      end
+
+      mentions = request["slackMentions"]
+      raise InvalidRequest, "BuildRequest slackMentions must be an array" unless mentions.is_a?(Array)
+      raise InvalidRequest, "BuildRequest has too many Slack mentions" if mentions.length > 32
+      mentions.each do |mention|
+        unless mention.is_a?(String) && mention.bytesize <= 128 && !mention.match?(/[[:cntrl:]]/)
+          raise InvalidRequest, "BuildRequest slackMentions contains an invalid value"
+        end
+      end
+
+      safe_mentions = mentions
+        .map(&:strip)
+        .select { |mention| mention.match?(/\A[UW][A-Z0-9]+\z/) }
+        .uniq
+      platform = { 0 => "Current", 1 => "Android", 2 => "iOS", 3 => "Both" }.fetch(request["platform"])
+      distribution_profile = { 0 => "Actionfit", 1 => "Stormborn" }.fetch(request["distributionProfile"])
+      development_build = request["developmentBuild"]
+      result = {
+        "request_state" => "build",
+        "reason" => "",
+        "platform" => platform,
+        "development_android" => development_build && [0, 1, 3].include?(request["platform"]),
+        "development_build" => development_build,
+        "distribution_profile" => distribution_profile,
+        "build_version" => request["buildVersion"].strip,
+        "bundle_no" => request["bundleNo"].strip,
+        "slack_mentions" => safe_mentions.join(" ")
+      }
+    end
+  end
+rescue JSON::ParserError
+  result["request_state"] = "invalid"
+  result["reason"] = "BuildRequest is not valid JSON"
+rescue InvalidRequest => error
+  result["request_state"] = "invalid"
+  result["reason"] = error.message
+rescue SystemCallError => error
+  result["request_state"] = "invalid"
+  result["reason"] = "BuildRequest could not be read: #{error.class}"
+rescue StandardError
+  result["request_state"] = "invalid"
+  result["reason"] = "BuildRequest could not be validated safely"
+end
+
+File.open(output_path, "wb", 0o600) { |file| file.write(JSON.generate(result)) }
+RUBY
+}
+
+metadata_value() {
+  local metadata_path="$1"
+  local key="$2"
+  ruby -rjson -e 'value = JSON.parse(File.binread(ARGV.fetch(0))).fetch(ARGV.fetch(1)); print(value == true ? "true" : value == false ? "false" : value)' "$metadata_path" "$key"
+}
+
+source_started_at_epoch() {
+  SOURCE_RUN_STARTED_AT="${SOURCE_RUN_STARTED_AT:-}" ruby -rtime -e 'print(Time.iso8601(ENV.fetch("SOURCE_RUN_STARTED_AT")).to_i)'
+}
+
+export_notification_context() {
+  local metadata_path="$1"
+
+  export BUILD_PROJECT_NAME="${SOURCE_REPOSITORY##*/}"
+  export BUILD_PLATFORM
+  BUILD_PLATFORM="$(metadata_value "$metadata_path" platform)"
+  export BUILD_VERSION
+  BUILD_VERSION="$(metadata_value "$metadata_path" build_version)"
+  export BUILD_BUNDLE_NO
+  BUILD_BUNDLE_NO="$(metadata_value "$metadata_path" bundle_no)"
+  export BUILD_DEVELOPMENT_BUILD
+  BUILD_DEVELOPMENT_BUILD="$(metadata_value "$metadata_path" development_build)"
+  export BUILD_DISTRIBUTION_PROFILE
+  BUILD_DISTRIBUTION_PROFILE="$(metadata_value "$metadata_path" distribution_profile)"
+  export SLACK_BUILD_MENTIONS
+  SLACK_BUILD_MENTIONS="$(metadata_value "$metadata_path" slack_mentions)"
+  export BUILD_SHORT_SHA="$SOURCE_SHA"
+  export BUILD_RUN_URL="$SOURCE_RUN_URL"
+  export BUILD_STARTED_AT_EPOCH
+  BUILD_STARTED_AT_EPOCH="$(source_started_at_epoch)"
+  export GITHUB_REPOSITORY="$SOURCE_REPOSITORY"
+  export GITHUB_SHA="$SOURCE_SHA"
+}
+
+notify_advisory() {
+  local status="$1"
+  if [ ! -x "$notify_script" ]; then
+    warning "Slack notification helper is not installed: $notify_script"
+    return 0
+  fi
+
+  BUILD_JOB_STATUS="$status" "$notify_script" "$status" || {
+    warning "Slack notification helper failed; delivery remains advisory."
+    return 0
+  }
+}
+
+find_single_apk() {
+  local root="${SLACK_APK_ROOT:-}"
+  APK_ROOT="$root" ruby <<'RUBY'
+root = ENV.fetch("APK_ROOT", "")
+abort("APK artifact root is missing") if root.empty? || !File.directory?(root) || File.symlink?(root)
+
+matches = Dir.glob(File.join(root, "**", "*"), File::FNM_DOTMATCH)
+  .select { |path| File.basename(path).downcase.end_with?(".apk") }
+abort("expected exactly one APK in the downloaded artifact") unless matches.length == 1
+
+apk = matches.first
+abort("APK must be a regular, non-symbolic-link file") unless File.file?(apk) && !File.symlink?(apk)
+abort("APK path contains control characters") if apk.match?(/[[:cntrl:]]/)
+abort("APK is empty") unless File.size(apk) > 0
+puts File.expand_path(apk)
+RUBY
+}
+
+inspect_request() {
+  local metadata_path="$1"
+  local state reason development_android
+
+  state="$(metadata_value "$metadata_path" request_state)"
+  reason="$(metadata_value "$metadata_path" reason)"
+  development_android="$(metadata_value "$metadata_path" development_android)"
+  write_output request_state "$state"
+  if [ "$state" = "build" ]; then
+    write_output should_build true
+    write_output development_android "$development_android"
+    echo "Approved BuildCommit request for Slack delivery."
+  else
+    write_output should_build false
+    write_output development_android false
+    if [ "$state" = "invalid" ]; then
+      warning "$reason"
+    else
+      echo "$reason; Slack delivery is skipped."
+    fi
+  fi
+}
+
+run_start() {
+  local metadata_path="$1"
+  local epoch
+
+  export_notification_context "$metadata_path"
+  epoch="$BUILD_STARTED_AT_EPOCH"
+  write_output started_at_epoch "$epoch"
+  notify_advisory start
+}
+
+run_complete() {
+  local metadata_path="$1"
+  local conclusion notification_status development_android apk_path
+
+  conclusion="${SOURCE_CONCLUSION:-}"
+  case "$conclusion" in
+    success) notification_status=success ;;
+    cancelled) notification_status=cancelled ;;
+    failure|timed_out|action_required|neutral|skipped|stale|startup_failure) notification_status=failure ;;
+    *)
+      warning "SOURCE_CONCLUSION is not a recognized workflow_run conclusion; reporting failure."
+      notification_status=failure
+      ;;
+  esac
+
+  export_notification_context "$metadata_path"
+  development_android="$(metadata_value "$metadata_path" development_android)"
+
+  if [ "$notification_status" = "success" ] && [ "$development_android" = "true" ]; then
+    apk_path=""
+    if apk_path="$(find_single_apk 2>/dev/null)"; then
+      if [ -x "$upload_script" ] && SLACK_FILE_PATH="$apk_path" "$upload_script"; then
+        echo "Development BuildCommit success was delivered as one Slack APK post."
+        return 0
+      fi
+      warning "Development APK delivery failed; sending the webhook success fallback."
+    else
+      warning "Development APK artifact validation failed; sending the webhook success fallback."
+    fi
+  fi
+
+  notify_advisory "$notification_status"
+}
+
+if [ "$#" -ne 1 ]; then
+  usage
+  exit 64
+fi
+
+case "$mode" in
+  inspect|start|complete) ;;
+  *)
+    usage
+    exit 64
+    ;;
+esac
+
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/buildcommit-slack.XXXXXX")"
+trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
+metadata_path="$tmp_dir/request-metadata.json"
+
+if ! validate_source_context >/dev/null 2>"$tmp_dir/source-error"; then
+  source_error="$(sed -n '1p' "$tmp_dir/source-error")"
+  write_output request_state invalid
+  write_output should_build false
+  write_output development_android false
+  warning "${source_error:-Source workflow_run metadata is invalid}"
+  exit 0
+fi
+
+parse_request "$metadata_path"
+request_state="$(metadata_value "$metadata_path" request_state)"
+
+case "$mode" in
+  inspect)
+    inspect_request "$metadata_path"
+    ;;
+  start)
+    if [ "$request_state" = "build" ]; then
+      run_start "$metadata_path"
+    else
+      warning "Slack start delivery skipped because BuildRequest state is $request_state."
+    fi
+    ;;
+  complete)
+    if [ "$request_state" = "build" ]; then
+      run_complete "$metadata_path"
+    else
+      warning "Slack completion delivery skipped because BuildRequest state is $request_state."
+    fi
+    ;;
+esac
+
+exit 0

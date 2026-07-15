@@ -32,15 +32,11 @@ inputs:
     required: false
     default: ""
   build-version:
-    description: Build version used in notifications and cleanup metadata.
+    description: Build version used in store validation and cleanup metadata.
     required: false
     default: ""
   bundle-no:
-    description: Bundle number used in notifications and cleanup metadata.
-    required: false
-    default: ""
-  slack-mentions:
-    description: Normalized Slack mentions.
+    description: Bundle number used in store validation and cleanup metadata.
     required: false
     default: ""
   project-name:
@@ -62,7 +58,6 @@ runs:
         marker_path="$RUNNER_TEMP/buildcommit-android-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.marker"
         rm -f "$marker_path"
         touch "$marker_path"
-        echo "started_at_epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
         echo "marker_path=$marker_path" >> "$GITHUB_OUTPUT"
 
     - name: Resolve Android store upload mode
@@ -102,28 +97,6 @@ runs:
     - name: Prepare Android transient output
       shell: bash
       run: rm -rf "$ANDROID_UPLOAD_DIR"
-
-    - name: Notify Slack Android start
-      shell: bash
-      env:
-        BUILD_JOB_STATUS: start
-        BUILD_PLATFORM: AOS
-        BUILD_PROJECT_NAME: ${{ inputs.project-name }}
-        BUILD_VERSION: ${{ inputs.build-version }}
-        BUILD_BUNDLE_NO: ${{ inputs.bundle-no }}
-        BUILD_DEVELOPMENT_BUILD: ${{ inputs.development-build }}
-        BUILD_DISTRIBUTION_PROFILE: ${{ inputs.distribution-profile }}
-        SLACK_BUILD_MENTIONS: ${{ inputs.slack-mentions }}
-        BUILD_SHORT_SHA: ${{ github.sha }}
-        BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
-      run: |
-        if [ ! -f "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh" ]; then
-          echo "::warning::Slack notification script not found; skipping."
-          exit 0
-        fi
-
-        bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"
 
     - name: Resolve Android local runner secrets
       id: local_secrets
@@ -319,24 +292,10 @@ runs:
       continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
-        name: Android-BuildCommit-Development-APK
+        name: Android-BuildCommit-Development-APK-${{ github.run_id }}-${{ github.run_attempt }}
         path: ${{ steps.apk.outputs.path }}
         if-no-files-found: error
         compression-level: 0
-
-    - name: Attach Development APK to Slack
-      if: inputs.development-build == 'true' && steps.apk.outputs.path != ''
-      continue-on-error: true
-      shell: bash
-      env:
-        SLACK_FILE_PATH: ${{ steps.apk.outputs.path }}
-        BUILD_PROJECT_NAME: ${{ inputs.project-name }}
-        BUILD_VERSION: ${{ inputs.build-version }}
-        BUILD_BUNDLE_NO: ${{ inputs.bundle-no }}
-        SLACK_BUILD_MENTIONS: ${{ inputs.slack-mentions }}
-        BUILD_SHORT_SHA: ${{ github.sha }}
-        BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      run: bash "$REPOSITORY_ROOT/.github/scripts/upload-slack-file.sh"
 
     - name: Cleanup old Android build artifacts
       if: success() && steps.upload_mode.outputs.deferred != 'true' && (inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
@@ -362,26 +321,3 @@ runs:
         name: Android-BuildCommit-Logs
         path: ${{ env.UNITY_LOG_DIR }}/**
         if-no-files-found: warn
-
-    - name: Notify Slack Android result
-      if: always() && steps.upload_mode.outputs.deferred != 'true'
-      shell: bash
-      env:
-        BUILD_JOB_STATUS: ${{ job.status }}
-        BUILD_PLATFORM: AOS
-        BUILD_PROJECT_NAME: ${{ inputs.project-name }}
-        BUILD_VERSION: ${{ inputs.build-version }}
-        BUILD_BUNDLE_NO: ${{ inputs.bundle-no }}
-        BUILD_DEVELOPMENT_BUILD: ${{ inputs.development-build }}
-        BUILD_DISTRIBUTION_PROFILE: ${{ inputs.distribution-profile }}
-        SLACK_BUILD_MENTIONS: ${{ inputs.slack-mentions }}
-        BUILD_SHORT_SHA: ${{ github.sha }}
-        BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        BUILD_STARTED_AT_EPOCH: ${{ steps.build_timer.outputs.started_at_epoch }}
-      run: |
-        if [ ! -f "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh" ]; then
-          echo "::warning::Slack notification script not found; skipping."
-          exit 0
-        fi
-
-        bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"

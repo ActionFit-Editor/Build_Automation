@@ -97,13 +97,17 @@ mentions = ENV.fetch("SLACK_BUILD_MENTIONS", "")
   .split(/[,\s]+/)
   .map(&:strip)
   .reject(&:empty?)
-  .map { |value| value.match?(/\A[UW][A-Z0-9]+\z/) ? "<@#{value}>" : value }
+  .select { |value| value.match?(/\A[UW][A-Z0-9]+\z/) }
+  .map { |value| "<@#{value}>" }
   .uniq
-version = ENV.fetch("BUILD_VERSION", "")
-bundle = ENV.fetch("BUILD_BUNDLE_NO", "")
+escape_mrkdwn = lambda do |value|
+  value.gsub("&", "&amp;").gsub("<", "&lt;").gsub(">", "&gt;")
+end
+version = escape_mrkdwn.call(ENV.fetch("BUILD_VERSION", ""))
+bundle = escape_mrkdwn.call(ENV.fetch("BUILD_BUNDLE_NO", ""))
 version_label = version.empty? ? "version unknown" : "v#{version.sub(/\A[vV]/, "")}"
 version_label += "(#{bundle})" unless bundle.empty?
-lines = ["[DEVELOPMENT BUILD] #{ENV.fetch("BUILD_PROJECT_NAME")} Android #{version_label}"]
+lines = ["[DEVELOPMENT BUILD] [OK] #{ENV.fetch("BUILD_PROJECT_NAME")} Android BuildCommit SUCCESS - #{version_label}"]
 lines.unshift(mentions.join(" ")) unless mentions.empty?
 sha = ENV.fetch("BUILD_SHORT_SHA", "")[0, 7]
 lines << "Commit: #{sha}" unless sha.empty?

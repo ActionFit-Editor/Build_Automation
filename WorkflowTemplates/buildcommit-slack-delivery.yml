@@ -1,0 +1,166 @@
+name: BuildCommit Slack Delivery
+
+on:
+  workflow_run:
+    workflows:
+      - BuildCommit Auto Build
+    types:
+      - in_progress
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: buildcommit-slack-delivery-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+  cancel-in-progress: false
+
+jobs:
+  deliver:
+    name: Deliver BuildCommit Slack Notification
+    if: >-
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.path == '.github/workflows/buildcommit-auto-build.yml' &&
+      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
+    permissions:
+      actions: read
+      contents: read
+    runs-on:
+      group: slack-delivery
+      labels: slack-delivery
+    timeout-minutes: 15
+    env:
+      SOURCE_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      SOURCE_RUN_URL: ${{ github.event.workflow_run.html_url }}
+      SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+      SOURCE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+      SOURCE_EVENT: ${{ github.event.workflow_run.event }}
+      SOURCE_RUN_STARTED_AT: ${{ github.event.workflow_run.run_started_at }}
+    steps:
+      - name: Initialize Slack delivery paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          for value in "$SOURCE_RUN_ID" "$SOURCE_RUN_ATTEMPT" "$GITHUB_RUN_ID"; do
+            case "$value" in
+              *[!0-9]*|'')
+                echo "::error::Slack delivery run identifiers must be numeric."
+                exit 1
+                ;;
+            esac
+          done
+
+          delivery_work_root="$RUNNER_TEMP/buildcommit-slack-delivery-${SOURCE_RUN_ID}-${SOURCE_RUN_ATTEMPT}-${GITHUB_RUN_ID}"
+          {
+            printf 'DELIVERY_WORK_ROOT=%s\n' "$delivery_work_root"
+            printf 'BUILD_REQUEST_PATH=%s/build_request.json\n' "$delivery_work_root"
+            printf 'SLACK_APK_ROOT=%s/apk\n' "$delivery_work_root"
+          } >> "$GITHUB_ENV"
+
+      - name: Fetch BuildCommit request metadata
+        id: fetch_request
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          case "$SOURCE_SHA" in
+            *[!0-9a-fA-F]*|'')
+              echo "::error::Invalid source commit SHA."
+              exit 1
+              ;;
+          esac
+          if [ "${#SOURCE_SHA}" -ne 40 ]; then
+            echo "::error::Source commit SHA must contain 40 hexadecimal characters."
+            exit 1
+          fi
+
+          rm -rf "$DELIVERY_WORK_ROOT"
+          install -d -m 700 "$DELIVERY_WORK_ROOT" "$SLACK_APK_ROOT"
+          gh api \
+            --header "Accept: application/vnd.github.raw+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${SOURCE_REPOSITORY}/contents/.build/build_request.json?ref=${SOURCE_SHA}" \
+            > "$BUILD_REQUEST_PATH"
+          chmod 600 "$BUILD_REQUEST_PATH"
+
+          if [ ! -s "$BUILD_REQUEST_PATH" ]; then
+            echo "::error::BuildCommit request metadata is empty."
+            exit 1
+          fi
+
+      - name: Inspect BuildCommit request metadata
+        id: inspect
+        if: always() && steps.fetch_request.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x /Users/lydia/workspace/slack-delivery/bin/deliver-buildcommit-slack ]; then
+            echo "::error::Slack delivery executable is missing or not executable."
+            exit 1
+          fi
+          /Users/lydia/workspace/slack-delivery/bin/deliver-buildcommit-slack inspect
+
+      - name: Deliver build start notification
+        if: >-
+          always() &&
+          github.event.action == 'in_progress' &&
+          steps.inspect.outcome == 'success' &&
+          steps.inspect.outputs.request_state == 'build' &&
+          steps.inspect.outputs.should_build == 'true'
+        continue-on-error: true
+        shell: bash
+        run: /Users/lydia/workspace/slack-delivery/bin/deliver-buildcommit-slack start
+
+      - name: Download Development APK from source run
+        if: >-
+          always() &&
+          github.event.action == 'completed' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          steps.inspect.outcome == 'success' &&
+          steps.inspect.outputs.request_state == 'build' &&
+          steps.inspect.outputs.should_build == 'true' &&
+          steps.inspect.outputs.development_android == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: Android-BuildCommit-Development-APK-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+          path: ${{ env.SLACK_APK_ROOT }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Deliver build completion notification
+        if: >-
+          always() &&
+          github.event.action == 'completed' &&
+          steps.inspect.outcome == 'success' &&
+          steps.inspect.outputs.request_state == 'build' &&
+          steps.inspect.outputs.should_build == 'true'
+        continue-on-error: true
+        shell: bash
+        env:
+          SOURCE_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: /Users/lydia/workspace/slack-delivery/bin/deliver-buildcommit-slack complete
+
+      - name: Cleanup Slack delivery files
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$DELIVERY_WORK_ROOT" in
+            "$RUNNER_TEMP"/buildcommit-slack-delivery-*)
+              rm -rf "$DELIVERY_WORK_ROOT"
+              ;;
+            *)
+              echo "::error::Refusing to clean an unexpected delivery path: $DELIVERY_WORK_ROOT"
+              exit 1
+              ;;
+          esac

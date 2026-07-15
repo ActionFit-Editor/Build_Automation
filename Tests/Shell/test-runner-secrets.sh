@@ -126,8 +126,8 @@ cat > "$request_path" <<'EOF'
   "androidAliasPassword": ""
 }
 EOF
-printf 'xoxb-runner-fixture-token\n' > "$secret_root/shared/slack-bot-token"
-printf 'C12345678\n' > "$secret_root/shared/slack-channel-id"
+: > "$github_env"
+: > "$github_output"
 development_validation_output="$(
   HOME="$home_root" \
   BUILD_REQUEST_PATH="$request_path" \
@@ -136,14 +136,16 @@ development_validation_output="$(
   GITHUB_OUTPUT="$github_output" \
     bash "$validator" Actionfit Android None
 )"
-if ! printf '%s\n' "$development_validation_output" | grep -Fx '::add-mask::xoxb-runner-fixture-token' >/dev/null; then
-  echo "Development Android validation must mask the Slack Bot token" >&2
+if printf '%s\n' "$development_validation_output" | grep -Ei 'slack|webhook' >/dev/null; then
+  echo "Development Android validation must not inspect Slack configuration" >&2
   exit 1
 fi
-if printf '%s\n' "$development_validation_output" \
-  | grep -v '^::add-mask::' \
-  | grep -F 'xoxb-runner-fixture-token' >/dev/null; then
-  echo "Development Android validation must not print the Slack Bot token outside masking commands" >&2
+if grep -Ei 'slack|webhook' "$github_env" "$github_output" >/dev/null; then
+  echo "Development Android validation must not export Slack configuration" >&2
+  exit 1
+fi
+if grep -Eiq 'slack|webhook' "$validator"; then
+  echo "Runner secret validation must not contain Slack credential access" >&2
   exit 1
 fi
 

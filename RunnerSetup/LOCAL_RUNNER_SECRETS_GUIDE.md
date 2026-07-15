@@ -1,8 +1,8 @@
 # Local Runner Secrets Guide
 
-This guide describes the local secret bundle used by the `BuildCommit Auto Build` workflow on a macOS self-hosted runner.
+This guide describes the mobile build secret bundle used by the `BuildCommit Auto Build` workflow on a macOS self-hosted Unity runner.
 
-BuildRequest schema 12 contains build metadata plus project-specific Android keystore Base64 and signing passwords. Android request values take precedence, while the Mac runner bundle provides optional Android fallbacks and remains the source for Google Play JSON, iOS team and App Store Connect credentials, Apple Distribution certificates, and provisioning profiles.
+BuildRequest schema 12 contains build metadata plus project-specific Android keystore Base64 and signing passwords. Android request values take precedence, while the Mac runner bundle provides optional Android fallbacks and remains the source for Google Play JSON, iOS team and App Store Connect credentials, Apple Distribution certificates, and provisioning profiles. Slack credentials are deliberately excluded and belong only to the dedicated Slack delivery runner described in `SLACK_DELIVERY_RUNNER_SETUP.md`.
 
 ## Directory Layout
 
@@ -22,7 +22,6 @@ workspace/build-automation/
     android-signing.env
     ios-keychain.env
     github-package-read-token
-    slack-webhook-url
   profiles/
     actionfit/
       profile.env
@@ -100,26 +99,7 @@ REPLACE_WITH_READ_ONLY_GITHUB_TOKEN
 
 This file is used only when the runner user does not already have working `gh auth` Git credential setup. Put one read-only token on the first non-comment line. The token must be able to read private ActionFit GitHub package repositories used by `$UNITY_PROJECT_DIR/Packages/manifest.json`.
 
-`shared/slack-webhook-url`
-
-```bash
-# Optional. Slack Incoming Webhook URL for build start/result notifications.
-https://hooks.slack.com/services/...
-```
-
-This file is optional. When present, the workflow sends Android/iOS BuildCommit start and result notifications to Slack. Start messages use `[Start]`, and result messages include one summary line plus elapsed `Time`, distribution profile, commit, and GitHub Actions run URL. Leave the file commented or empty to skip Slack notifications.
-
-`shared/slack-bot-token` and `shared/slack-channel-id`
-
-```bash
-# slack-bot-token: Bot token with files:write. Never commit this value.
-xoxb-...
-
-# slack-channel-id: target channel ID; the bot must already be a member.
-C12345678
-```
-
-These files are optional and used only for direct Development Android APK attachment. The workflow uses Slack's external upload URL and completion APIs. Missing/invalid configuration or an API failure emits a warning and leaves the APK in the `Android-BuildCommit-Development-APK` GitHub Artifact without failing a successful build. No SMB/NAS or persistent workspace file share is used.
+Do not create `slack-webhook-url`, `slack-bot-token`, or `slack-channel-id` in this mobile build bundle. Install them once under `/Users/lydia/workspace/slack-delivery/secrets/shared` on the dedicated Slack delivery runner instead. Unity runner workflow steps never read that Slack bundle.
 
 `profiles/actionfit/profile.env`
 
@@ -159,7 +139,7 @@ find "/Users/lydia/workspace/build-automation" -type d -exec chmod 700 {} \;
 find "/Users/lydia/workspace/build-automation" -type f -exec chmod 600 {} \;
 ```
 
-Only the macOS user running the GitHub Actions runner should be able to read these files.
+Only the macOS user running the Unity GitHub Actions runner should be able to read these mobile build files.
 
 ## Validate Locally
 
@@ -198,14 +178,12 @@ Private package access:
 
 Slack notification:
 
-- Runs `notify-slack-build-result.sh` at the start of each Android/iOS build job and at the end with `if: always()`.
-- Reads `shared/slack-webhook-url` or `SLACK_BUILD_WEBHOOK_URL`.
-- Reads optional BuildCommit request `slackMentions` JSON array through `SLACK_BUILD_MENTIONS` and prepends multiple Slack member mentions to the notification. AutoBuild stores shared mention rows in `BuildAutomationSettingsSO`; only rows with `Mention` enabled enter the request, and memo values are not committed into `.build/build_request.json`.
-- Sends a short message with one summary line plus time when available, profile, commit, and GitHub Actions run URL. It intentionally omits separate `Project`, `Version`, `Platform`, `Result`, `Upload`, and `Ref` lines.
-- Sends `[Start]` messages plus success, failure, and cancelled results.
-- Skips without failing the build when the webhook file is missing, empty, invalid, or Slack POST fails.
-- Prefixes Development Build start/result summaries with `[DEVELOPMENT BUILD]`.
-- Development Android additionally reads `shared/slack-bot-token` and `shared/slack-channel-id`, attaches the fresh APK through Slack Bot `files:write`, and falls back to the GitHub Artifact when attachment is unavailable.
+- The mobile build workflow never reads Slack credentials or posts directly to Slack.
+- A separate `workflow_run` workflow handles `BuildCommit Auto Build` `in_progress` and `completed` events on runner group and label `slack-delivery`.
+- The delivery workflow does not check out or execute source repository content. It fetches only `.build/build_request.json` at the source `head_sha` through the GitHub API and validates it with a fixed host-local executable.
+- A successful Development Android build uploads a uniquely named APK Artifact. The delivery runner downloads that exact source-run Artifact and sends the success message and APK as one Slack file post.
+- Missing credentials, Artifact download failure, and Slack API failure are advisory. They do not change the source mobile build result, and the APK remains available as a GitHub Artifact.
+- See `SLACK_DELIVERY_RUNNER_SETUP.md` for the host paths, installer, GitHub runner group access, and security boundary.
 
 Android:
 
@@ -232,4 +210,4 @@ Project and symbols:
 
 ## Security Rule
 
-Do not allow untrusted workflow code to run on this runner. Any workflow running on the self-hosted Mac can read files that the runner user can read. Keep BuildCommit triggers limited to trusted tags/branches and do not run arbitrary pull request workflows on this runner. Android BuildRequest signing values must never be printed to workflow logs.
+Do not allow untrusted workflow code to run on this runner. Any workflow running on the self-hosted Mac can read files that the runner user can read. Keep BuildCommit triggers limited to trusted tags/branches and do not run arbitrary pull request workflows on this runner. Android BuildRequest signing values must never be printed to workflow logs. Merely registering the Slack delivery runner separately under the same macOS user is operational separation, not credential isolation; use a separate OS user or machine when the Unity runner must be unable to read Slack credentials.

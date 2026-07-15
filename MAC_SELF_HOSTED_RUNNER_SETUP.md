@@ -145,7 +145,7 @@ App Store Connect API key는 TestFlight upload에 사용됩니다. signing/expor
 
 ## 6. 로컬 시크릿 번들 준비
 
-self-hosted runner는 Android BuildRequest의 keystore Base64와 signing 비밀번호를 우선 사용하고, 누락된 Android 값 및 Google Play/iOS/App Store Connect credential은 Mac 로컬 파일에서 읽습니다. 기본 workflow template은 기존 ActionFit runner bundle을 사용하도록 `CI_SECRET_ROOT=/Users/lydia/workspace/build-automation`을 명시합니다. Setup/validation script를 workflow 밖에서 직접 실행해 이 환경변수가 없으면 `$HOME/ci-secrets/build-automation`을 사용합니다. BuildCommit request에는 runner 로컬 경로를 넣지 않습니다.
+self-hosted Unity runner는 Android BuildRequest의 keystore Base64와 signing 비밀번호를 우선 사용하고, 누락된 Android 값 및 Google Play/iOS/App Store Connect credential은 Mac 로컬 파일에서 읽습니다. 기본 workflow template은 기존 ActionFit runner bundle을 사용하도록 `CI_SECRET_ROOT=/Users/lydia/workspace/build-automation`을 명시합니다. Setup/validation script를 workflow 밖에서 직접 실행해 이 환경변수가 없으면 `$HOME/ci-secrets/build-automation`을 사용합니다. BuildCommit request에는 runner 로컬 경로를 넣지 않습니다. Slack credential은 이 번들에 두지 않고 전용 `slack-delivery` runner가 별도 경로에서 관리합니다.
 
 기본 workflow template 경로:
 
@@ -172,7 +172,6 @@ workspace/build-automation/
     android-signing.env
     ios-keychain.env
     github-package-read-token
-    slack-webhook-url
   profiles/
     actionfit/
       profile.env
@@ -234,9 +233,9 @@ gh auth setup-git --hostname github.com
 
 `gh auth`를 사용할 수 없는 runner라면 `shared/github-package-read-token` 파일의 첫 non-comment line에 private ActionFit package repo read 권한이 있는 fine-grained token을 넣습니다. workflow는 Unity 실행 전에 이 credential을 준비하고 `$UNITY_PROJECT_DIR/Packages/manifest.json`의 ActionFit GitHub package 접근을 `git ls-remote`로 사전 확인합니다.
 
-Slack 빌드 알림을 사용하려면 `shared/slack-webhook-url` 파일의 첫 non-comment line에 Slack Incoming Webhook URL을 넣습니다. 이 파일이 없거나 비어 있으면 Android/iOS phase 시작과 마지막의 알림 step은 조용히 skip됩니다. 시작 알림은 `[Start]`로 표시되고, 결과 알림은 `Time` 라인으로 phase 소요 시간을 표시합니다.
+Slack 알림과 Development APK 전송은 Unity build runner가 직접 수행하지 않습니다. 별도 `BuildCommit Slack Delivery` workflow와 `slack-delivery` runner가 `/Users/lydia/workspace/slack-delivery/secrets/shared`의 webhook, Bot token, channel ID를 사용합니다. Runner group, host tool, default-branch 배포와 보안 경계는 `RunnerSetup/SLACK_DELIVERY_RUNNER_SETUP.md`를 따릅니다.
 
-Slack 사람 태그는 AutoBuild 창의 `Slack Mentions` 행 목록에서 설정합니다. 각 행은 `Mention` 체크박스, `Member ID`, `Memo`를 가지며 BuildAutomation 패키지의 `BuildAutomationSettingsSO`에 저장되어 프로젝트에서 공유됩니다. 기본 에셋 경로는 `Assets/_Data/_BuildAutomation/BuildAutomationSettingsSO.asset`입니다. `Mention`이 체크된 행의 `Member ID`만 `.build/build_request.json`의 `slackMentions` JSON 배열로 직렬화되어 workflow에 전달됩니다. `Memo`는 request에 포함되지 않고 AutoBuild 창에서 식별용으로 보입니다. 표시 이름 `@송제우`가 아니라 `U12345678` 또는 `<@U12345678>` 형식을 사용합니다.
+Slack 사람 태그는 AutoBuild 창의 `Slack Mentions` 행 목록에서 설정합니다. 각 행은 `Mention` 체크박스, `Member ID`, `Memo`를 가지며 BuildAutomation 패키지의 `BuildAutomationSettingsSO`에 저장되어 프로젝트에서 공유됩니다. 기본 에셋 경로는 `Assets/_Data/_BuildAutomation/BuildAutomationSettingsSO.asset`입니다. `Mention`이 체크된 행의 `Member ID`만 `.build/build_request.json`의 `slackMentions` JSON 배열로 직렬화되어 delivery workflow에 전달됩니다. `Memo`는 request에 포함되지 않고 AutoBuild 창에서 식별용으로 보입니다. 표시 이름이나 Slack markup이 아니라 raw `U12345678` 또는 `W12345678` 형식만 사용합니다.
 
 회사별 `profile.env`에는 실제 파일 경로와 iOS/App Store Connect 값을 넣습니다.
 

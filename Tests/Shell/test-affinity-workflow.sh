@@ -44,6 +44,9 @@ runs_on = mobile_build.fetch("runs-on")
 expected_labels = ["self-hosted", "macOS", "unity-mobile", "${{ needs.allocate.outputs.affinity_label }}"]
 abort("unexpected affinity runner labels: #{runs_on.inspect}") unless runs_on == expected_labels
 
+forbidden_slack_access = /(?:SLACK_(?:BUILD_)?(?:WEBHOOK_URL|BOT_TOKEN|CHANNEL_ID)|slack-(?:webhook-url|bot-token|channel-id)|notify-slack-build-result\.sh|upload-slack-file\.sh|hooks\.slack\.com)/i
+abort("mobile-build must not access Slack credentials or repository Slack helpers") if mobile_build.to_s.match?(forbidden_slack_access)
+
 workflow_environment = workflow.fetch("env")
 abort("Store upload timeout is missing") unless workflow_environment.fetch("STORE_UPLOAD_TIMEOUT_SECONDS") == 3600
 abort("TestFlight retries must be limited to two attempts") unless workflow_environment.fetch("TESTFLIGHT_UPLOAD_ATTEMPTS") == 2
@@ -133,6 +136,14 @@ abort("iOS action must be composite") unless ios_action.dig("runs", "using") == 
   ["Android", android_action],
   ["iOS", ios_action]
 ].each do |platform, action|
+  abort("#{platform} composite must not expose the legacy slack-mentions input") if action.fetch("inputs").key?("slack-mentions")
+  abort("#{platform} composite must not access Slack") if action.to_s.match?(forbidden_slack_access)
+end
+
+[
+  ["Android", android_action],
+  ["iOS", ios_action]
+].each do |platform, action|
   abort("#{platform} defer input is missing") unless action.dig("inputs", "defer-store-upload", "default") == "false"
   abort("#{platform} Development Build input is missing") unless action.dig("inputs", "development-build", "default") == "false"
   expected_output = "${{ steps.upload_mode.outputs.deferred }}"
@@ -157,10 +168,8 @@ abort("fresh Development APK locator is missing") unless development_apk
 abort("Development APK locator must use the build marker") unless development_apk.fetch("run").include?("steps.build_timer.outputs.marker_path")
 development_artifact = android_steps.find { |step| step["name"] == "Upload Development APK artifact" }
 abort("Development APK GitHub Artifact fallback is missing") unless development_artifact
-slack_attachment = android_steps.find { |step| step["name"] == "Attach Development APK to Slack" }
-abort("Development APK Slack attachment is missing") unless slack_attachment
-abort("Slack attachment failure must not fail a successful build") unless slack_attachment.fetch("continue-on-error") == true
-abort("Slack attachment must use the package-owned uploader") unless slack_attachment.fetch("run").include?("upload-slack-file.sh")
+expected_apk_artifact_name = "Android-BuildCommit-Development-APK-${{ github.run_id }}-${{ github.run_attempt }}"
+abort("Development APK artifact must be unique to the workflow run attempt") unless development_artifact.dig("with", "name") == expected_apk_artifact_name
 
 ios_steps = ios_action.dig("runs", "steps")
 ios_sync_upload = ios_steps.find { |step| step["name"] == "Upload to TestFlight" }
