@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.46`
+- Current package version at generation time: `1.0.47`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -112,7 +112,10 @@ Read this file when:
 - `mobile-build` depends on `allocate` and requests `self-hosted`, `macOS`, `unity-mobile`, and `${{ needs.allocate.outputs.affinity_label }}` so both platforms use the same runner-local workspace.
 - Before reset and checkout, `mobile-build` verifies that `RUNNER_NAME` matches the allocator output and atomically refreshes `.unity-mobile-affinity.json` in the workspace parent. The host cleanup process uses this marker for the longer affinity retention policy even when a later checkout or build step fails.
 - `PrepareBuildSequence` chooses the active Android/iOS target first, defaults to Android when neither mobile target is active, writes platform working requests, and prepares the first target in one Unity process. The first `BuildFromRequest` runs in a separate process. A Both request then runs `SwitchToRequestBuildTarget` for the second platform in another process before its separate `BuildFromRequest`, limiting a normal Both build to one platform switch.
-- Android/iOS composite action invocations use `continue-on-error` at the job boundary so a failed first platform does not skip the second. The final aggregation step fails the job when any requested platform action failed.
+- For Both requests, the first platform composite starts its Store upload through `store-upload-worker.rb` after copying immutable IPA/AAB upload inputs, then returns so the second target switch/build can overlap that network transfer. The workflow waits for the first upload after the second platform action, uploads deferred artifacts and diagnostics, then cleans credentials and worker state. Never delete or overwrite the first IPA/AAB, mapping, native symbols, or Store credential before the deferred upload is terminal.
+- Android deferred upload uses `upload-google-play.sh` with Fastlane `supply`, preserving the internal/completed release, mapping.txt, and native debug symbols behavior of the synchronous Google Play action. Single-platform and second-platform Android uploads remain synchronous.
+- All TestFlight uploads use `upload-testflight.rb`. Each `pilot` attempt runs in a fresh TMPDIR and process group with a default 900-second hard timeout, at most two attempts, and a ten-second retry delay. Timeout or cancellation must terminate the complete pilot/altool process group; do not replace this with an unbounded Fastlane invocation.
+- Android/iOS composite action invocations use `continue-on-error` at the job boundary so a failed first platform or deferred Store upload does not skip the second. The final aggregation step fails the job when any requested platform action, deferred upload finalizer, or worker cleanup failed. Keep the deferred worker capped at 3600 seconds and the complete mobile job capped at 180 minutes.
 - Each composite action narrows `GooglePlayInternalAndTestFlight` to its own store target before local-secret validation. This prevents iOS signing/keychain environment from becoming an Android phase prerequisite, or Google Play credentials from becoming an iOS phase prerequisite, now that both phases share one job environment.
 
 ## Package Tools Menu

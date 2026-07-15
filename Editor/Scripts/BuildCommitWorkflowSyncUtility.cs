@@ -20,6 +20,9 @@ namespace ActionFit.BuildAutomation.Editor
         internal const string PreparePrivatePackageAccessScriptRelativePath = ".github/scripts/prepare-actionfit-private-package-access.sh";
         internal const string NotifySlackScriptRelativePath = ".github/scripts/notify-slack-build-result.sh";
         internal const string CleanupOldBuildArtifactsScriptRelativePath = ".github/scripts/cleanup-old-build-artifacts.sh";
+        internal const string StoreUploadWorkerScriptRelativePath = ".github/scripts/store-upload-worker.rb";
+        internal const string UploadGooglePlayScriptRelativePath = ".github/scripts/upload-google-play.sh";
+        internal const string UploadTestFlightScriptRelativePath = ".github/scripts/upload-testflight.rb";
 
         private const string PackageName = "com.actionfit.buildautomation";
         private static readonly string[] PackageAssetRelativePaths =
@@ -34,7 +37,10 @@ namespace ActionFit.BuildAutomation.Editor
             EnsureUnityModulesScriptRelativePath,
             PreparePrivatePackageAccessScriptRelativePath,
             NotifySlackScriptRelativePath,
-            CleanupOldBuildArtifactsScriptRelativePath
+            CleanupOldBuildArtifactsScriptRelativePath,
+            StoreUploadWorkerScriptRelativePath,
+            UploadGooglePlayScriptRelativePath,
+            UploadTestFlightScriptRelativePath
         };
 
         private static readonly string[] ProjectAssetRelativePaths =
@@ -49,7 +55,10 @@ namespace ActionFit.BuildAutomation.Editor
             EnsureUnityModulesScriptRelativePath,
             PreparePrivatePackageAccessScriptRelativePath,
             NotifySlackScriptRelativePath,
-            CleanupOldBuildArtifactsScriptRelativePath
+            CleanupOldBuildArtifactsScriptRelativePath,
+            StoreUploadWorkerScriptRelativePath,
+            UploadGooglePlayScriptRelativePath,
+            UploadTestFlightScriptRelativePath
         };
 
         internal static bool IsWorkflowCurrent()
@@ -124,7 +133,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static string GetWorkflowAssetSummary()
         {
-            return $"{WorkflowRelativePath}, {AndroidBuildActionRelativePath}, {IosBuildActionRelativePath}, {AllocateRunnerScriptRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {ResolveUnityScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}";
+            return $"{WorkflowRelativePath}, {AndroidBuildActionRelativePath}, {IosBuildActionRelativePath}, {AllocateRunnerScriptRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {ResolveUnityScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}, {StoreUploadWorkerScriptRelativePath}, {UploadGooglePlayScriptRelativePath}, {UploadTestFlightScriptRelativePath}";
         }
 
         private static bool PackageFileMatchesProjectFile(string packageRelativePath, string projectRelativePath)

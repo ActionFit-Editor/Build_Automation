@@ -9,6 +9,10 @@ inputs:
     description: Run the Unity target switch before building.
     required: false
     default: "false"
+  defer-store-upload:
+    description: Start the Store upload in the background so the next platform can build.
+    required: false
+    default: "false"
   upload-target:
     description: BuildRequest upload target.
     required: true
@@ -39,6 +43,11 @@ inputs:
     description: Resolved Unity project name.
     required: true
 
+outputs:
+  store-upload-deferred:
+    description: Whether the Google Play upload was delegated to the background worker.
+    value: ${{ steps.upload_mode.outputs.deferred }}
+
 runs:
   using: composite
   steps:
@@ -51,6 +60,32 @@ runs:
         touch "$marker_path"
         echo "started_at_epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
         echo "marker_path=$marker_path" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve Android store upload mode
+      id: upload_mode
+      shell: bash
+      env:
+        DEFER_STORE_UPLOAD: ${{ inputs.defer-store-upload }}
+        REQUEST_UPLOAD_TARGET: ${{ inputs.upload-target }}
+      run: |
+        set -euo pipefail
+        case "$DEFER_STORE_UPLOAD" in
+          true|false) ;;
+          *)
+            echo "::error::defer-store-upload must be true or false: $DEFER_STORE_UPLOAD"
+            exit 1
+            ;;
+        esac
+
+        deferred=false
+        case "$REQUEST_UPLOAD_TARGET" in
+          GooglePlayInternal|GooglePlayInternalAndTestFlight)
+            if [ "$DEFER_STORE_UPLOAD" = true ]; then
+              deferred=true
+            fi
+            ;;
+        esac
+        echo "deferred=$deferred" >> "$GITHUB_OUTPUT"
 
     - name: Prepare Android transient output
       shell: bash
@@ -211,7 +246,7 @@ runs:
         echo "service_account_json_path=$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH" >> "$GITHUB_OUTPUT"
 
     - name: Upload to Google Play internal track
-      if: inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight'
+      if: steps.upload_mode.outputs.deferred != 'true' && (inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
       uses: r0adkll/upload-google-play@v1
       with:
         serviceAccountJson: ${{ steps.google_play_config.outputs.service_account_json_path }}
@@ -222,8 +257,23 @@ runs:
         tracks: internal
         status: completed
 
+    - name: Start Google Play upload in background
+      if: steps.upload_mode.outputs.deferred == 'true'
+      shell: bash
+      env:
+        ANDROID_PACKAGE_NAME: ${{ inputs.android-package-name }}
+        ANDROID_AAB_PATH: ${{ steps.aab.outputs.path }}
+        ANDROID_MAPPING_PATH: ${{ steps.aab.outputs.mapping_path }}
+        ANDROID_DEBUG_SYMBOLS_PATH: ${{ steps.aab.outputs.debug_symbols_path }}
+        GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH: ${{ steps.google_play_config.outputs.service_account_json_path }}
+      run: |
+        set -euo pipefail
+        /usr/bin/ruby "$REPOSITORY_ROOT/.github/scripts/store-upload-worker.rb" \
+          start android "${STORE_UPLOAD_TIMEOUT_SECONDS:-3600}" -- \
+          /bin/bash "$REPOSITORY_ROOT/.github/scripts/upload-google-play.sh"
+
     - name: Upload Android AAB artifact
-      if: always()
+      if: always() && steps.upload_mode.outputs.deferred != 'true'
       continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
@@ -239,7 +289,7 @@ runs:
         compression-level: 0
 
     - name: Cleanup old Android build artifacts
-      if: success() && (inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
+      if: success() && steps.upload_mode.outputs.deferred != 'true' && (inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
       continue-on-error: true
       shell: bash
       env:
@@ -255,7 +305,7 @@ runs:
         bash "$REPOSITORY_ROOT/.github/scripts/cleanup-old-build-artifacts.sh"
 
     - name: Upload Android logs
-      if: always()
+      if: always() && steps.upload_mode.outputs.deferred != 'true'
       continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
@@ -264,7 +314,7 @@ runs:
         if-no-files-found: warn
 
     - name: Notify Slack Android result
-      if: always()
+      if: always() && steps.upload_mode.outputs.deferred != 'true'
       shell: bash
       env:
         BUILD_JOB_STATUS: ${{ job.status }}

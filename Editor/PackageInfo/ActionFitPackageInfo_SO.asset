@@ -21,11 +21,13 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- `allocate` job\uC744 \uC804\uC6A9 `mobile-build-allocator` runner\uC640
-    host-local \uC9C1\uB82C allocator\uB85C \uC804\uD658\uD588\uC2B5\uB2C8\uB2E4.\n-
-    Actions runner-write secret \uC758\uC874\uC131\uC744 \uC81C\uAC70\uD558\uACE0
-    \uAE30\uC874 `gh` Keychain \uC778\uC99D\uC744 \uC0AC\uC6A9\uD569\uB2C8\uB2E4.\n-
-    `mobile-build`\uAC00 affinity workspace \uBCF4\uC874 \uB9C8\uCEE4\uB97C \uAC31\uC2E0\uD574
-    14\uC77C cleanup \uC815\uCC45\uC744 \uC720\uC9C0\uD569\uB2C8\uB2E4."
+  _releaseNote: "- Both \uC694\uCCAD\uC758 \uCCAB Store \uC5C5\uB85C\uB4DC\uC640
+    \uB450 \uBC88\uC9F8 \uD50C\uB7AB\uD3FC switch/build\uB97C \uBCD1\uD589\uD574
+    \uB300\uAE30 \uC2DC\uAC04\uC744 \uC904\uC600\uC2B5\uB2C8\uB2E4.\n- TestFlight
+    `pilot/altool`\uC5D0 15\uBD84 hard timeout\uACFC \uCD5C\uB300 2\uD68C\uC758 \uC0C8
+    \uC138\uC158 \uC7AC\uC2DC\uB3C4\uB97C \uC801\uC6A9\uD574 \uBB34\uD55C \uC7AC\uC2DC\uB3C4\uB97C
+    \uCC28\uB2E8\uD588\uC2B5\uB2C8\uB2E4.\n- \uBE44\uB3D9\uAE30 Store worker\uC758
+    \uC885\uB8CC \uCF54\uB4DC, timeout, cancel, artifact/credential cleanup \uC21C\uC11C\uB97C
+    \uAC80\uC99D\uD558\uB294 shell \uD68C\uADC0 \uD14C\uC2A4\uD2B8\uB97C \uCD94\uAC00\uD588\uC2B5\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.githubauth@1.0.6, com.actionfit.buildsetting@1.1.9,
     com.actionfit.customsymbols@1.0.6

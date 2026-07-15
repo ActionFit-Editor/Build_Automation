@@ -9,6 +9,10 @@ inputs:
     description: Run the Unity target switch before building.
     required: false
     default: "false"
+  defer-store-upload:
+    description: Start the Store upload in the background so the next platform can build.
+    required: false
+    default: "false"
   upload-target:
     description: BuildRequest upload target.
     required: true
@@ -35,6 +39,11 @@ inputs:
     description: Resolved Unity project name.
     required: true
 
+outputs:
+  store-upload-deferred:
+    description: Whether the TestFlight upload was delegated to the background worker.
+    value: ${{ steps.upload_mode.outputs.deferred }}
+
 runs:
   using: composite
   steps:
@@ -42,6 +51,32 @@ runs:
       id: build_timer
       shell: bash
       run: echo "started_at_epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve iOS store upload mode
+      id: upload_mode
+      shell: bash
+      env:
+        DEFER_STORE_UPLOAD: ${{ inputs.defer-store-upload }}
+        REQUEST_UPLOAD_TARGET: ${{ inputs.upload-target }}
+      run: |
+        set -euo pipefail
+        case "$DEFER_STORE_UPLOAD" in
+          true|false) ;;
+          *)
+            echo "::error::defer-store-upload must be true or false: $DEFER_STORE_UPLOAD"
+            exit 1
+            ;;
+        esac
+
+        deferred=false
+        case "$REQUEST_UPLOAD_TARGET" in
+          TestFlight|GooglePlayInternalAndTestFlight)
+            if [ "$DEFER_STORE_UPLOAD" = true ]; then
+              deferred=true
+            fi
+            ;;
+        esac
+        echo "deferred=$deferred" >> "$GITHUB_OUTPUT"
 
     - name: Prepare iOS transient output
       shell: bash
@@ -559,15 +594,26 @@ runs:
         echo "path=$ipa_path" >> "$GITHUB_OUTPUT"
 
     - name: Upload to TestFlight
-      if: inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight'
+      if: steps.upload_mode.outputs.deferred != 'true' && (inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
       shell: bash
+      env:
+        APP_STORE_CONNECT_API_KEY_JSON_PATH: ${{ steps.asc_key.outputs.api_key_json_path }}
+        IOS_IPA_PATH: ${{ steps.ipa.outputs.path }}
       run: |
         set -euo pipefail
-        "$FASTLANE_CMD" pilot upload \
-          --api_key_path "${{ steps.asc_key.outputs.api_key_json_path }}" \
-          --app_identifier "$IOS_BUNDLE_ID" \
-          --ipa "${{ steps.ipa.outputs.path }}" \
-          --skip_waiting_for_build_processing
+        /usr/bin/ruby "$REPOSITORY_ROOT/.github/scripts/upload-testflight.rb"
+
+    - name: Start TestFlight upload in background
+      if: steps.upload_mode.outputs.deferred == 'true'
+      shell: bash
+      env:
+        APP_STORE_CONNECT_API_KEY_JSON_PATH: ${{ steps.asc_key.outputs.api_key_json_path }}
+        IOS_IPA_PATH: ${{ steps.ipa.outputs.path }}
+      run: |
+        set -euo pipefail
+        /usr/bin/ruby "$REPOSITORY_ROOT/.github/scripts/store-upload-worker.rb" \
+          start ios "${STORE_UPLOAD_TIMEOUT_SECONDS:-3600}" -- \
+          /usr/bin/ruby "$REPOSITORY_ROOT/.github/scripts/upload-testflight.rb"
 
     - name: Cleanup iOS signing assets
       if: always() && (inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
@@ -617,7 +663,7 @@ runs:
         fi
 
     - name: Upload iOS app artifact
-      if: success()
+      if: success() && steps.upload_mode.outputs.deferred != 'true'
       continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
@@ -631,7 +677,7 @@ runs:
         retention-days: 7
 
     - name: Cleanup old iOS build artifacts
-      if: success() && (inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
+      if: success() && steps.upload_mode.outputs.deferred != 'true' && (inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
       continue-on-error: true
       shell: bash
       env:
@@ -659,7 +705,7 @@ runs:
         retention-days: 7
 
     - name: Notify Slack iOS result
-      if: always()
+      if: always() && steps.upload_mode.outputs.deferred != 'true'
       shell: bash
       env:
         BUILD_JOB_STATUS: ${{ job.status }}
