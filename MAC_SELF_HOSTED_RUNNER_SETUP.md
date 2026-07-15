@@ -205,7 +205,7 @@ ANDROID_KEYSTORE_PASS="..."
 ANDROID_KEYALIAS_PASS="..."
 ```
 
-두 값은 schema 11 BuildRequest에 해당 signing 비밀번호가 없을 때 사용하는 fallback입니다.
+두 값은 schema 12 BuildRequest에 해당 signing 비밀번호가 없을 때 사용하는 fallback입니다.
 
 프로필별로 Android 비밀번호가 다르면 `profiles/<profile>/android-signing.env`에서 덮어씁니다.
 

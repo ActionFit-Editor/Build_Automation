@@ -216,6 +216,7 @@ namespace ActionFit.BuildAutomation.Editor
             if (EditorGUI.EndChangeCheck())
                 EditorPrefs.SetInt(DistributionProfilePrefsKey, (int)_distributionProfile);
 
+            DrawDevelopmentBuildSetting();
             DrawBuildSymbolSettings();
             DrawSlackMentions();
 
@@ -249,6 +250,25 @@ namespace ActionFit.BuildAutomation.Editor
             EditorGUILayout.HelpBox(
                 $"{BuildRequestUtility.RelativePath} will be stored at the Git repository root. GitHub Actions will build when the build tag is pushed.",
                 MessageType.Info);
+        }
+
+        private void DrawDevelopmentBuildSetting()
+        {
+            SerializedProperty developmentBuildProp = _serializedSettings.FindProperty("developmentBuild");
+            if (developmentBuildProp == null)
+            {
+                EditorGUILayout.HelpBox(
+                    $"BuildSettingsSO does not expose developmentBuild. Update {BuildSettingBridge.PackageId} to {BuildSettingBridge.MinimumVersion} or newer.",
+                    MessageType.Error);
+                return;
+            }
+
+            EditorGUILayout.Space(4);
+            EditorGUILayout.PropertyField(
+                developmentBuildProp,
+                new GUIContent(
+                    "Development Build",
+                    "Unity BuildOptions.Development를 Android/iOS 로컬 및 CI Player 빌드에 적용합니다. DEV scripting define과는 별도 설정입니다."));
         }
 
         private void DrawBuildSymbolSettings()
@@ -1243,7 +1263,7 @@ namespace ActionFit.BuildAutomation.Editor
     internal static class BuildSettingBridge
     {
         internal const string PackageId = "com.actionfit.buildsetting";
-        internal const string MinimumVersion = "1.1.3";
+        internal const string MinimumVersion = "1.1.11";
         internal const string BuildSettingsTypeName = "ActionFit.BuildSetting.Editor.BuildSettingsSO, com.actionfit.buildsetting.Editor";
 
         private const string BuildSettingsApplierTypeName = "ActionFit.BuildSetting.Editor.BuildSettingsApplier, com.actionfit.buildsetting.Editor";
@@ -1264,7 +1284,15 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static bool IsAvailable()
         {
-            return SettingsType != null;
+            return HasRequiredContract(SettingsType);
+        }
+
+        internal static bool HasRequiredContract(Type settingsType)
+        {
+            FieldInfo developmentBuildField = settingsType?.GetField(
+                "developmentBuild",
+                BindingFlags.Public | BindingFlags.Instance);
+            return developmentBuildField?.FieldType == typeof(bool);
         }
 
         internal static bool EnsureAvailable(bool showDialog)
@@ -1321,14 +1349,27 @@ namespace ActionFit.BuildAutomation.Editor
             return value as string ?? "";
         }
 
+        internal static bool TryGetBool(ScriptableObject settings, string fieldName, out bool value)
+        {
+            object fieldValue = GetFieldValue(settings, fieldName);
+            if (fieldValue is bool boolValue)
+            {
+                value = boolValue;
+                return true;
+            }
+
+            value = false;
+            return false;
+        }
+
         internal static void SetString(ScriptableObject settings, string fieldName, string value)
         {
             SetFieldValue(settings, fieldName, value ?? "");
         }
 
-        internal static void SetBool(ScriptableObject settings, string fieldName, bool value)
+        internal static bool SetBool(ScriptableObject settings, string fieldName, bool value)
         {
-            SetFieldValue(settings, fieldName, value);
+            return SetFieldValue(settings, fieldName, value);
         }
 
         private static object InvokeStaticSettingsMethod(string methodName)
@@ -1347,13 +1388,17 @@ namespace ActionFit.BuildAutomation.Editor
             return field?.GetValue(settings);
         }
 
-        private static void SetFieldValue(ScriptableObject settings, string fieldName, object value)
+        private static bool SetFieldValue(ScriptableObject settings, string fieldName, object value)
         {
             if (settings == null || string.IsNullOrEmpty(fieldName))
-                return;
+                return false;
 
             FieldInfo field = settings.GetType().GetField(fieldName, BindingFlags.Public | BindingFlags.Instance);
+            if (field == null || value == null || !field.FieldType.IsInstanceOfType(value))
+                return false;
+
             field?.SetValue(settings, value);
+            return true;
         }
     }
 

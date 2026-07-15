@@ -41,6 +41,14 @@ namespace ActionFit.BuildAutomation.Editor
                 return null;
             }
 
+            if (!BuildSettingBridge.TryGetBool(settings, "developmentBuild", out bool developmentBuild))
+            {
+                Debug.LogError(
+                    $"[BuildRequestUtility] Build Settings does not support Development Build. " +
+                    $"Update {BuildSettingBridge.PackageId} to {BuildSettingBridge.MinimumVersion} or newer.");
+                return null;
+            }
+
             BuildRequestPlatform resolvedPlatform = ResolvePlatform(platform);
             if (resolvedPlatform == BuildRequestPlatform.None)
             {
@@ -62,6 +70,7 @@ namespace ActionFit.BuildAutomation.Editor
                 triggerSource = BuildRequest.BuildCommitTriggerSource,
                 unityProjectPath = unityProjectPath,
                 autoConfigureBuildSymbols = autoConfigureBuildSymbols,
+                developmentBuild = developmentBuild,
                 platform = resolvedPlatform,
                 buildKind = buildKind,
                 uploadTarget = uploadTarget,
@@ -236,11 +245,11 @@ namespace ActionFit.BuildAutomation.Editor
                 return null;
             }
 
-            if (request.schemaVersion != 11)
+            if (request.schemaVersion != BuildRequest.CurrentSchemaVersion)
             {
                 Debug.LogError(
                     $"[BuildRequestUtility] Unsupported BuildRequest schema: {request.schemaVersion}. " +
-                    "Open AutoBuild and create a schema 11 request.");
+                    $"Open AutoBuild and create a schema {BuildRequest.CurrentSchemaVersion} request.");
                 return null;
             }
 

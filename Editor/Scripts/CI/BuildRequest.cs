@@ -40,12 +40,14 @@ namespace ActionFit.BuildAutomation.Editor
     [Serializable]
     public class BuildRequest
     {
+        public const int CurrentSchemaVersion = 12;
         public const string BuildCommitTriggerSource = "BuildCommit";
 
-        public int schemaVersion = 11;
+        public int schemaVersion = CurrentSchemaVersion;
         public string triggerSource = BuildCommitTriggerSource;
         public string unityProjectPath = ".";
         public bool autoConfigureBuildSymbols = true;
+        public bool developmentBuild = false;
         public BuildRequestPlatform platform = BuildRequestPlatform.None;
         public BuildRequestKind buildKind = BuildRequestKind.Default;
         public BuildRequestUploadTarget uploadTarget = BuildRequestUploadTarget.None;

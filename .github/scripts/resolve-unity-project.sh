@@ -19,7 +19,7 @@ repository_root = File.realpath(ARGV.fetch(0))
 request_path = File.expand_path(ARGV.fetch(1), repository_root)
 request = JSON.parse(File.read(request_path))
 schema_version = request.fetch("schemaVersion", 0).to_i
-abort("Unsupported BuildRequest schemaVersion: #{schema_version} (expected 11)") unless schema_version == 11
+abort("Unsupported BuildRequest schemaVersion: #{schema_version} (expected 12)") unless schema_version == 12
 
 raw_path = ENV.fetch("UNITY_PROJECT_PATH", request.fetch("unityProjectPath", ".").to_s).strip
 raw_path = "." if raw_path.empty?

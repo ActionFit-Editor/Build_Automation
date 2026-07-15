@@ -2,7 +2,7 @@
 
 This guide describes the local secret bundle used by the `BuildCommit Auto Build` workflow on a macOS self-hosted runner.
 
-BuildRequest schema 11 contains build metadata plus project-specific Android keystore Base64 and signing passwords. Android request values take precedence, while the Mac runner bundle provides optional Android fallbacks and remains the source for Google Play JSON, iOS team and App Store Connect credentials, Apple Distribution certificates, and provisioning profiles.
+BuildRequest schema 12 contains build metadata plus project-specific Android keystore Base64 and signing passwords. Android request values take precedence, while the Mac runner bundle provides optional Android fallbacks and remains the source for Google Play JSON, iOS team and App Store Connect credentials, Apple Distribution certificates, and provisioning profiles.
 
 ## Directory Layout
 
@@ -195,7 +195,7 @@ Slack notification:
 
 Android:
 
-- Validates and uses `androidKeystoreBase64`, `androidKeystorePassword`, and `androidAliasPassword` from the schema 11 BuildRequest when present.
+- Validates and uses `androidKeystoreBase64`, `androidKeystorePassword`, and `androidAliasPassword` from the schema 12 BuildRequest when present.
 - Falls back independently to `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASS`, and `ANDROID_KEYALIAS_PASS` for missing request values.
 - Uses the request's `androidKeyaliasName` metadata.
 - Uses `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH` for Google Play upload.
@@ -212,7 +212,7 @@ iOS:
 
 Project and symbols:
 
-- Reads repository-root `.build/build_request.json`; only schema 11 is accepted and `unityProjectPath` resolves `$UNITY_PROJECT_DIR`.
+- Reads repository-root `.build/build_request.json`; only schema 12 is accepted and `unityProjectPath` resolves `$UNITY_PROJECT_DIR`.
 - Derives `Packages`, `ProjectSettings`, `Library`, `Builds`, and `Logs` from `$UNITY_PROJECT_DIR`; workflow/scripts remain under repository-root `.github`.
 - When `autoConfigureBuildSymbols=true`, prepares the Custom Symbols build list in the target-switch Unity process and verifies it in the separate build process.
 

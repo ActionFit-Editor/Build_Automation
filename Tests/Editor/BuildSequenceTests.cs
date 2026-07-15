@@ -61,6 +61,7 @@ namespace ActionFit.BuildAutomation.Editor.Tests
             {
                 platform = BuildRequestPlatform.Both,
                 buildKind = BuildRequestKind.AndroidAabAndiOSXcodeProject,
+                developmentBuild = true,
                 iosBundleId = "com.actionfit.ios"
             };
 
@@ -68,6 +69,7 @@ namespace ActionFit.BuildAutomation.Editor.Tests
 
             Assert.That(request.platform, Is.EqualTo(BuildRequestPlatform.Android));
             Assert.That(request.buildKind, Is.EqualTo(BuildRequestKind.AndroidAab));
+            Assert.That(request.developmentBuild, Is.True);
             Assert.That(request.iosBundleId, Is.Empty);
         }
 
@@ -78,6 +80,7 @@ namespace ActionFit.BuildAutomation.Editor.Tests
             {
                 platform = BuildRequestPlatform.Both,
                 buildKind = BuildRequestKind.AndroidAabAndiOSXcodeProject,
+                developmentBuild = true,
                 androidPackageName = "com.actionfit.android",
                 androidKeystoreFileName = "upload.keystore",
                 androidKeystoreBase64 = "base64",
@@ -90,6 +93,7 @@ namespace ActionFit.BuildAutomation.Editor.Tests
 
             Assert.That(request.platform, Is.EqualTo(BuildRequestPlatform.iOS));
             Assert.That(request.buildKind, Is.EqualTo(BuildRequestKind.iOSXcodeProject));
+            Assert.That(request.developmentBuild, Is.True);
             Assert.That(request.androidPackageName, Is.Empty);
             Assert.That(request.androidKeystoreFileName, Is.Empty);
             Assert.That(request.androidKeystoreBase64, Is.Empty);

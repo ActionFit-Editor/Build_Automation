@@ -53,7 +53,9 @@ namespace ActionFit.BuildAutomation.Editor
                 return 1;
             }
 
-            ApplyRequest(settings, request);
+            if (!ApplyRequest(settings, request))
+                return 1;
+
             BuildSettingBridge.ApplyVersionSettings(settings);
             ApplyPlayerIdentifiers(settings);
 
@@ -72,7 +74,7 @@ namespace ActionFit.BuildAutomation.Editor
             return summary.result == BuildResult.Succeeded ? 0 : 1;
         }
 
-        private static void ApplyRequest(ScriptableObject settings, BuildRequest request)
+        internal static bool ApplyRequest(ScriptableObject settings, BuildRequest request)
         {
             string androidAlias = request.androidKeyaliasName?.Trim();
             string androidPackageName = request.androidPackageName?.Trim();
@@ -86,12 +88,21 @@ namespace ActionFit.BuildAutomation.Editor
             if (!string.IsNullOrEmpty(iosBundleId)) BuildSettingBridge.SetString(settings, "iosPackageName", iosBundleId);
             if (!string.IsNullOrEmpty(iosDevelopmentTeamId)) BuildSettingBridge.SetString(settings, "developmentTeamId", iosDevelopmentTeamId);
             if (!string.IsNullOrEmpty(androidAlias)) BuildSettingBridge.SetString(settings, "keyStoreAlias", androidAlias);
+            if (!BuildSettingBridge.SetBool(settings, "developmentBuild", request.developmentBuild))
+            {
+                Debug.LogError(
+                    $"[CIBuildEntry] BuildSettingsSO does not support developmentBuild. " +
+                    $"Update {BuildSettingBridge.PackageId} to {BuildSettingBridge.MinimumVersion} or newer.");
+                return false;
+            }
+
             BuildSettingBridge.SetBool(settings, "saveFileInProject", true);
             BuildSettingBridge.SetBool(settings, "manageSymbolsOnBuild", request.autoConfigureBuildSymbols);
 
             EditorUtility.SetDirty(settings);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[CIBuildEntry] Request applied: trigger={request.triggerSource}, unityProjectPath={request.unityProjectPath}, platform={request.platform}, kind={request.buildKind}, upload={request.uploadTarget}, profile={request.distributionProfile}, autoConfigureBuildSymbols={request.autoConfigureBuildSymbols}, androidPackage={androidPackageName}, iosBundle={iosBundleId}, iosTeamId={iosDevelopmentTeamId}, androidAlias={androidAlias}");
+            Debug.Log($"[CIBuildEntry] Request applied: trigger={request.triggerSource}, unityProjectPath={request.unityProjectPath}, platform={request.platform}, kind={request.buildKind}, upload={request.uploadTarget}, profile={request.distributionProfile}, autoConfigureBuildSymbols={request.autoConfigureBuildSymbols}, developmentBuild={request.developmentBuild}, androidPackage={androidPackageName}, iosBundle={iosBundleId}, iosTeamId={iosDevelopmentTeamId}, androidAlias={androidAlias}");
+            return true;
         }
 
         private static void ApplyPlayerIdentifiers(ScriptableObject settings)

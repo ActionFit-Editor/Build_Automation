@@ -23,7 +23,7 @@ EOF
 request_path="$fixture_root/build_request.json"
 cat > "$request_path" <<'EOF'
 {
-  "schemaVersion": 11,
+  "schemaVersion": 12,
   "androidKeystoreBase64": "cmVxdWVzdC1rZXlzdG9yZQ==",
   "androidKeystorePassword": "request-keystore-pass",
   "androidAliasPassword": "request-alias-pass"
@@ -93,7 +93,7 @@ ANDROID_KEYALIAS_PASS="runner-alias-pass"
 EOF
 cat > "$request_path" <<'EOF'
 {
-  "schemaVersion": 11,
+  "schemaVersion": 12,
   "androidKeystoreBase64": "",
   "androidKeystorePassword": "",
   "androidAliasPassword": ""

@@ -8,7 +8,7 @@ The runner must build from BuildCommit requests without GitHub Secrets for mobil
 
 - `distributionProfile`: `Actionfit` or `Stormborn`
 - `platform`: `Android`, `iOS`, or `Both`
-- schema 11 build metadata such as `unityProjectPath`, `autoConfigureBuildSymbols`, version, bundle number, build kind, upload target, package name, bundle id, and optional non-secret Android alias
+- schema 12 build metadata such as `unityProjectPath`, `autoConfigureBuildSymbols`, `developmentBuild`, version, bundle number, build kind, upload target, package name, bundle id, and optional non-secret Android alias
 
 BuildRequest carries the project-specific Android keystore Base64 and signing passwords. The local bundle selected by `CI_SECRET_ROOT` provides Android fallbacks plus upload credentials, team ids, Apple Distribution `.p12` files, App Store provisioning profiles, and optional keychain settings. The scripts default to `$HOME/ci-secrets/build-automation`. BuildRequest never carries runner-local paths.
 
@@ -16,7 +16,7 @@ BuildRequest carries the project-specific Android keystore Base64 and signing pa
 
 - `WorkflowTemplates/buildcommit-auto-build.yml`: source workflow template.
 - `.github/actions/build-android/action.yml` and `.github/actions/build-ios/action.yml`: platform build/deploy composite actions synchronized with the workflow.
-- `.github/scripts/resolve-unity-project.sh`: validates schema 11 `unityProjectPath` and exports repository/project-derived paths.
+- `.github/scripts/resolve-unity-project.sh`: validates schema 12 `unityProjectPath` and exports repository/project-derived paths.
 - `RunnerSetup/setup-local-runner-secrets.sh`: creates local directory and `.env` templates.
 - `RunnerSetup/validate-local-runner-secrets.sh`: validates local files and exports env vars for GitHub Actions.
 - `.github/scripts/prepare-actionfit-private-package-access.sh`: prepares GitHub credentials for private UPM package repositories before Unity starts.

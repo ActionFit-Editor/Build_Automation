@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.47`
+- Current package version at generation time: `1.0.48`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -65,7 +65,7 @@ Read this file when:
 - Menu: `Tools/Package/Build Automation/AutoBuild`.
 - Build request path: Git repository root `.build/build_request.json`, never the nested Unity project root.
 - The committed `.build/build_request.json` is read-only during CI. `PrepareBuildSequence` writes allowlisted Android/iOS copies under repository-root `.build/ci/`; `BuildRequestUtility.Load` accepts only the original path or those fixed copies and rejects path escape, alternate names, and symbolic-link traversal.
-- Current BuildRequest schema is 11. It adds repository-relative `unityProjectPath` and `autoConfigureBuildSymbols`. Both earlier and later schemas are rejected; recreate an old request from the AutoBuild window.
+- Current BuildRequest schema is 12. It carries repository-relative `unityProjectPath`, `autoConfigureBuildSymbols`, and the default-off `developmentBuild` snapshot. Both earlier and later schemas are rejected; recreate an old request from the AutoBuild window.
 - `BuildAutomationProjectPaths` resolves the Git repository root with `git rev-parse --show-toplevel`. `unityProjectPath` is `.` for a root project or a normalized path such as `KnitFactory` for a nested project. Absolute paths, `..`, control characters, and paths escaping the repository must be rejected.
 - Build tag prefix: `build/**`.
 - Storage commit message prefix: `[BuildRequest]`.
@@ -104,7 +104,8 @@ Read this file when:
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`.
 - AutoBuild window workflow sync copies `WorkflowTemplates/buildcommit-auto-build.yml`, `.github/actions/build-android/action.yml`, `.github/actions/build-ios/action.yml`, allocator `.github/scripts/allocate-unity-mobile-runner.js`, and package `.github/scripts/*.sh` into the Git repository root `.github/`. Manual sync asks for confirmation; BuildCommit auto sync runs without confirmation when `Auto Sync Build Files` is enabled.
 - `BuildAutomationSettingsSO.autoConfigureBuildSymbols` defaults to true and is serialized as request `autoConfigureBuildSymbols`. When enabled, the reflection bridge calls `CustomSymbolsSO.FindOrCreateSettingsAsset()` before obtaining `GetBuildSymbols(BuildTarget)`. Custom Symbols 1.0.6 creates a missing default asset from current Standalone/Android/iOS defines; creation failure or a later symbol mismatch fails the build. `SwitchToRequestBuildTarget` writes scripting define symbols and the separate `BuildFromRequest` process validates exact symbol-set equality. Disabled requests skip apply/validation.
-- Build Automation depends on `com.actionfit.buildsetting@1.1.9`, `com.actionfit.customsymbols@1.0.6`, and `com.actionfit.githubauth@1.0.6` or newer. Keep dependency metadata in `package.json` and `Editor/PackageInfo/ActionFitPackageInfo_SO.asset` `_dependenciesOverride`; ActionFit Package Manager must publish that dependency metadata to the catalog CSV and write the resolved Git UPM URLs into the Unity project's `Packages/manifest.json` during install/update. If a dependency is missing, BuildAutomation should compile, show a clear warning, and stop the affected workflow.
+- `BuildSettingsSO.developmentBuild` is shown in AutoBuild regardless of Custom Symbols and serialized into each schema 12 request. Both working requests preserve it. `CIBuildEntry` applies it before the actual platform build and fails fast when the reflection bridge cannot find the required public bool field. Keep it independent from legacy `isDevMode` and the `DEV` scripting define.
+- Build Automation depends on `com.actionfit.buildsetting@1.1.11`, `com.actionfit.customsymbols@1.0.6`, and `com.actionfit.githubauth@1.0.6` or newer. Keep dependency metadata in `package.json` and `Editor/PackageInfo/ActionFitPackageInfo_SO.asset` `_dependenciesOverride`; ActionFit Package Manager must publish that dependency metadata to the catalog CSV and write the resolved Git UPM URLs into the Unity project's `Packages/manifest.json` during install/update. If a dependency is missing, BuildAutomation should compile, show a clear warning, and stop the affected workflow.
 - The storage commit alone should not trigger CI. The pushed `build/**` tag is the actual CI request.
 - The workflow runs `allocate` on the dedicated `mobile-build-allocator` runner group with the `runner-allocator` label before mobile scheduling. It must not check out repository content. It calls the fixed host-local `/Users/lydia/workspace/runner-allocator/bin/allocate-project-runner` executable with `GITHUB_REPOSITORY` and `GITHUB_OUTPUT`.
 - The allocator uses repository variable `UNITY_RUNNER_AFFINITY_LABEL` when set; otherwise it derives `project-<repository-slug>`. The value must match `project-[a-z0-9-]+`. A host-local file lock serializes organization-wide assignments. It reuses one existing online mapping or assigns the label to the online eligible runner with the fewest `project-*` labels, using idle state as a tie-breaker rather than rejecting busy runners. Eligible runners require `unity-mobile` and must not have `ci`, `ci-validation`, `unity-package-ci`, or `runner-allocator`.
