@@ -1042,7 +1042,16 @@ namespace ActionFit.BuildAutomation.Editor
 
             try
             {
-                GitCommandResult result = GitProcessRunner.Run(repositoryRoot, args);
+                GitCommandResult result = GitProcessRunner.RunWithIndexLockRetry(repositoryRoot, args);
+                if (result.IndexLockRetryCount > 0)
+                {
+                    string retryMessage = result.ExitCode == 0
+                        ? $"git {args} recovered after {result.IndexLockRetryCount} index.lock retry attempt(s)."
+                        : $"git {args} still failed after {result.IndexLockRetryCount} index.lock retry attempt(s).";
+                    AddLog($"[git retry] {retryMessage}");
+                    Debug.LogWarning($"[BuildCommitWindow] Git retry: {retryMessage}");
+                }
+
                 if (result.TimedOut)
                 {
                     string timeoutMessage =
@@ -1121,20 +1130,69 @@ namespace ActionFit.BuildAutomation.Editor
         internal readonly string Output;
         internal readonly string Error;
         internal readonly bool TimedOut;
+        internal readonly int IndexLockRetryCount;
 
-        internal GitCommandResult(int exitCode, string output, string error, bool timedOut)
+        internal GitCommandResult(
+            int exitCode,
+            string output,
+            string error,
+            bool timedOut,
+            int indexLockRetryCount = 0)
         {
             ExitCode = exitCode;
             Output = output ?? "";
             Error = error ?? "";
             TimedOut = timedOut;
+            IndexLockRetryCount = indexLockRetryCount;
         }
     }
 
     internal static class GitProcessRunner
     {
         internal const int DefaultTimeoutMilliseconds = 300000;
+        internal const int DefaultIndexLockRetryCount = 20;
+        internal const int DefaultIndexLockRetryDelayMilliseconds = 250;
         private const int TerminationWaitMilliseconds = 5000;
+
+        internal static GitCommandResult RunWithIndexLockRetry(
+            string workingDirectory,
+            string arguments,
+            int timeoutMilliseconds = DefaultTimeoutMilliseconds,
+            int maxIndexLockRetries = DefaultIndexLockRetryCount,
+            int indexLockRetryDelayMilliseconds = DefaultIndexLockRetryDelayMilliseconds)
+        {
+            if (maxIndexLockRetries < 0) throw new ArgumentOutOfRangeException(nameof(maxIndexLockRetries));
+            if (indexLockRetryDelayMilliseconds < 0)
+                throw new ArgumentOutOfRangeException(nameof(indexLockRetryDelayMilliseconds));
+
+            GitCommandResult result = Run(workingDirectory, arguments, timeoutMilliseconds);
+            int retryCount = 0;
+
+            while (retryCount < maxIndexLockRetries && IsIndexLockContention(result))
+            {
+                retryCount++;
+                if (indexLockRetryDelayMilliseconds > 0)
+                    System.Threading.Thread.Sleep(indexLockRetryDelayMilliseconds);
+                result = Run(workingDirectory, arguments, timeoutMilliseconds);
+            }
+
+            return new GitCommandResult(
+                result.ExitCode,
+                result.Output,
+                result.Error,
+                result.TimedOut,
+                retryCount);
+        }
+
+        internal static bool IsIndexLockContention(GitCommandResult result)
+        {
+            if (result.TimedOut || result.ExitCode == 0) return false;
+
+            string message = $"{result.Error}\n{result.Output}";
+            return message.IndexOf("index.lock", StringComparison.OrdinalIgnoreCase) >= 0
+                   && message.IndexOf("Unable to create", StringComparison.OrdinalIgnoreCase) >= 0
+                   && message.IndexOf("File exists", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
 
         internal static GitCommandResult Run(
             string workingDirectory,

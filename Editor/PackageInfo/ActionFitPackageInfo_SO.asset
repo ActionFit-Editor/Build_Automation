@@ -16,11 +16,15 @@ MonoBehaviour:
   _displayName: Build Automation
   _repoName: Build_Automation
   _repositoryVisibility: 0
-  _owner: 
+  _owner: "\uC1A1\uC81C\uC6B0"
   _status: verified
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "\uCE74\uD0C8\uB85C\uADF8 \uBA54\uD0C0\uB370\uC774\uD130 \uAC31\uC2E0
-    \uB9B4\uB9AC\uC988."
-  _dependenciesOverride: 
+  _releaseNote: '- Retries transient Git index.lock contention for up to five seconds
+    without deleting another process''s lock.
+
+    - Adds EditMode coverage for released
+    and persistent index.lock scenarios.'
+  _dependenciesOverride: com.actionfit.githubauth@1.0.6, com.actionfit.buildsetting@1.1.11,
+    com.actionfit.customsymbols@1.0.6

@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using NUnit.Framework;
 
 namespace ActionFit.BuildAutomation.Editor.Tests
@@ -96,6 +97,94 @@ namespace ActionFit.BuildAutomation.Editor.Tests
                 Assert.That(addResult.TimedOut, Is.False);
                 Assert.That(addResult.ExitCode, Is.EqualTo(0), addResult.Error);
                 Assert.That(File.Exists(Path.Combine(testRoot, ".git", "index.lock")), Is.False);
+            }
+            finally
+            {
+                string operationRoot = Directory.GetParent(testRoot)?.FullName;
+                if (!string.IsNullOrWhiteSpace(operationRoot) && Directory.Exists(operationRoot))
+                    DeleteDirectory(operationRoot);
+            }
+        }
+
+        [Test]
+        [Timeout(30000)]
+        public void RunWithIndexLockRetrySucceedsAfterLockIsReleased()
+        {
+            string testRoot = Path.Combine(
+                Path.GetTempPath(),
+                "ActionFitBuildAutomationTests",
+                Guid.NewGuid().ToString("N"),
+                "git-index-lock-retry");
+            Directory.CreateDirectory(testRoot);
+
+            try
+            {
+                GitCommandResult initResult = GitProcessRunner.Run(testRoot, "init", 10000);
+                Assert.That(initResult.ExitCode, Is.EqualTo(0), initResult.Error);
+
+                File.WriteAllText(Path.Combine(testRoot, "request.txt"), "request");
+                string lockPath = Path.Combine(testRoot, ".git", "index.lock");
+                File.WriteAllText(lockPath, "busy");
+
+                Task releaseLockTask = Task.Run(async () =>
+                {
+                    await Task.Delay(150);
+                    File.Delete(lockPath);
+                });
+
+                GitCommandResult addResult = GitProcessRunner.RunWithIndexLockRetry(
+                    testRoot,
+                    "add request.txt",
+                    10000,
+                    20,
+                    25);
+
+                Assert.That(releaseLockTask.Wait(1000), Is.True);
+                Assert.That(addResult.TimedOut, Is.False);
+                Assert.That(addResult.ExitCode, Is.EqualTo(0), addResult.Error);
+                Assert.That(addResult.IndexLockRetryCount, Is.GreaterThan(0));
+                Assert.That(File.Exists(lockPath), Is.False);
+            }
+            finally
+            {
+                string operationRoot = Directory.GetParent(testRoot)?.FullName;
+                if (!string.IsNullOrWhiteSpace(operationRoot) && Directory.Exists(operationRoot))
+                    DeleteDirectory(operationRoot);
+            }
+        }
+
+        [Test]
+        [Timeout(30000)]
+        public void RunWithIndexLockRetryLeavesPersistentLockUntouched()
+        {
+            string testRoot = Path.Combine(
+                Path.GetTempPath(),
+                "ActionFitBuildAutomationTests",
+                Guid.NewGuid().ToString("N"),
+                "git-index-lock-persistent");
+            Directory.CreateDirectory(testRoot);
+
+            try
+            {
+                GitCommandResult initResult = GitProcessRunner.Run(testRoot, "init", 10000);
+                Assert.That(initResult.ExitCode, Is.EqualTo(0), initResult.Error);
+
+                File.WriteAllText(Path.Combine(testRoot, "request.txt"), "request");
+                string lockPath = Path.Combine(testRoot, ".git", "index.lock");
+                File.WriteAllText(lockPath, "busy");
+
+                GitCommandResult addResult = GitProcessRunner.RunWithIndexLockRetry(
+                    testRoot,
+                    "add request.txt",
+                    10000,
+                    2,
+                    1);
+
+                Assert.That(addResult.TimedOut, Is.False);
+                Assert.That(addResult.ExitCode, Is.Not.EqualTo(0));
+                Assert.That(addResult.IndexLockRetryCount, Is.EqualTo(2));
+                Assert.That(GitProcessRunner.IsIndexLockContention(addResult), Is.True);
+                Assert.That(File.Exists(lockPath), Is.True);
             }
             finally
             {

@@ -12,7 +12,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.11",
     "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/AI_GitHub.git#1.0.6",
     "com.actionfit.customsymbols": "https://github.com/ActionFit-Editor/Custom_Symbols.git#1.0.6",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.50"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.51"
   }
 }
 ```
@@ -54,7 +54,7 @@ preflight는 signing 값, keystore Base64, token, webhook, certificate와 keycha
 
 `Commit, Tag & Push`는 Unity를 실행 중인 로컬 기기의 `git push`와 tag push 권한을 사용합니다. 자동빌드를 요청하는 각 개발자 기기는 해당 GitHub repository에 push/tag 권한이 있는 계정으로 Git 인증을 먼저 설정해야 합니다. BuildCommit은 커밋 생성 전에 `com.actionfit.githubauth`의 preflight를 reflection으로 호출하고, 인증이 없으면 GitHub 인증 필요 팝업을 띄운 뒤 중단합니다. `com.actionfit.buildsetting`, `com.actionfit.customsymbols` 또는 `com.actionfit.githubauth`가 누락된 프로젝트에서는 필요한 기능을 막고 의존성 설치를 안내합니다. ActionFit Package Manager로 설치/업데이트하면 catalog CSV의 dependency 정보가 Unity 프로젝트의 `Packages/manifest.json`에 Git UPM URL로 함께 기록됩니다. 수동으로 manifest를 편집하는 경우에는 Build Automation, Build Setting, Custom Symbols, AI GitHub Git UPM URL을 직접 추가해야 합니다. 자세한 GitHub 연결 확인 순서와 오류별 안내는 `Packages/com.actionfit.githubauth/README.md`를 확인합니다.
 
-BuildCommit의 Git 명령은 stdout과 stderr를 동시에 읽어 `core.autocrlf=true` 환경에서 대량 줄바꿈 경고가 발생해도 파이프가 막히지 않도록 합니다. 각 명령은 최대 5분 동안 실행되며, timeout이면 프로세스 트리를 종료하고 오류를 기록합니다. 실행 중인 Git 프로세스가 남아 있는 동안 `.git/index.lock`을 직접 삭제하지 않습니다.
+BuildCommit의 Git 명령은 stdout과 stderr를 동시에 읽어 `core.autocrlf=true` 환경에서 대량 줄바꿈 경고가 발생해도 파이프가 막히지 않도록 합니다. 각 명령은 최대 5분 동안 실행되며, timeout이면 프로세스 트리를 종료하고 오류를 기록합니다. 다른 Git 작업이 `.git/index.lock`을 잠시 점유하면 250ms 간격으로 최대 20회 재시도하고, 계속 점유 중이면 기존 오류를 표시한 채 중단합니다. 실행 중인 Git 프로세스의 lock을 직접 삭제하지 않습니다.
 
 `CS0103: The name 'BuildSettingBridge' does not exist in the current context`가 발생하면 `com.actionfit.buildautomation`을 `1.0.25` 이상으로 업데이트한 뒤 `AssetDatabase.Refresh` 또는 Unity 재시작으로 스크립트 컴파일 목록을 갱신합니다. 이 버전부터 bridge 타입은 Unity가 이미 컴파일하는 소스에 포함되어 부분 refresh 상태에서도 BuildAutomation 참조가 깨지지 않도록 되어 있습니다.
 
