@@ -49,6 +49,7 @@ fi
 version="${BUILD_VERSION:-}"
 bundle_no="${BUILD_BUNDLE_NO:-}"
 distribution_profile="${BUILD_DISTRIBUTION_PROFILE:-}"
+development_build="$(printf '%s' "${BUILD_DEVELOPMENT_BUILD:-false}" | tr '[:upper:]' '[:lower:]')"
 run_url="${BUILD_RUN_URL:-${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-}}"
 short_sha="${BUILD_SHORT_SHA:-${GITHUB_SHA:-}}"
 started_at_epoch="${BUILD_STARTED_AT_EPOCH:-}"
@@ -138,6 +139,7 @@ payload="$(
   VERSION_LABEL="$version_label" \
   DURATION_LABEL="$duration_label" \
   DISTRIBUTION_PROFILE="$distribution_profile" \
+  DEVELOPMENT_BUILD="$development_build" \
   SHORT_SHA="$short_sha" \
   RUN_URL="$run_url" \
   SLACK_MENTIONS="$mentions" \
@@ -149,6 +151,7 @@ status_symbol = ENV.fetch("STATUS_SYMBOL", "")
 version_label = ENV.fetch("VERSION_LABEL", "")
 duration_label = ENV.fetch("DURATION_LABEL", "")
 distribution_profile = ENV.fetch("DISTRIBUTION_PROFILE", "")
+development_build = ENV.fetch("DEVELOPMENT_BUILD", "false") == "true"
 short_sha = ENV.fetch("SHORT_SHA", "")
 run_url = ENV.fetch("RUN_URL", "")
 raw_mentions = ENV.fetch("SLACK_MENTIONS", "")
@@ -169,9 +172,8 @@ mentions = raw_mentions
   .uniq
   .join(" ")
 
-lines = [
-  "[#{status_symbol}] #{project_name} #{platform} BuildCommit #{status_label} - #{version_label}"
-]
+development_label = development_build ? "[DEVELOPMENT BUILD] " : ""
+lines = ["#{development_label}[#{status_symbol}] #{project_name} #{platform} BuildCommit #{status_label} - #{version_label}"]
 
 lines.unshift(mentions) unless mentions.empty?
 lines << "Time: #{duration_label}" unless duration_label.empty?

@@ -21,12 +21,12 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- AutoBuild \uCC3D\uC5D0 \uAE30\uBCF8 OFF\uC778 `Development Build`
-    \uC124\uC815\uC744 \uCD94\uAC00\uD558\uACE0 BuildRequest schema 12\uC5D0 \uC800\uC7A5\uD569\uB2C8\uB2E4.\n-
-    CI\uAC00 Android/iOS \uC2E4\uC81C \uBE4C\uB4DC \uC804\uC5D0 \uC694\uCCAD \uAC12\uC744
-    \uC801\uC6A9\uD558\uBA70, \uD544\uC694\uD55C Build Setting \uACC4\uC57D\uC774
-    \uC5C6\uC73C\uBA74 \uBA85\uD655\uD558\uAC8C \uC2E4\uD328\uD569\uB2C8\uB2E4.\n-
-    Both \uD50C\uB7AB\uD3FC working request\uC640 \uD68C\uADC0 \uD14C\uC2A4\uD2B8\uAC00
-    Development Build \uC120\uD0DD\uC744 \uBCF4\uC874\uD558\uB3C4\uB85D \uD655\uC7A5\uD588\uC2B5\uB2C8\uB2E4."
+  _releaseNote: "- Development Android\uB97C APK\uB85C \uBE4C\uB4DC\uD558\uACE0 Slack
+    Bot \uC9C1\uC811 \uCCA8\uBD80\uC640 GitHub Artifact fallback\uC744 \uC801\uC6A9\uD569\uB2C8\uB2E4.\n-
+    Development iOS\uB294 \uB9C8\uCF00\uD305 \uBC84\uC804\uC744 \uC720\uC9C0\uD55C
+    \uCC44 TestFlight \uBE4C\uB4DC \uBC88\uD638\uB97C 1\uB85C \uACE0\uC815\uD558\uACE0
+    \uCDA9\uB3CC\uC744 \uC0AC\uC804 \uAC80\uC0AC\uD569\uB2C8\uB2E4.\n- \uC6D0\uBCF8
+    BuildRequest\uC640 BuildSettingsSO\uB97C \uBCF4\uC874\uD558\uACE0 \uBE44\uAC1C\uBC1C
+    \uBE4C\uB4DC \uB3D9\uC791\uC740 \uC720\uC9C0\uD569\uB2C8\uB2E4."
   _dependenciesOverride: com.actionfit.githubauth@1.0.6, com.actionfit.buildsetting@1.1.11,
     com.actionfit.customsymbols@1.0.6

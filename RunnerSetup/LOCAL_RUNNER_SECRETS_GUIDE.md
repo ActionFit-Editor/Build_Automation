@@ -109,6 +109,18 @@ https://hooks.slack.com/services/...
 
 This file is optional. When present, the workflow sends Android/iOS BuildCommit start and result notifications to Slack. Start messages use `[Start]`, and result messages include one summary line plus elapsed `Time`, distribution profile, commit, and GitHub Actions run URL. Leave the file commented or empty to skip Slack notifications.
 
+`shared/slack-bot-token` and `shared/slack-channel-id`
+
+```bash
+# slack-bot-token: Bot token with files:write. Never commit this value.
+xoxb-...
+
+# slack-channel-id: target channel ID; the bot must already be a member.
+C12345678
+```
+
+These files are optional and used only for direct Development Android APK attachment. The workflow uses Slack's external upload URL and completion APIs. Missing/invalid configuration or an API failure emits a warning and leaves the APK in the `Android-BuildCommit-Development-APK` GitHub Artifact without failing a successful build. No SMB/NAS or persistent workspace file share is used.
+
 `profiles/actionfit/profile.env`
 
 ```bash
@@ -192,6 +204,8 @@ Slack notification:
 - Sends a short message with one summary line plus time when available, profile, commit, and GitHub Actions run URL. It intentionally omits separate `Project`, `Version`, `Platform`, `Result`, `Upload`, and `Ref` lines.
 - Sends `[Start]` messages plus success, failure, and cancelled results.
 - Skips without failing the build when the webhook file is missing, empty, invalid, or Slack POST fails.
+- Prefixes Development Build start/result summaries with `[DEVELOPMENT BUILD]`.
+- Development Android additionally reads `shared/slack-bot-token` and `shared/slack-channel-id`, attaches the fresh APK through Slack Bot `files:write`, and falls back to the GitHub Artifact when attachment is unavailable.
 
 Android:
 

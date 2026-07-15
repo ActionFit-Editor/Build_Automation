@@ -7,6 +7,7 @@ bash "$package_root/Tests/Shell/test-unity-project-paths.sh"
 bash "$package_root/Tests/Shell/test-runner-secrets.sh"
 bash "$package_root/Tests/Shell/test-affinity-workflow.sh"
 bash "$package_root/Tests/Shell/test-store-upload-worker.sh"
+bash "$package_root/Tests/Shell/test-development-distribution.sh"
 node "$package_root/Tests/Shell/test-runner-allocator.js"
 
 cmp \
@@ -30,6 +31,8 @@ if [ -e "$repository_root/.git" ]; then
   assert_synced "$package_root/.github/scripts/store-upload-worker.rb" "$repository_root/.github/scripts/store-upload-worker.rb"
   assert_synced "$package_root/.github/scripts/upload-google-play.sh" "$repository_root/.github/scripts/upload-google-play.sh"
   assert_synced "$package_root/.github/scripts/upload-testflight.rb" "$repository_root/.github/scripts/upload-testflight.rb"
+  assert_synced "$package_root/.github/scripts/check-testflight-build-number.rb" "$repository_root/.github/scripts/check-testflight-build-number.rb"
+  assert_synced "$package_root/.github/scripts/upload-slack-file.sh" "$repository_root/.github/scripts/upload-slack-file.sh"
 fi
 
 echo "Build Automation shell tests passed"

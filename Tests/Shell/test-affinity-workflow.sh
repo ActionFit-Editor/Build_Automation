@@ -71,6 +71,19 @@ abort("PrepareBuildSequence entry point is missing") unless sequence.fetch("run"
   abort("missing build phase: #{step_id}") unless steps.any? { |step| step["id"] == step_id }
 end
 
+{
+  "android_first" => ["android_upload_target", "android_bundle_no", "android_development_build"],
+  "android_second" => ["android_upload_target", "android_bundle_no", "android_development_build"],
+  "ios_first" => ["ios_upload_target", "ios_bundle_no", "ios_development_build"],
+  "ios_second" => ["ios_upload_target", "ios_bundle_no", "ios_development_build"]
+}.each do |step_id, outputs|
+  step = steps.find { |candidate| candidate["id"] == step_id }
+  platform = step_id.start_with?("android") ? "android" : "ios"
+  abort("#{step_id} must use the effective working-request upload target") unless step.dig("with", "upload-target") == "${{ steps.sequence.outputs.#{outputs[0]} }}"
+  abort("#{step_id} must use the effective working-request bundle number") unless step.dig("with", "bundle-no") == "${{ steps.sequence.outputs.#{outputs[1]} }}"
+  abort("#{step_id} must use the effective Development Build flag") unless step.dig("with", "development-build") == "${{ steps.sequence.outputs.#{outputs[2]} }}"
+end
+
 step_by_id = lambda do |step_id|
   steps.find { |step| step["id"] == step_id } || abort("missing workflow step: #{step_id}")
 end
@@ -121,11 +134,13 @@ abort("iOS action must be composite") unless ios_action.dig("runs", "using") == 
   ["iOS", ios_action]
 ].each do |platform, action|
   abort("#{platform} defer input is missing") unless action.dig("inputs", "defer-store-upload", "default") == "false"
+  abort("#{platform} Development Build input is missing") unless action.dig("inputs", "development-build", "default") == "false"
   expected_output = "${{ steps.upload_mode.outputs.deferred }}"
   abort("#{platform} deferred output is missing") unless action.dig("outputs", "store-upload-deferred", "value") == expected_output
   upload_mode = action.dig("runs", "steps").find { |step| step["id"] == "upload_mode" }
   abort("#{platform} upload mode resolver is missing") unless upload_mode
   abort("#{platform} upload mode must validate the defer input") unless upload_mode.fetch("run").include?("defer-store-upload must be true or false")
+  abort("#{platform} upload mode must validate the Development Build input") unless upload_mode.fetch("run").include?("development-build must be true or false")
 end
 
 android_steps = android_action.dig("runs", "steps")
@@ -137,6 +152,15 @@ abort("deferred Google Play upload is missing") unless android_deferred_upload
 abort("deferred Google Play upload mode guard is missing") unless android_deferred_upload.fetch("if") == "steps.upload_mode.outputs.deferred == 'true'"
 abort("deferred Google Play upload must use the worker") unless android_deferred_upload.fetch("run").include?("store-upload-worker.rb")
 abort("deferred Google Play upload wrapper is missing") unless android_deferred_upload.fetch("run").include?("upload-google-play.sh")
+development_apk = android_steps.find { |step| step["id"] == "apk" }
+abort("fresh Development APK locator is missing") unless development_apk
+abort("Development APK locator must use the build marker") unless development_apk.fetch("run").include?("steps.build_timer.outputs.marker_path")
+development_artifact = android_steps.find { |step| step["name"] == "Upload Development APK artifact" }
+abort("Development APK GitHub Artifact fallback is missing") unless development_artifact
+slack_attachment = android_steps.find { |step| step["name"] == "Attach Development APK to Slack" }
+abort("Development APK Slack attachment is missing") unless slack_attachment
+abort("Slack attachment failure must not fail a successful build") unless slack_attachment.fetch("continue-on-error") == true
+abort("Slack attachment must use the package-owned uploader") unless slack_attachment.fetch("run").include?("upload-slack-file.sh")
 
 ios_steps = ios_action.dig("runs", "steps")
 ios_sync_upload = ios_steps.find { |step| step["name"] == "Upload to TestFlight" }
@@ -148,6 +172,9 @@ abort("deferred TestFlight upload is missing") unless ios_deferred_upload
 abort("deferred TestFlight upload mode guard is missing") unless ios_deferred_upload.fetch("if") == "steps.upload_mode.outputs.deferred == 'true'"
 abort("deferred TestFlight upload must use the worker") unless ios_deferred_upload.fetch("run").include?("store-upload-worker.rb")
 abort("deferred TestFlight retry wrapper is missing") unless ios_deferred_upload.fetch("run").include?("upload-testflight.rb")
+testflight_collision = ios_steps.find { |step| step["name"] == "Check fixed Development TestFlight build number" }
+abort("Development TestFlight collision check is missing") unless testflight_collision
+abort("TestFlight collision check must use the package-owned checker") unless testflight_collision.fetch("run").include?("check-testflight-build-number.rb")
 RUBY
 
 if grep -Fq 'File.write(path, JSON.pretty_generate(request))' "$workflow"; then

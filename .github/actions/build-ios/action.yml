@@ -16,6 +16,10 @@ inputs:
   upload-target:
     description: BuildRequest upload target.
     required: true
+  development-build:
+    description: Whether this phase is a Development Build.
+    required: false
+    default: "false"
   distribution-profile:
     description: Local runner distribution profile.
     required: true
@@ -58,12 +62,20 @@ runs:
       env:
         DEFER_STORE_UPLOAD: ${{ inputs.defer-store-upload }}
         REQUEST_UPLOAD_TARGET: ${{ inputs.upload-target }}
+        DEVELOPMENT_BUILD: ${{ inputs.development-build }}
       run: |
         set -euo pipefail
         case "$DEFER_STORE_UPLOAD" in
           true|false) ;;
           *)
             echo "::error::defer-store-upload must be true or false: $DEFER_STORE_UPLOAD"
+            exit 1
+            ;;
+        esac
+        case "$DEVELOPMENT_BUILD" in
+          true|false) ;;
+          *)
+            echo "::error::development-build must be true or false: $DEVELOPMENT_BUILD"
             exit 1
             ;;
         esac
@@ -92,6 +104,7 @@ runs:
         BUILD_PROJECT_NAME: ${{ inputs.project-name }}
         BUILD_VERSION: ${{ inputs.build-version }}
         BUILD_BUNDLE_NO: ${{ inputs.bundle-no }}
+        BUILD_DEVELOPMENT_BUILD: ${{ inputs.development-build }}
         BUILD_DISTRIBUTION_PROFILE: ${{ inputs.distribution-profile }}
         SLACK_BUILD_MENTIONS: ${{ inputs.slack-mentions }}
         BUILD_SHORT_SHA: ${{ github.sha }}
@@ -328,6 +341,16 @@ runs:
 
         "$fastlane_cmd" --version
         echo "FASTLANE_CMD=$fastlane_cmd" >> "$GITHUB_ENV"
+
+    - name: Check fixed Development TestFlight build number
+      if: inputs.development-build == 'true' && (inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
+      shell: bash
+      env:
+        APP_STORE_CONNECT_API_KEY_JSON_PATH: ${{ steps.asc_key.outputs.api_key_json_path }}
+        IOS_BUNDLE_ID: ${{ inputs.ios-bundle-id }}
+        TESTFLIGHT_BUILD_VERSION: ${{ inputs.build-version }}
+        TESTFLIGHT_BUILD_NUMBER: ${{ inputs.bundle-no }}
+      run: /usr/bin/ruby "$REPOSITORY_ROOT/.github/scripts/check-testflight-build-number.rb"
 
     - name: Prepare iOS signing assets
       if: inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight'
@@ -713,6 +736,7 @@ runs:
         BUILD_PROJECT_NAME: ${{ inputs.project-name }}
         BUILD_VERSION: ${{ inputs.build-version }}
         BUILD_BUNDLE_NO: ${{ inputs.bundle-no }}
+        BUILD_DEVELOPMENT_BUILD: ${{ inputs.development-build }}
         BUILD_DISTRIBUTION_PROFILE: ${{ inputs.distribution-profile }}
         SLACK_BUILD_MENTIONS: ${{ inputs.slack-mentions }}
         BUILD_SHORT_SHA: ${{ github.sha }}

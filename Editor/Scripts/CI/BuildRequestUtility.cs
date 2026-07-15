@@ -460,7 +460,12 @@ namespace ActionFit.BuildAutomation.Editor
 
             if (platform == BuildRequestPlatform.Android)
             {
-                if (request.buildKind == BuildRequestKind.Default ||
+                if (request.developmentBuild)
+                {
+                    request.buildKind = BuildRequestKind.AndroidApk;
+                    request.uploadTarget = BuildRequestUploadTarget.None;
+                }
+                else if (request.buildKind == BuildRequestKind.Default ||
                     request.buildKind == BuildRequestKind.iOSXcodeProject ||
                     request.buildKind == BuildRequestKind.AndroidAabAndiOSXcodeProject)
                 {
@@ -472,6 +477,11 @@ namespace ActionFit.BuildAutomation.Editor
             }
 
             request.buildKind = BuildRequestKind.iOSXcodeProject;
+            if (request.developmentBuild)
+            {
+                request.uploadTarget = BuildRequestUploadTarget.TestFlight;
+                request.bundleNo = "1";
+            }
             request.androidPackageName = "";
             request.androidKeystoreFileName = "";
             request.androidKeystoreBase64 = "";

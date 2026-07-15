@@ -198,12 +198,13 @@ namespace ActionFit.BuildAutomation.Editor
                 return 1;
             }
 
+            BuildRequest secondRequest = null;
             string secondRequestPath = "";
             if (second != BuildRequestPlatform.None &&
                 !BuildRequestUtility.TrySaveWorkingRequest(
                     request,
                     second,
-                    out _,
+                    out secondRequest,
                     out secondRequestPath,
                     out string secondRequestError))
             {
@@ -220,6 +221,12 @@ namespace ActionFit.BuildAutomation.Editor
             string iosRequestPath = first == BuildRequestPlatform.iOS
                 ? firstRequestPath
                 : second == BuildRequestPlatform.iOS ? secondRequestPath : "";
+            BuildRequest androidRequest = first == BuildRequestPlatform.Android
+                ? firstRequest
+                : second == BuildRequestPlatform.Android ? secondRequest : null;
+            BuildRequest iosRequest = first == BuildRequestPlatform.iOS
+                ? firstRequest
+                : second == BuildRequestPlatform.iOS ? secondRequest : null;
 
             string outputPath = Environment.GetEnvironmentVariable("BUILD_SEQUENCE_OUTPUT_PATH")?.Trim();
             if (string.IsNullOrEmpty(outputPath))
@@ -235,13 +242,24 @@ namespace ActionFit.BuildAutomation.Editor
                     $"first={first}",
                     $"second={(second == BuildRequestPlatform.None ? "" : second.ToString())}",
                     $"android_request_path={androidRequestPath}",
-                    $"ios_request_path={iosRequestPath}"
+                    $"ios_request_path={iosRequestPath}",
+                    $"android_upload_target={androidRequest?.uploadTarget.ToString() ?? ""}",
+                    $"android_bundle_no={androidRequest?.bundleNo ?? ""}",
+                    $"android_development_build={FormatBooleanOutput(androidRequest?.developmentBuild)}",
+                    $"ios_upload_target={iosRequest?.uploadTarget.ToString() ?? ""}",
+                    $"ios_bundle_no={iosRequest?.bundleNo ?? ""}",
+                    $"ios_development_build={FormatBooleanOutput(iosRequest?.developmentBuild)}"
                 });
 
             Debug.Log(
                 $"[CIBuildEntry] Build sequence prepared: request={request.platform}, " +
                 $"active={EditorUserBuildSettings.activeBuildTarget}, first={first}, second={second}");
             return 0;
+        }
+
+        private static string FormatBooleanOutput(bool? value)
+        {
+            return value.HasValue ? value.Value.ToString().ToLowerInvariant() : "";
         }
 
         internal static bool TryResolveBuildSequence(

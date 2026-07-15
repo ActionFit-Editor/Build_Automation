@@ -55,32 +55,38 @@ namespace ActionFit.BuildAutomation.Editor.Tests
         }
 
         [Test]
-        public void AndroidWorkingRequestRemovesIosOnlyValues()
+        public void DevelopmentAndroidWorkingRequestUsesApkWithoutStoreUpload()
         {
             var request = new BuildRequest
             {
                 platform = BuildRequestPlatform.Both,
                 buildKind = BuildRequestKind.AndroidAabAndiOSXcodeProject,
+                uploadTarget = BuildRequestUploadTarget.GooglePlayInternalAndTestFlight,
                 developmentBuild = true,
+                bundleNo = "555",
                 iosBundleId = "com.actionfit.ios"
             };
 
             BuildRequestUtility.PrepareWorkingRequest(request, BuildRequestPlatform.Android);
 
             Assert.That(request.platform, Is.EqualTo(BuildRequestPlatform.Android));
-            Assert.That(request.buildKind, Is.EqualTo(BuildRequestKind.AndroidAab));
+            Assert.That(request.buildKind, Is.EqualTo(BuildRequestKind.AndroidApk));
+            Assert.That(request.uploadTarget, Is.EqualTo(BuildRequestUploadTarget.None));
+            Assert.That(request.bundleNo, Is.EqualTo("555"));
             Assert.That(request.developmentBuild, Is.True);
             Assert.That(request.iosBundleId, Is.Empty);
         }
 
         [Test]
-        public void IosWorkingRequestRemovesAndroidSigningValues()
+        public void DevelopmentIosWorkingRequestUsesFixedTestFlightBuildNumber()
         {
             var request = new BuildRequest
             {
                 platform = BuildRequestPlatform.Both,
                 buildKind = BuildRequestKind.AndroidAabAndiOSXcodeProject,
+                uploadTarget = BuildRequestUploadTarget.GooglePlayInternalAndTestFlight,
                 developmentBuild = true,
+                bundleNo = "555",
                 androidPackageName = "com.actionfit.android",
                 androidKeystoreFileName = "upload.keystore",
                 androidKeystoreBase64 = "base64",
@@ -93,6 +99,8 @@ namespace ActionFit.BuildAutomation.Editor.Tests
 
             Assert.That(request.platform, Is.EqualTo(BuildRequestPlatform.iOS));
             Assert.That(request.buildKind, Is.EqualTo(BuildRequestKind.iOSXcodeProject));
+            Assert.That(request.uploadTarget, Is.EqualTo(BuildRequestUploadTarget.TestFlight));
+            Assert.That(request.bundleNo, Is.EqualTo("1"));
             Assert.That(request.developmentBuild, Is.True);
             Assert.That(request.androidPackageName, Is.Empty);
             Assert.That(request.androidKeystoreFileName, Is.Empty);
@@ -100,6 +108,37 @@ namespace ActionFit.BuildAutomation.Editor.Tests
             Assert.That(request.androidKeystorePassword, Is.Empty);
             Assert.That(request.androidAliasPassword, Is.Empty);
             Assert.That(request.androidKeyaliasName, Is.Empty);
+        }
+
+        [Test]
+        public void ReleaseWorkingRequestsPreserveStoreBehavior()
+        {
+            var androidRequest = new BuildRequest
+            {
+                platform = BuildRequestPlatform.Both,
+                buildKind = BuildRequestKind.AndroidAabAndiOSXcodeProject,
+                uploadTarget = BuildRequestUploadTarget.GooglePlayInternalAndTestFlight,
+                developmentBuild = false,
+                bundleNo = "555"
+            };
+            var iosRequest = new BuildRequest
+            {
+                platform = androidRequest.platform,
+                buildKind = androidRequest.buildKind,
+                uploadTarget = androidRequest.uploadTarget,
+                developmentBuild = androidRequest.developmentBuild,
+                bundleNo = androidRequest.bundleNo
+            };
+
+            BuildRequestUtility.PrepareWorkingRequest(androidRequest, BuildRequestPlatform.Android);
+            BuildRequestUtility.PrepareWorkingRequest(iosRequest, BuildRequestPlatform.iOS);
+
+            Assert.That(androidRequest.buildKind, Is.EqualTo(BuildRequestKind.AndroidAab));
+            Assert.That(androidRequest.uploadTarget, Is.EqualTo(BuildRequestUploadTarget.GooglePlayInternalAndTestFlight));
+            Assert.That(androidRequest.bundleNo, Is.EqualTo("555"));
+            Assert.That(iosRequest.buildKind, Is.EqualTo(BuildRequestKind.iOSXcodeProject));
+            Assert.That(iosRequest.uploadTarget, Is.EqualTo(BuildRequestUploadTarget.GooglePlayInternalAndTestFlight));
+            Assert.That(iosRequest.bundleNo, Is.EqualTo("555"));
         }
 
         [Test]

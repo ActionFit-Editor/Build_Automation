@@ -117,6 +117,36 @@ grep -Fx "$keystore_path" "$github_env" >/dev/null
 grep -Fx 'runner-keystore-pass' "$github_env" >/dev/null
 grep -Fx 'runner-alias-pass' "$github_env" >/dev/null
 
+cat > "$request_path" <<'EOF'
+{
+  "schemaVersion": 12,
+  "developmentBuild": true,
+  "androidKeystoreBase64": "",
+  "androidKeystorePassword": "",
+  "androidAliasPassword": ""
+}
+EOF
+printf 'xoxb-runner-fixture-token\n' > "$secret_root/shared/slack-bot-token"
+printf 'C12345678\n' > "$secret_root/shared/slack-channel-id"
+development_validation_output="$(
+  HOME="$home_root" \
+  BUILD_REQUEST_PATH="$request_path" \
+  GITHUB_ACTIONS=true \
+  GITHUB_ENV="$github_env" \
+  GITHUB_OUTPUT="$github_output" \
+    bash "$validator" Actionfit Android None
+)"
+if ! printf '%s\n' "$development_validation_output" | grep -Fx '::add-mask::xoxb-runner-fixture-token' >/dev/null; then
+  echo "Development Android validation must mask the Slack Bot token" >&2
+  exit 1
+fi
+if printf '%s\n' "$development_validation_output" \
+  | grep -v '^::add-mask::' \
+  | grep -F 'xoxb-runner-fixture-token' >/dev/null; then
+  echo "Development Android validation must not print the Slack Bot token outside masking commands" >&2
+  exit 1
+fi
+
 rm -f "$keystore_path"
 if HOME="$home_root" BUILD_REQUEST_PATH="$request_path" GITHUB_ACTIONS=false \
   bash "$validator" Actionfit Android None >/dev/null 2>&1; then

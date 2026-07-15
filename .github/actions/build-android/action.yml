@@ -16,6 +16,10 @@ inputs:
   upload-target:
     description: BuildRequest upload target.
     required: true
+  development-build:
+    description: Whether this phase is a Development Build.
+    required: false
+    default: "false"
   distribution-profile:
     description: Local runner distribution profile.
     required: true
@@ -67,12 +71,20 @@ runs:
       env:
         DEFER_STORE_UPLOAD: ${{ inputs.defer-store-upload }}
         REQUEST_UPLOAD_TARGET: ${{ inputs.upload-target }}
+        DEVELOPMENT_BUILD: ${{ inputs.development-build }}
       run: |
         set -euo pipefail
         case "$DEFER_STORE_UPLOAD" in
           true|false) ;;
           *)
             echo "::error::defer-store-upload must be true or false: $DEFER_STORE_UPLOAD"
+            exit 1
+            ;;
+        esac
+        case "$DEVELOPMENT_BUILD" in
+          true|false) ;;
+          *)
+            echo "::error::development-build must be true or false: $DEVELOPMENT_BUILD"
             exit 1
             ;;
         esac
@@ -99,6 +111,7 @@ runs:
         BUILD_PROJECT_NAME: ${{ inputs.project-name }}
         BUILD_VERSION: ${{ inputs.build-version }}
         BUILD_BUNDLE_NO: ${{ inputs.bundle-no }}
+        BUILD_DEVELOPMENT_BUILD: ${{ inputs.development-build }}
         BUILD_DISTRIBUTION_PROFILE: ${{ inputs.distribution-profile }}
         SLACK_BUILD_MENTIONS: ${{ inputs.slack-mentions }}
         BUILD_SHORT_SHA: ${{ github.sha }}
@@ -226,6 +239,19 @@ runs:
           echo "::warning::No Android mapping.txt found near the AAB."
         fi
 
+    - name: Locate Development APK
+      id: apk
+      if: inputs.development-build == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        apk_path="$(find "$UNITY_BUILD_DIR" -type f -name '*.apk' -newer "${{ steps.build_timer.outputs.marker_path }}" -print -quit)"
+        if [ -z "$apk_path" ]; then
+          echo "::error::No fresh Development APK found under $UNITY_BUILD_DIR."
+          exit 1
+        fi
+        echo "path=$apk_path" >> "$GITHUB_OUTPUT"
+
     - name: Prepare Google Play profile config
       id: google_play_config
       if: inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight'
@@ -273,7 +299,7 @@ runs:
           /bin/bash "$REPOSITORY_ROOT/.github/scripts/upload-google-play.sh"
 
     - name: Upload Android AAB artifact
-      if: always() && steps.upload_mode.outputs.deferred != 'true'
+      if: always() && inputs.development-build != 'true' && steps.upload_mode.outputs.deferred != 'true'
       continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
@@ -287,6 +313,30 @@ runs:
           ${{ env.UNITY_BUILD_DIR }}/**/*mapping.txt
         if-no-files-found: warn
         compression-level: 0
+
+    - name: Upload Development APK artifact
+      if: always() && inputs.development-build == 'true' && steps.apk.outputs.path != ''
+      continue-on-error: true
+      uses: actions/upload-artifact@v4
+      with:
+        name: Android-BuildCommit-Development-APK
+        path: ${{ steps.apk.outputs.path }}
+        if-no-files-found: error
+        compression-level: 0
+
+    - name: Attach Development APK to Slack
+      if: inputs.development-build == 'true' && steps.apk.outputs.path != ''
+      continue-on-error: true
+      shell: bash
+      env:
+        SLACK_FILE_PATH: ${{ steps.apk.outputs.path }}
+        BUILD_PROJECT_NAME: ${{ inputs.project-name }}
+        BUILD_VERSION: ${{ inputs.build-version }}
+        BUILD_BUNDLE_NO: ${{ inputs.bundle-no }}
+        SLACK_BUILD_MENTIONS: ${{ inputs.slack-mentions }}
+        BUILD_SHORT_SHA: ${{ github.sha }}
+        BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: bash "$REPOSITORY_ROOT/.github/scripts/upload-slack-file.sh"
 
     - name: Cleanup old Android build artifacts
       if: success() && steps.upload_mode.outputs.deferred != 'true' && (inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
@@ -322,6 +372,7 @@ runs:
         BUILD_PROJECT_NAME: ${{ inputs.project-name }}
         BUILD_VERSION: ${{ inputs.build-version }}
         BUILD_BUNDLE_NO: ${{ inputs.bundle-no }}
+        BUILD_DEVELOPMENT_BUILD: ${{ inputs.development-build }}
         BUILD_DISTRIBUTION_PROFILE: ${{ inputs.distribution-profile }}
         SLACK_BUILD_MENTIONS: ${{ inputs.slack-mentions }}
         BUILD_SHORT_SHA: ${{ github.sha }}

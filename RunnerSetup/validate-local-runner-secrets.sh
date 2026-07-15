@@ -11,6 +11,8 @@ if [ -z "$repository_root" ]; then
   repository_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"
 fi
 request_path="${BUILD_REQUEST_PATH:-$repository_root/.build/build_request.json}"
+slack_bot_token_file="${SLACK_BOT_TOKEN_FILE:-$secret_root/shared/slack-bot-token}"
+slack_channel_id_file="${SLACK_CHANNEL_ID_FILE:-$secret_root/shared/slack-channel-id}"
 
 profile_slug="$(printf '%s' "$profile" | tr '[:upper:]' '[:lower:]')"
 case "$profile_slug" in
@@ -196,6 +198,22 @@ read_request_value() {
   ruby -rjson -e 'request = JSON.parse(File.read(ARGV.fetch(0))); value = request[ARGV.fetch(1)]; print(value.nil? ? "" : value.to_s.strip)' "$request_path" "$field" 2>/dev/null || true
 }
 
+read_first_config_value() {
+  local path="$1"
+  if [ ! -r "$path" ]; then
+    return
+  fi
+
+  sed -n \
+    -e '/^[[:space:]]*#/d' \
+    -e '/^[[:space:]]*$/d' \
+    -e 's/^[[:space:]]*//' \
+    -e 's/[[:space:]]*$//' \
+    -e 'p' \
+    -e 'q' \
+    "$path"
+}
+
 source_env_file "profile env" "$profile_env"
 request_ios_bundle_id="${IOS_BUNDLE_ID_FROM_REQUEST:-$(read_request_value "iosBundleId")}"
 
@@ -233,6 +251,19 @@ if [ "$uses_android" -eq 1 ]; then
   fi
   if [ -z "$request_keyalias_pass" ] && [ -n "${ANDROID_KEYALIAS_PASS:-}" ]; then
     append_github_env "ANDROID_KEYALIAS_PASS" "${ANDROID_KEYALIAS_PASS:-}"
+  fi
+
+  request_development_build="$(printf '%s' "$(read_request_value "developmentBuild")" | tr '[:upper:]' '[:lower:]')"
+  if [ "$request_development_build" = "true" ]; then
+    slack_bot_token="${SLACK_BUILD_BOT_TOKEN:-$(read_first_config_value "$slack_bot_token_file")}"
+    slack_channel_id="${SLACK_BUILD_CHANNEL_ID:-$(read_first_config_value "$slack_channel_id_file")}"
+    if [ -z "$slack_bot_token" ] || [ -z "$slack_channel_id" ]; then
+      echo "::warning::Slack Bot token or channel ID is not configured; Development APK delivery will use the GitHub Artifact fallback."
+    elif [[ ! "$slack_channel_id" =~ ^[CGD][A-Z0-9]+$ ]]; then
+      echo "::warning::Slack channel ID is invalid; Development APK delivery will use the GitHub Artifact fallback."
+    else
+      mask_value "$slack_bot_token"
+    fi
   fi
 fi
 
