@@ -148,6 +148,9 @@ deferred_diagnostics = steps.find { |step| step["name"] == "Upload deferred stor
 abort("deferred Store diagnostics are missing") unless deferred_diagnostics
 abort("successful deferred Store uploads must not retain diagnostics") unless deferred_diagnostics.fetch("if").include?("steps.first_store_upload.outcome != 'success'")
 abort("deferred Store diagnostics must expire after seven days") unless deferred_diagnostics.dig("with", "retention-days") == 7
+deferred_cleanup = steps.find { |step| step["name"] == "Cleanup old artifacts after deferred upload" }
+expected_deferred_cleanup_number = "${{ steps.android_first.outputs.store-upload-deferred == 'true' && steps.sequence.outputs.android_bundle_no || steps.ios_first.outputs.effective-bundle-no }}"
+abort("deferred iOS cleanup must use the effective bundle number") unless deferred_cleanup.dig("env", "BUILD_CLEANUP_BUNDLE_NO") == expected_deferred_cleanup_number
 
 failure_step = steps.find { |step| step["name"] == "Fail when a requested platform failed" }
 abort("final build failure aggregation is missing") unless failure_step
@@ -235,9 +238,23 @@ abort("deferred TestFlight upload is missing") unless ios_deferred_upload
 abort("deferred TestFlight upload mode guard is missing") unless ios_deferred_upload.fetch("if") == "steps.upload_mode.outputs.deferred == 'true'"
 abort("deferred TestFlight upload must use the worker") unless ios_deferred_upload.fetch("run").include?("store-upload-worker.rb")
 abort("deferred TestFlight retry wrapper is missing") unless ios_deferred_upload.fetch("run").include?("upload-testflight.rb")
-testflight_collision = ios_steps.find { |step| step["name"] == "Check fixed Development TestFlight build number" }
-abort("Development TestFlight collision check is missing") unless testflight_collision
-abort("TestFlight collision check must use the package-owned checker") unless testflight_collision.fetch("run").include?("check-testflight-build-number.rb")
+testflight_resolver = ios_steps.find { |step| step["name"] == "Resolve Development TestFlight build number" }
+abort("Development TestFlight build-number resolver is missing") unless testflight_resolver
+abort("TestFlight build-number resolver must expose its selected number") unless testflight_resolver.fetch("id") == "testflight_build_number"
+abort("TestFlight build-number resolver must use the package-owned checker") unless testflight_resolver.fetch("run").include?("check-testflight-build-number.rb")
+abort("TestFlight build-number resolver must start from the iOS working-request number") unless testflight_resolver.dig("env", "TESTFLIGHT_BUILD_NUMBER") == "${{ inputs.bundle-no }}"
+apply_testflight_number = ios_steps.find { |step| step["name"] == "Apply Development TestFlight build number" }
+abort("Resolved TestFlight build-number application is missing") unless apply_testflight_number
+abort("Resolved TestFlight build number must update only the supplied working request") unless apply_testflight_number.dig("env", "BUILD_REQUEST_PATH") == "${{ inputs.request-path }}"
+abort("Resolved TestFlight build number must be written structurally") unless apply_testflight_number.fetch("run").include?('request["bundleNo"] = resolved')
+resolver_index = ios_steps.index(testflight_resolver)
+apply_index = ios_steps.index(apply_testflight_number)
+unity_build_index = ios_steps.index { |step| step["name"] == "Build iOS Xcode project from BuildCommit request" }
+abort("TestFlight build number must resolve before the Unity iOS build") unless resolver_index < apply_index && apply_index < unity_build_index
+expected_effective_bundle = "${{ steps.testflight_build_number.outputs.build_number || inputs.bundle-no }}"
+abort("iOS action must expose the effective bundle number") unless ios_action.dig("outputs", "effective-bundle-no", "value") == expected_effective_bundle
+ios_cleanup = ios_steps.find { |step| step["name"] == "Cleanup old iOS build artifacts" }
+abort("iOS cleanup must use the effective bundle number") unless ios_cleanup.dig("env", "BUILD_CLEANUP_BUNDLE_NO") == expected_effective_bundle
 ios_app_artifact = ios_steps.find { |step| step["name"] == "Upload iOS app artifact" }
 abort("iOS recovery app Artifact is missing") unless ios_app_artifact
 abort("successful TestFlight uploads must not retain a duplicate IPA") unless ios_app_artifact.fetch("if").include?("steps.testflight_upload.outcome != 'success'")

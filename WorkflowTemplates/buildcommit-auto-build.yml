@@ -481,7 +481,7 @@ jobs:
         env:
           BUILD_CLEANUP_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
           BUILD_CLEANUP_BUILD_VERSION: ${{ steps.detect.outputs.build_version }}
-          BUILD_CLEANUP_BUNDLE_NO: ${{ steps.android_first.outputs.store-upload-deferred == 'true' && steps.sequence.outputs.android_bundle_no || steps.sequence.outputs.ios_bundle_no }}
+          BUILD_CLEANUP_BUNDLE_NO: ${{ steps.android_first.outputs.store-upload-deferred == 'true' && steps.sequence.outputs.android_bundle_no || steps.ios_first.outputs.effective-bundle-no }}
         run: bash "$REPOSITORY_ROOT/.github/scripts/cleanup-old-build-artifacts.sh"
 
       - name: Final cleanup while preserving Unity Library

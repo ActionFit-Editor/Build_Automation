@@ -2,6 +2,7 @@
 set -euo pipefail
 
 package_root="$(cd "$(dirname "$0")/../.." && pwd -P)"
+ios_action="$package_root/.github/actions/build-ios/action.yml"
 slack_uploader="$package_root/.github/scripts/upload-slack-file.sh"
 testflight_checker="$package_root/.github/scripts/check-testflight-build-number.rb"
 slack_notifier="$package_root/.github/scripts/notify-slack-build-result.sh"
@@ -58,20 +59,39 @@ case "$last_argument" in
         ;;
     esac
     ;;
-  https://api.appstoreconnect.apple.com/v1/builds)
+  https://api.appstoreconnect.apple.com/v1/builds*)
     case "${FAKE_ASC_MODE:-available}" in
       collision)
         printf '{"data":[{"type":"builds","id":"BUILD_FIXTURE","attributes":{"version":"1"}}]}\n'
+        ;;
+      chained)
+        printf '{"data":[{"type":"builds","id":"BUILD_FIXTURE","attributes":{"version":"1"}}]}\n'
+        ;;
+      paginated)
+        if [[ "$last_argument" == *cursor=NEXT* ]]; then
+          printf '{"data":[{"type":"builds","id":"BUILD_TWO","attributes":{"version":"2"}}]}\n'
+        else
+          printf '{"data":[{"type":"builds","id":"BUILD_ONE","attributes":{"version":"1"}}],"links":{"next":"https://api.appstoreconnect.apple.com/v1/builds?cursor=NEXT"}}\n'
+        fi
+        ;;
+      unsafe_pagination)
+        printf '{"data":[],"links":{"next":"https://example.invalid/v1/builds?cursor=LEAK"}}\n'
+        ;;
+      non_integer)
+        printf '{"data":[{"type":"builds","id":"BUILD_FIXTURE","attributes":{"version":"1.2.3"}}]}\n'
         ;;
       *)
         printf '{"data":[]}\n'
         ;;
     esac
     ;;
-  https://api.appstoreconnect.apple.com/v1/apps/APP_FIXTURE/buildUploads)
+  https://api.appstoreconnect.apple.com/v1/apps/APP_FIXTURE/buildUploads*)
     case "${FAKE_ASC_MODE:-available}" in
       active_upload)
-        printf '{"data":[{"type":"buildUploads","id":"UPLOAD_FIXTURE","attributes":{"state":{"state":"PROCESSING"}}}]}\n'
+        printf '{"data":[{"type":"buildUploads","id":"UPLOAD_FIXTURE","attributes":{"cfBundleVersion":"1"}}]}\n'
+        ;;
+      chained)
+        printf '{"data":[{"type":"buildUploads","id":"UPLOAD_FIXTURE","attributes":{"cfBundleVersion":"2"}}]}\n'
         ;;
       *)
         printf '{"data":[]}\n'
@@ -241,25 +261,33 @@ fi
   File.chmod(0600, ARGV.fetch(0))
 ' "$fixture_root/app-store-key.json" "$fixture_root/app-store-key.p8"
 
+testflight_github_output="$fixture_root/testflight-github-output"
+: > "$testflight_github_output"
+available_output="$(
 PATH="$fixture_root/bin:$PATH" \
-FAKE_CURL_LOG="$fixture_root/asc-curl.log" \
-FAKE_CURL_CONFIG_LOG="$fixture_root/asc-curl-config.log" \
-APP_STORE_CONNECT_API_KEY_JSON_PATH="$fixture_root/app-store-key.json" \
-IOS_BUNDLE_ID="com.actionfit.fixture" \
-TESTFLIGHT_BUILD_VERSION="5.5.5" \
-TESTFLIGHT_BUILD_NUMBER="1" \
-  /usr/bin/ruby "$testflight_checker" >/dev/null
+  FAKE_CURL_LOG="$fixture_root/asc-curl.log" \
+  FAKE_CURL_CONFIG_LOG="$fixture_root/asc-curl-config.log" \
+  GITHUB_OUTPUT="$testflight_github_output" \
+  APP_STORE_CONNECT_API_KEY_JSON_PATH="$fixture_root/app-store-key.json" \
+  IOS_BUNDLE_ID="com.actionfit.fixture" \
+  TESTFLIGHT_BUILD_VERSION="5.5.5" \
+  TESTFLIGHT_BUILD_NUMBER="1" \
+  /usr/bin/ruby "$testflight_checker"
+)"
+grep -Fx 'build_number=1' "$testflight_github_output" >/dev/null
+printf '%s\n' "$available_output" | grep -F 'Resolved Development TestFlight build number: 5.5.5(1)' >/dev/null
 
 grep -F 'https://api.appstoreconnect.apple.com/v1/apps' "$fixture_root/asc-curl.log" >/dev/null
 grep -F 'filter[bundleId]=com.actionfit.fixture' "$fixture_root/asc-curl.log" >/dev/null
 grep -F 'https://api.appstoreconnect.apple.com/v1/builds' "$fixture_root/asc-curl.log" >/dev/null
 grep -F 'filter[app]=APP_FIXTURE' "$fixture_root/asc-curl.log" >/dev/null
 grep -F 'filter[preReleaseVersion.version]=5.5.5' "$fixture_root/asc-curl.log" >/dev/null
-grep -F 'filter[version]=1' "$fixture_root/asc-curl.log" >/dev/null
+grep -F 'fields[builds]=version' "$fixture_root/asc-curl.log" >/dev/null
+grep -F 'limit=200' "$fixture_root/asc-curl.log" >/dev/null
 grep -F 'https://api.appstoreconnect.apple.com/v1/apps/APP_FIXTURE/buildUploads' "$fixture_root/asc-curl.log" >/dev/null
 grep -F 'filter[cfBundleShortVersionString]=5.5.5' "$fixture_root/asc-curl.log" >/dev/null
-grep -F 'filter[cfBundleVersion]=1' "$fixture_root/asc-curl.log" >/dev/null
 grep -F 'filter[state]=AWAITING_UPLOAD,PROCESSING,COMPLETE' "$fixture_root/asc-curl.log" >/dev/null
+grep -F 'fields[buildUploads]=cfBundleVersion' "$fixture_root/asc-curl.log" >/dev/null
 if grep -F 'Authorization: Bearer' "$fixture_root/asc-curl.log" >/dev/null; then
   echo "App Store Connect JWT must not be passed in curl process arguments" >&2
   exit 1
@@ -296,43 +324,147 @@ fi
   abort("ES256 JWT signature verification failed") unless private_key.dsa_verify_asn1(digest, der)
 ' "$fixture_root/asc-curl-config.log" "$fixture_root/app-store-key.json"
 
-set +e
+: > "$testflight_github_output"
 collision_output="$(
   PATH="$fixture_root/bin:$PATH" \
   FAKE_CURL_LOG="$fixture_root/asc-collision-curl.log" \
   FAKE_CURL_CONFIG_LOG="$fixture_root/asc-collision-config.log" \
   FAKE_ASC_MODE=collision \
+  GITHUB_OUTPUT="$testflight_github_output" \
   APP_STORE_CONNECT_API_KEY_JSON_PATH="$fixture_root/app-store-key.json" \
   IOS_BUNDLE_ID="com.actionfit.fixture" \
   TESTFLIGHT_BUILD_VERSION="5.5.5" \
   TESTFLIGHT_BUILD_NUMBER="1" \
     /usr/bin/ruby "$testflight_checker" 2>&1
 )"
-collision_status=$?
-set -e
-if [ "$collision_status" -ne 3 ] || ! printf '%s\n' "$collision_output" | grep -F 'already contains build 5.5.5(1)' >/dev/null; then
-  echo "TestFlight build-number collision must fail clearly" >&2
-  exit 1
-fi
+grep -Fx 'build_number=2' "$testflight_github_output" >/dev/null
+printf '%s\n' "$collision_output" | grep -F 'Resolved Development TestFlight build number: 5.5.5(2)' >/dev/null
 
-set +e
+: > "$testflight_github_output"
 active_upload_output="$(
   PATH="$fixture_root/bin:$PATH" \
   FAKE_CURL_LOG="$fixture_root/asc-active-curl.log" \
   FAKE_CURL_CONFIG_LOG="$fixture_root/asc-active-config.log" \
   FAKE_ASC_MODE=active_upload \
+  GITHUB_OUTPUT="$testflight_github_output" \
   APP_STORE_CONNECT_API_KEY_JSON_PATH="$fixture_root/app-store-key.json" \
   IOS_BUNDLE_ID="com.actionfit.fixture" \
   TESTFLIGHT_BUILD_VERSION="5.5.5" \
   TESTFLIGHT_BUILD_NUMBER="1" \
     /usr/bin/ruby "$testflight_checker" 2>&1
 )"
-active_upload_status=$?
+grep -Fx 'build_number=2' "$testflight_github_output" >/dev/null
+printf '%s\n' "$active_upload_output" | grep -F 'occupied_max=1' >/dev/null
+
+: > "$testflight_github_output"
+chained_output="$(
+  PATH="$fixture_root/bin:$PATH" \
+  FAKE_CURL_LOG="$fixture_root/asc-chained-curl.log" \
+  FAKE_CURL_CONFIG_LOG="$fixture_root/asc-chained-config.log" \
+  FAKE_ASC_MODE=chained \
+  GITHUB_OUTPUT="$testflight_github_output" \
+  APP_STORE_CONNECT_API_KEY_JSON_PATH="$fixture_root/app-store-key.json" \
+  IOS_BUNDLE_ID="com.actionfit.fixture" \
+  TESTFLIGHT_BUILD_VERSION="5.5.5" \
+  TESTFLIGHT_BUILD_NUMBER="1" \
+    /usr/bin/ruby "$testflight_checker" 2>&1
+)"
+grep -Fx 'build_number=3' "$testflight_github_output" >/dev/null
+printf '%s\n' "$chained_output" | grep -F 'occupied_max=2' >/dev/null
+
+: > "$testflight_github_output"
+PATH="$fixture_root/bin:$PATH" \
+FAKE_CURL_LOG="$fixture_root/asc-paginated-curl.log" \
+FAKE_CURL_CONFIG_LOG="$fixture_root/asc-paginated-config.log" \
+FAKE_ASC_MODE=paginated \
+GITHUB_OUTPUT="$testflight_github_output" \
+APP_STORE_CONNECT_API_KEY_JSON_PATH="$fixture_root/app-store-key.json" \
+IOS_BUNDLE_ID="com.actionfit.fixture" \
+TESTFLIGHT_BUILD_VERSION="5.5.5" \
+TESTFLIGHT_BUILD_NUMBER="1" \
+  /usr/bin/ruby "$testflight_checker" >/dev/null
+grep -Fx 'build_number=3' "$testflight_github_output" >/dev/null
+grep -F 'https://api.appstoreconnect.apple.com/v1/builds?cursor=NEXT' "$fixture_root/asc-paginated-curl.log" >/dev/null
+
+: > "$testflight_github_output"
+set +e
+unsafe_pagination_output="$(
+  PATH="$fixture_root/bin:$PATH" \
+  FAKE_CURL_LOG="$fixture_root/asc-unsafe-pagination-curl.log" \
+  FAKE_CURL_CONFIG_LOG="$fixture_root/asc-unsafe-pagination-config.log" \
+  FAKE_ASC_MODE=unsafe_pagination \
+  GITHUB_OUTPUT="$testflight_github_output" \
+  APP_STORE_CONNECT_API_KEY_JSON_PATH="$fixture_root/app-store-key.json" \
+  IOS_BUNDLE_ID="com.actionfit.fixture" \
+  TESTFLIGHT_BUILD_VERSION="5.5.5" \
+  TESTFLIGHT_BUILD_NUMBER="1" \
+    /usr/bin/ruby "$testflight_checker" 2>&1
+)"
+unsafe_pagination_status=$?
 set -e
-if [ "$active_upload_status" -ne 3 ] || ! printf '%s\n' "$active_upload_output" | grep -F 'active upload for build 5.5.5(1)' >/dev/null; then
-  echo "Active TestFlight upload collision must fail clearly" >&2
+if [ "$unsafe_pagination_status" -ne 1 ] || ! printf '%s\n' "$unsafe_pagination_output" | grep -F 'unsafe next page link' >/dev/null; then
+  echo "Unsafe App Store Connect pagination must fail closed" >&2
   exit 1
 fi
+if grep -F 'example.invalid' "$fixture_root/asc-unsafe-pagination-curl.log" >/dev/null; then
+  echo "App Store Connect credentials must not be sent to an unsafe pagination origin" >&2
+  exit 1
+fi
+
+: > "$testflight_github_output"
+set +e
+non_integer_output="$(
+  PATH="$fixture_root/bin:$PATH" \
+  FAKE_CURL_LOG="$fixture_root/asc-non-integer-curl.log" \
+  FAKE_CURL_CONFIG_LOG="$fixture_root/asc-non-integer-config.log" \
+  FAKE_ASC_MODE=non_integer \
+  GITHUB_OUTPUT="$testflight_github_output" \
+  APP_STORE_CONNECT_API_KEY_JSON_PATH="$fixture_root/app-store-key.json" \
+  IOS_BUNDLE_ID="com.actionfit.fixture" \
+  TESTFLIGHT_BUILD_VERSION="5.5.5" \
+  TESTFLIGHT_BUILD_NUMBER="1" \
+    /usr/bin/ruby "$testflight_checker" 2>&1
+)"
+non_integer_status=$?
+set -e
+if [ "$non_integer_status" -ne 1 ] || ! printf '%s\n' "$non_integer_output" | grep -F 'non-integer build number' >/dev/null; then
+  echo "Non-integer TestFlight build numbers must fail closed" >&2
+  exit 1
+fi
+if [ -s "$testflight_github_output" ]; then
+  echo "Failed TestFlight build-number resolution must not emit an output" >&2
+  exit 1
+fi
+
+apply_number_script="$fixture_root/apply-development-testflight-number.sh"
+/usr/bin/ruby -ryaml -e '
+  action = YAML.load_file(ARGV.fetch(0))
+  step = action.fetch("runs").fetch("steps").find do |candidate|
+    candidate["name"] == "Apply Development TestFlight build number"
+  end
+  abort("apply Development TestFlight build-number step missing") unless step
+  STDOUT.write(step.fetch("run"))
+' "$ios_action" > "$apply_number_script"
+chmod +x "$apply_number_script"
+
+request_repository="$fixture_root/request-repository"
+working_request="$request_repository/.build/ci/build_request_ios.json"
+original_request="$request_repository/.build/build_request.json"
+mkdir -p "$(dirname "$working_request")"
+printf '{"developmentBuild":true,"bundleNo":"1","sentinel":"working"}\n' > "$working_request"
+printf '{"developmentBuild":true,"bundleNo":"555","sentinel":"original"}\n' > "$original_request"
+REPOSITORY_ROOT="$request_repository" \
+BUILD_REQUEST_PATH="$working_request" \
+REQUESTED_BUILD_NUMBER="1" \
+RESOLVED_BUILD_NUMBER="3" \
+  bash "$apply_number_script" >/dev/null
+/usr/bin/ruby -rjson -e '
+  working = JSON.parse(File.read(ARGV.fetch(0)))
+  original = JSON.parse(File.read(ARGV.fetch(1)))
+  abort("resolved number was not applied to the iOS working request") unless working["bundleNo"] == "3"
+  abort("working request fields were not preserved") unless working["sentinel"] == "working"
+  abort("original BuildRequest was modified") unless original["bundleNo"] == "555" && original["sentinel"] == "original"
+' "$working_request" "$original_request"
 
 set +e
 api_error_output="$(

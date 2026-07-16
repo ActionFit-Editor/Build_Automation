@@ -21,15 +21,11 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: '- Retains Development APK Artifacts for one day, persists verified
-    Slack delivery receipts to prevent duplicate rerun posts, and deletes delivered
-    Artifacts idempotently.
+  _releaseNote: '- Resolves Development iOS TestFlight build numbers from 1 by selecting
+    one greater than the highest completed build or active upload for the marketing
+    version.
 
-    - Keeps Unity build results independent while making
-    required APK delivery failures visible in the separate Slack workflow.
-
-    -
-    Uses exact Store upload outcomes and fresh staged binaries to avoid duplicate
-    or stale recovery artifacts while bounding retention.'
+    - Applies the resolved number only to the iOS working request before
+    Unity builds, with bounded same-origin pagination and fail-closed API validation.'
   _dependenciesOverride: com.actionfit.githubauth@1.0.6, com.actionfit.buildsetting@1.1.11,
     com.actionfit.customsymbols@1.0.6

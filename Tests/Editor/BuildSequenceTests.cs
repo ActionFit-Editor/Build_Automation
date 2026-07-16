@@ -78,7 +78,7 @@ namespace ActionFit.BuildAutomation.Editor.Tests
         }
 
         [Test]
-        public void DevelopmentIosWorkingRequestUsesFixedTestFlightBuildNumber()
+        public void DevelopmentIosWorkingRequestStartsTestFlightBuildNumberAtOne()
         {
             var request = new BuildRequest
             {

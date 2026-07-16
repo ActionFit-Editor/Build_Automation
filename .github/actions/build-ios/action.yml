@@ -46,6 +46,9 @@ outputs:
   store-binary-path:
     description: Fresh IPA exported by this build phase.
     value: ${{ steps.ipa.outputs.path }}
+  effective-bundle-no:
+    description: Bundle number applied to the generated iOS app.
+    value: ${{ steps.testflight_build_number.outputs.build_number || inputs.bundle-no }}
 
 runs:
   using: composite
@@ -121,6 +124,129 @@ runs:
           "$DISTRIBUTION_PROFILE" \
           iOS \
           "$platform_upload_target"
+
+    - name: Prepare App Store Connect API key
+      id: asc_key
+      if: inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight'
+      shell: bash
+      env:
+        IOS_BUNDLE_ID_FROM_REQUEST: ${{ inputs.ios-bundle-id }}
+      run: |
+        set -euo pipefail
+        ruby <<'RUBY'
+        require "json"
+
+        api_key_id = ENV.fetch("APP_STORE_CONNECT_API_KEY_ID", "").strip
+        issuer_id = ENV.fetch("APP_STORE_CONNECT_ISSUER_ID", "").strip
+        p8_path = ENV.fetch("APP_STORE_CONNECT_API_KEY_P8_PATH", "").strip
+        bundle_id = ENV.fetch("IOS_BUNDLE_ID_FROM_REQUEST", "").strip
+        team_id = ENV.fetch("IOS_DEVELOPMENT_TEAM_ID", "").strip
+
+        missing = []
+        missing << "APP_STORE_CONNECT_API_KEY_ID" if api_key_id.empty?
+        missing << "APP_STORE_CONNECT_ISSUER_ID" if issuer_id.empty?
+        missing << "APP_STORE_CONNECT_API_KEY_P8_PATH" if p8_path.empty?
+        missing << "IOS_BUNDLE_ID" if bundle_id.empty?
+        missing << "IOS_DEVELOPMENT_TEAM_ID" if team_id.empty?
+        unless missing.empty?
+          puts "::error::Missing iOS/TestFlight local runner configuration: #{missing.join(", ")}"
+          exit 1
+        end
+
+        unless File.readable?(p8_path)
+          puts "::error::App Store Connect .p8 is not readable: #{p8_path}"
+          exit 1
+        end
+
+        api_key_json_path = File.join(ENV.fetch("RUNNER_TEMP"), "app_store_connect_api_key.json")
+        File.write(
+          api_key_json_path,
+          JSON.pretty_generate(
+            {
+              key_id: api_key_id,
+              issuer_id: issuer_id,
+              key: File.read(p8_path),
+              duration: 1200,
+              in_house: false
+            }
+          )
+        )
+        File.chmod(0600, api_key_json_path)
+
+        File.open(ENV.fetch("GITHUB_ENV"), "a") do |env|
+          env.puts("APP_STORE_CONNECT_API_KEY_ID=#{api_key_id}")
+          env.puts("APP_STORE_CONNECT_ISSUER_ID=#{issuer_id}")
+          env.puts("IOS_BUNDLE_ID=#{bundle_id}")
+          env.puts("IOS_DEVELOPMENT_TEAM_ID=#{team_id}")
+        end
+
+        File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |output|
+          output.puts("p8_path=#{p8_path}")
+          output.puts("api_key_json_path=#{api_key_json_path}")
+        end
+        RUBY
+
+    - name: Resolve Development TestFlight build number
+      id: testflight_build_number
+      if: inputs.development-build == 'true' && (inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
+      shell: bash
+      env:
+        APP_STORE_CONNECT_API_KEY_JSON_PATH: ${{ steps.asc_key.outputs.api_key_json_path }}
+        IOS_BUNDLE_ID: ${{ inputs.ios-bundle-id }}
+        TESTFLIGHT_BUILD_VERSION: ${{ inputs.build-version }}
+        TESTFLIGHT_BUILD_NUMBER: ${{ inputs.bundle-no }}
+      run: /usr/bin/ruby "$REPOSITORY_ROOT/.github/scripts/check-testflight-build-number.rb"
+
+    - name: Apply Development TestFlight build number
+      if: inputs.development-build == 'true' && (inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
+      shell: bash
+      env:
+        BUILD_REQUEST_PATH: ${{ inputs.request-path }}
+        REQUESTED_BUILD_NUMBER: ${{ inputs.bundle-no }}
+        RESOLVED_BUILD_NUMBER: ${{ steps.testflight_build_number.outputs.build_number }}
+      run: |
+        set -euo pipefail
+        /usr/bin/ruby <<'RUBY'
+        require "json"
+        require "securerandom"
+
+        repository_root = File.realpath(ENV.fetch("REPOSITORY_ROOT"))
+        request_path = File.realpath(ENV.fetch("BUILD_REQUEST_PATH"))
+        expected_path = File.join(repository_root, ".build", "ci", "build_request_ios.json")
+        abort("Refusing to update an unexpected iOS working BuildRequest: #{request_path}") unless request_path == expected_path
+
+        requested = ENV.fetch("REQUESTED_BUILD_NUMBER", "").strip
+        resolved = ENV.fetch("RESOLVED_BUILD_NUMBER", "").strip
+        abort("Requested Development TestFlight build number must be a positive integer") unless requested.match?(/\A[1-9][0-9]*\z/)
+        abort("Resolved Development TestFlight build number must be a positive integer") unless resolved.match?(/\A[1-9][0-9]*\z/)
+
+        request = JSON.parse(File.read(request_path))
+        abort("iOS working BuildRequest must contain an object") unless request.is_a?(Hash)
+        abort("iOS working BuildRequest is not a Development Build") unless request["developmentBuild"] == true
+        unless request["bundleNo"].to_s == requested
+          abort("iOS working BuildRequest bundle number changed before resolution")
+        end
+
+        request["bundleNo"] = resolved
+        temporary_path = File.join(
+          File.dirname(request_path),
+          ".#{File.basename(request_path)}.#{Process.pid}.#{SecureRandom.hex(6)}.tmp"
+        )
+        begin
+          File.open(temporary_path, "w", 0600) do |file|
+            file.write(JSON.pretty_generate(request))
+            file.write("\n")
+            file.flush
+            file.fsync
+          end
+          File.chmod(File.stat(request_path).mode & 0777, temporary_path)
+          File.rename(temporary_path, request_path)
+        ensure
+          File.delete(temporary_path) if File.exist?(temporary_path)
+        end
+
+        puts("Applied Development TestFlight build number #{resolved} to #{request_path}")
+        RUBY
 
     - name: Prepare iOS target and build symbols
       if: inputs.prepare-target == 'true'
@@ -233,67 +359,6 @@ runs:
           exit 1
         }
 
-    - name: Prepare App Store Connect API key
-      id: asc_key
-      if: inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight'
-      shell: bash
-      env:
-        IOS_BUNDLE_ID_FROM_REQUEST: ${{ inputs.ios-bundle-id }}
-      run: |
-        set -euo pipefail
-        ruby <<'RUBY'
-        require "json"
-
-        api_key_id = ENV.fetch("APP_STORE_CONNECT_API_KEY_ID", "").strip
-        issuer_id = ENV.fetch("APP_STORE_CONNECT_ISSUER_ID", "").strip
-        p8_path = ENV.fetch("APP_STORE_CONNECT_API_KEY_P8_PATH", "").strip
-        bundle_id = ENV.fetch("IOS_BUNDLE_ID_FROM_REQUEST", "").strip
-        team_id = ENV.fetch("IOS_DEVELOPMENT_TEAM_ID", "").strip
-
-        missing = []
-        missing << "APP_STORE_CONNECT_API_KEY_ID" if api_key_id.empty?
-        missing << "APP_STORE_CONNECT_ISSUER_ID" if issuer_id.empty?
-        missing << "APP_STORE_CONNECT_API_KEY_P8_PATH" if p8_path.empty?
-        missing << "IOS_BUNDLE_ID" if bundle_id.empty?
-        missing << "IOS_DEVELOPMENT_TEAM_ID" if team_id.empty?
-        unless missing.empty?
-          puts "::error::Missing iOS/TestFlight local runner configuration: #{missing.join(", ")}"
-          exit 1
-        end
-
-        unless File.readable?(p8_path)
-          puts "::error::App Store Connect .p8 is not readable: #{p8_path}"
-          exit 1
-        end
-
-        api_key_json_path = File.join(ENV.fetch("RUNNER_TEMP"), "app_store_connect_api_key.json")
-        File.write(
-          api_key_json_path,
-          JSON.pretty_generate(
-            {
-              key_id: api_key_id,
-              issuer_id: issuer_id,
-              key: File.read(p8_path),
-              duration: 1200,
-              in_house: false
-            }
-          )
-        )
-        File.chmod(0600, api_key_json_path)
-
-        File.open(ENV.fetch("GITHUB_ENV"), "a") do |env|
-          env.puts("APP_STORE_CONNECT_API_KEY_ID=#{api_key_id}")
-          env.puts("APP_STORE_CONNECT_ISSUER_ID=#{issuer_id}")
-          env.puts("IOS_BUNDLE_ID=#{bundle_id}")
-          env.puts("IOS_DEVELOPMENT_TEAM_ID=#{team_id}")
-        end
-
-        File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |output|
-          output.puts("p8_path=#{p8_path}")
-          output.puts("api_key_json_path=#{api_key_json_path}")
-        end
-        RUBY
-
     - name: Resolve fastlane
       if: inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight'
       shell: bash
@@ -313,16 +378,6 @@ runs:
 
         "$fastlane_cmd" --version
         echo "FASTLANE_CMD=$fastlane_cmd" >> "$GITHUB_ENV"
-
-    - name: Check fixed Development TestFlight build number
-      if: inputs.development-build == 'true' && (inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
-      shell: bash
-      env:
-        APP_STORE_CONNECT_API_KEY_JSON_PATH: ${{ steps.asc_key.outputs.api_key_json_path }}
-        IOS_BUNDLE_ID: ${{ inputs.ios-bundle-id }}
-        TESTFLIGHT_BUILD_VERSION: ${{ inputs.build-version }}
-        TESTFLIGHT_BUILD_NUMBER: ${{ inputs.bundle-no }}
-      run: /usr/bin/ruby "$REPOSITORY_ROOT/.github/scripts/check-testflight-build-number.rb"
 
     - name: Prepare iOS signing assets
       if: inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight'
@@ -682,7 +737,7 @@ runs:
       env:
         BUILD_CLEANUP_PROJECT_NAME: ${{ inputs.project-name }}
         BUILD_CLEANUP_BUILD_VERSION: ${{ inputs.build-version }}
-        BUILD_CLEANUP_BUNDLE_NO: ${{ inputs.bundle-no }}
+        BUILD_CLEANUP_BUNDLE_NO: ${{ steps.testflight_build_number.outputs.build_number || inputs.bundle-no }}
       run: |
         if [ ! -f "$REPOSITORY_ROOT/.github/scripts/cleanup-old-build-artifacts.sh" ]; then
           echo "::warning::Build cleanup script not found; skipping."
