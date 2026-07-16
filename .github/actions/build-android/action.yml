@@ -47,6 +47,15 @@ outputs:
   store-upload-deferred:
     description: Whether the Google Play upload was delegated to the background worker.
     value: ${{ steps.upload_mode.outputs.deferred }}
+  store-binary-path:
+    description: Fresh AAB staged by this build phase.
+    value: ${{ steps.aab.outputs.path }}
+  store-debug-symbols-path:
+    description: Fresh Android native debug symbols staged by this build phase.
+    value: ${{ steps.aab.outputs.debug_symbols_path }}
+  store-mapping-path:
+    description: Fresh Android mapping file staged by this build phase.
+    value: ${{ steps.aab.outputs.mapping_path }}
 
 runs:
   using: composite
@@ -172,14 +181,28 @@ runs:
 
     - name: Locate AAB for upload
       id: aab
-      if: inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight'
+      if: inputs.development-build != 'true'
       shell: bash
+      env:
+        REQUEST_UPLOAD_TARGET: ${{ inputs.upload-target }}
       run: |
         set -euo pipefail
-        aab_path="$(find "$UNITY_BUILD_DIR" -name '*.aab' -newer "${{ steps.build_timer.outputs.marker_path }}" -print -quit)"
+        marker_path="${{ steps.build_timer.outputs.marker_path }}"
+        aab_path="$(find "$UNITY_BUILD_DIR" -name '*.aab' -newer "$marker_path" -print -quit)"
         if [ -z "$aab_path" ]; then
-          echo "::error::No .aab found under $UNITY_BUILD_DIR. Google Play upload requires an AAB build."
-          exit 1
+          case "$REQUEST_UPLOAD_TARGET" in
+            GooglePlayInternal|GooglePlayInternalAndTestFlight)
+              echo "::error::No fresh .aab found under $UNITY_BUILD_DIR. Google Play upload requires an AAB build."
+              exit 1
+              ;;
+            *)
+              echo "path=" >> "$GITHUB_OUTPUT"
+              echo "debug_symbols_path=" >> "$GITHUB_OUTPUT"
+              echo "mapping_path=" >> "$GITHUB_OUTPUT"
+              echo "::warning::No fresh Android AAB was produced for recovery artifact staging."
+              exit 0
+              ;;
+          esac
         fi
         upload_dir="$ANDROID_UPLOAD_DIR"
         upload_path="$upload_dir/upload.aab"
@@ -188,9 +211,9 @@ runs:
         echo "path=$upload_path" >> "$GITHUB_OUTPUT"
 
         aab_dir="$(dirname "$aab_path")"
-        debug_symbols_path="$(find "$aab_dir" -maxdepth 1 -type f \( -iname '*symbols*.zip' -o -iname '*symbol*.zip' \) -print -quit)"
+        debug_symbols_path="$(find "$aab_dir" -maxdepth 1 -type f -newer "$marker_path" \( -iname '*symbols*.zip' -o -iname '*symbol*.zip' \) -print -quit)"
         if [ -z "$debug_symbols_path" ]; then
-          debug_symbols_path="$(find "$UNITY_LIBRARY_DIR/Bee/Android/Prj/IL2CPP/Gradle/launcher/build/outputs/native-debug-symbols" -name '*.zip' -print -quit 2>/dev/null || true)"
+          debug_symbols_path="$(find "$UNITY_LIBRARY_DIR/Bee/Android/Prj/IL2CPP/Gradle/launcher/build/outputs/native-debug-symbols" -name '*.zip' -newer "$marker_path" -print -quit 2>/dev/null || true)"
         fi
 
         if [ -n "$debug_symbols_path" ]; then
@@ -202,7 +225,7 @@ runs:
           echo "::warning::No Android debug symbols zip found."
         fi
 
-        mapping_path="$(find "$aab_dir" -maxdepth 1 -type f \( -name '*mapping.txt' -o -name 'mapping.txt' \) -print -quit)"
+        mapping_path="$(find "$aab_dir" -maxdepth 1 -type f -newer "$marker_path" \( -name '*mapping.txt' -o -name 'mapping.txt' \) -print -quit)"
         if [ -n "$mapping_path" ]; then
           mapping_upload_path="$upload_dir/mapping.txt"
           cp "$mapping_path" "$mapping_upload_path"
@@ -245,6 +268,7 @@ runs:
         echo "service_account_json_path=$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH" >> "$GITHUB_OUTPUT"
 
     - name: Upload to Google Play internal track
+      id: google_play_upload
       if: steps.upload_mode.outputs.deferred != 'true' && (inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
       uses: r0adkll/upload-google-play@v1
       with:
@@ -272,20 +296,25 @@ runs:
           /bin/bash "$REPOSITORY_ROOT/.github/scripts/upload-google-play.sh"
 
     - name: Upload Android AAB artifact
-      if: always() && inputs.development-build != 'true' && steps.upload_mode.outputs.deferred != 'true'
-      continue-on-error: true
+      if: >-
+        always() &&
+        inputs.development-build != 'true' &&
+        steps.upload_mode.outputs.deferred != 'true' &&
+        steps.aab.outputs.path != '' &&
+        (
+          (inputs.upload-target != 'GooglePlayInternal' && inputs.upload-target != 'GooglePlayInternalAndTestFlight') ||
+          steps.google_play_upload.outcome != 'success'
+        )
       uses: actions/upload-artifact@v4
       with:
         name: Android-BuildCommit-AAB
         path: |
-          ${{ env.ANDROID_UPLOAD_DIR }}/*.aab
-          ${{ env.ANDROID_UPLOAD_DIR }}/*.zip
-          ${{ env.ANDROID_UPLOAD_DIR }}/mapping.txt
-          ${{ env.UNITY_BUILD_DIR }}/**/*.aab
-          ${{ env.UNITY_BUILD_DIR }}/**/*.zip
-          ${{ env.UNITY_BUILD_DIR }}/**/*mapping.txt
-        if-no-files-found: warn
+          ${{ steps.aab.outputs.path }}
+          ${{ steps.aab.outputs.debug_symbols_path }}
+          ${{ steps.aab.outputs.mapping_path }}
+        if-no-files-found: error
         compression-level: 0
+        retention-days: 3
 
     - name: Upload Development APK artifact
       if: always() && inputs.development-build == 'true' && steps.apk.outputs.path != ''
@@ -296,6 +325,7 @@ runs:
         path: ${{ steps.apk.outputs.path }}
         if-no-files-found: error
         compression-level: 0
+        retention-days: 1
 
     - name: Cleanup old Android build artifacts
       if: success() && steps.upload_mode.outputs.deferred != 'true' && (inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
@@ -314,10 +344,11 @@ runs:
         bash "$REPOSITORY_ROOT/.github/scripts/cleanup-old-build-artifacts.sh"
 
     - name: Upload Android logs
-      if: always() && steps.upload_mode.outputs.deferred != 'true'
+      if: failure() && steps.upload_mode.outputs.deferred != 'true'
       continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         name: Android-BuildCommit-Logs
         path: ${{ env.UNITY_LOG_DIR }}/**
         if-no-files-found: warn
+        retention-days: 7

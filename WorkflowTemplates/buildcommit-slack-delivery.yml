@@ -26,6 +26,8 @@ jobs:
     permissions:
       actions: read
       contents: read
+    outputs:
+      apk_delivered: ${{ steps.complete.outputs.apk_delivered }}
     runs-on:
       group: slack-delivery
       labels: slack-delivery
@@ -119,6 +121,7 @@ jobs:
         run: /Users/lydia/workspace/slack-delivery/bin/deliver-buildcommit-slack start
 
       - name: Download Development APK from source run
+        id: download
         if: >-
           always() &&
           github.event.action == 'completed' &&
@@ -126,9 +129,9 @@ jobs:
           steps.inspect.outcome == 'success' &&
           steps.inspect.outputs.request_state == 'build' &&
           steps.inspect.outputs.should_build == 'true' &&
-          steps.inspect.outputs.development_android == 'true'
-        continue-on-error: true
-        uses: actions/download-artifact@v4
+          steps.inspect.outputs.development_android == 'true' &&
+          steps.inspect.outputs.apk_already_delivered != 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: Android-BuildCommit-Development-APK-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
           path: ${{ env.SLACK_APK_ROOT }}
@@ -137,13 +140,13 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
 
       - name: Deliver build completion notification
+        id: complete
         if: >-
           always() &&
           github.event.action == 'completed' &&
           steps.inspect.outcome == 'success' &&
           steps.inspect.outputs.request_state == 'build' &&
           steps.inspect.outputs.should_build == 'true'
-        continue-on-error: true
         shell: bash
         env:
           SOURCE_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
@@ -164,3 +167,116 @@ jobs:
               exit 1
               ;;
           esac
+
+      - name: Assert required Slack delivery outcome
+        if: always() && github.event.action == 'completed'
+        shell: bash
+        env:
+          FETCH_REQUEST_OUTCOME: ${{ steps.fetch_request.outcome }}
+          INSPECT_OUTCOME: ${{ steps.inspect.outcome }}
+          SHOULD_BUILD: ${{ steps.inspect.outputs.should_build }}
+          DEVELOPMENT_ANDROID: ${{ steps.inspect.outputs.development_android }}
+          APK_ALREADY_DELIVERED: ${{ steps.inspect.outputs.apk_already_delivered }}
+          SOURCE_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
+          COMPLETE_OUTCOME: ${{ steps.complete.outcome }}
+          APK_DELIVERED: ${{ steps.complete.outputs.apk_delivered }}
+        run: |
+          set -euo pipefail
+          failures=()
+
+          if [ "$FETCH_REQUEST_OUTCOME" != success ]; then
+            failures+=("BuildCommit request metadata fetch failed")
+          fi
+          if [ "$INSPECT_OUTCOME" != success ]; then
+            failures+=("BuildCommit request metadata inspection failed")
+          fi
+
+          if [ "$SHOULD_BUILD" = true ]; then
+            if [ "$COMPLETE_OUTCOME" != success ]; then
+              failures+=("Slack completion delivery failed")
+            fi
+
+            if [ "$SOURCE_CONCLUSION" = success ] && [ "$DEVELOPMENT_ANDROID" = true ]; then
+              if [ "$APK_ALREADY_DELIVERED" != true ] && [ "$DOWNLOAD_OUTCOME" != success ]; then
+                failures+=("Development APK Artifact download failed")
+              fi
+              if [ "$APK_DELIVERED" != true ]; then
+                failures+=("Development APK was not attached to Slack")
+              fi
+            fi
+          fi
+
+          if [ "${#failures[@]}" -gt 0 ]; then
+            printf '::error::%s\n' "${failures[@]}"
+            exit 1
+          fi
+
+          echo "Required Slack delivery checks passed."
+
+  cleanup:
+    name: Delete delivered Development APK artifact
+    needs: deliver
+    if: always() && needs.deliver.result == 'success' && needs.deliver.outputs.apk_delivered == 'true'
+    permissions:
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SOURCE_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+      SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+      SOURCE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+      ARTIFACT_NAME: Android-BuildCommit-Development-APK-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+    steps:
+      - name: Delete delivered Development APK artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: Android-BuildCommit-Development-APK-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          artifact_id="$(
+            gh api \
+              --method GET \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              -f "name=$ARTIFACT_NAME" \
+              -f per_page=100 \
+              "repos/${SOURCE_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" |
+              ARTIFACT_NAME="$ARTIFACT_NAME" SOURCE_RUN_ID="$SOURCE_RUN_ID" ruby -rjson -e '
+                payload = JSON.parse(STDIN.read)
+                artifacts = payload.fetch("artifacts")
+                expected_name = ENV.fetch("ARTIFACT_NAME")
+                expected_run_id = Integer(ENV.fetch("SOURCE_RUN_ID"), 10)
+                matches = artifacts.select { |artifact| artifact["name"] == expected_name }
+                if matches.empty?
+                  puts "missing"
+                  exit
+                end
+                abort("expected at most one delivered APK Artifact, found #{matches.length}") unless matches.length == 1
+
+                artifact = matches.first
+                if artifact["expired"]
+                  puts "expired"
+                  exit
+                end
+                workflow_run = artifact.fetch("workflow_run")
+                abort("delivered APK Artifact belongs to another workflow run") unless workflow_run.fetch("id") == expected_run_id
+                artifact_id = artifact.fetch("id")
+                abort("delivered APK Artifact ID is invalid") unless artifact_id.is_a?(Integer) && artifact_id.positive?
+                puts artifact_id
+              '
+          )"
+
+          if [ "$artifact_id" = missing ] || [ "$artifact_id" = expired ]; then
+            echo "Delivered Development APK Artifact no longer requires deletion: state=${artifact_id}, name=${ARTIFACT_NAME}"
+            exit 0
+          fi
+
+          gh api \
+            --method DELETE \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${SOURCE_REPOSITORY}/actions/artifacts/${artifact_id}"
+          echo "Deleted delivered Development APK Artifact: id=${artifact_id}, name=${ARTIFACT_NAME}"

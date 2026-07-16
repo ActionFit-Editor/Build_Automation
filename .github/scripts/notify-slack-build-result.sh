@@ -113,6 +113,10 @@ case "$status_normalized" in
     status_label="FAILED"
     status_symbol="FAIL"
     ;;
+  apk_delivery_failure)
+    status_label="BUILD SUCCESS / APK DELIVERY FAILED"
+    status_symbol="WARNING"
+    ;;
   cancelled)
     status_label="CANCELLED"
     status_symbol="CANCELLED"

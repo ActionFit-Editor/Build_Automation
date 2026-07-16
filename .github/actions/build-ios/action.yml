@@ -43,6 +43,9 @@ outputs:
   store-upload-deferred:
     description: Whether the TestFlight upload was delegated to the background worker.
     value: ${{ steps.upload_mode.outputs.deferred }}
+  store-binary-path:
+    description: Fresh IPA exported by this build phase.
+    value: ${{ steps.ipa.outputs.path }}
 
 runs:
   using: composite
@@ -586,6 +589,7 @@ runs:
         echo "path=$ipa_path" >> "$GITHUB_OUTPUT"
 
     - name: Upload to TestFlight
+      id: testflight_upload
       if: steps.upload_mode.outputs.deferred != 'true' && (inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
       shell: bash
       env:
@@ -655,18 +659,21 @@ runs:
         fi
 
     - name: Upload iOS app artifact
-      if: success() && steps.upload_mode.outputs.deferred != 'true'
-      continue-on-error: true
+      if: >-
+        always() &&
+        steps.upload_mode.outputs.deferred != 'true' &&
+        steps.ipa.outputs.path != '' &&
+        (
+          (inputs.upload-target != 'TestFlight' && inputs.upload-target != 'GooglePlayInternalAndTestFlight') ||
+          steps.testflight_upload.outcome != 'success'
+        )
       uses: actions/upload-artifact@v4
       with:
         name: iOS-BuildCommit-App
-        path: |
-          ${{ env.IOS_EXPORT_PATH }}/**/*.ipa
-          ${{ env.IOS_EXPORT_PATH }}/*.plist
-          ${{ env.UNITY_LOG_DIR }}/**
-          ${{ env.IOS_EXPORT_OPTIONS_PATH }}
-        if-no-files-found: warn
-        retention-days: 7
+        path: ${{ steps.ipa.outputs.path }}
+        if-no-files-found: error
+        compression-level: 0
+        retention-days: 3
 
     - name: Cleanup old iOS build artifacts
       if: success() && steps.upload_mode.outputs.deferred != 'true' && (inputs.upload-target == 'TestFlight' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')
@@ -692,6 +699,5 @@ runs:
         path: |
           ${{ env.UNITY_LOG_DIR }}/**
           ${{ env.IOS_EXPORT_OPTIONS_PATH }}
-          ${{ env.IOS_EXPORT_PATH }}/**
         if-no-files-found: warn
         retention-days: 7

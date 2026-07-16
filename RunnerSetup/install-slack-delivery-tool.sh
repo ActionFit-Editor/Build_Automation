@@ -6,10 +6,11 @@ package_root="$(cd "$script_dir/.." && pwd -P)"
 install_root="${SLACK_DELIVERY_ROOT:-/Users/lydia/workspace/slack-delivery}"
 bin_dir="$install_root/bin"
 secret_dir="$install_root/secrets/shared"
+receipt_dir="$install_root/receipts"
 
 umask 077
-mkdir -p "$bin_dir" "$secret_dir"
-chmod 700 "$install_root" "$bin_dir" "$install_root/secrets" "$secret_dir"
+mkdir -p "$bin_dir" "$secret_dir" "$receipt_dir"
+chmod 700 "$install_root" "$bin_dir" "$install_root/secrets" "$secret_dir" "$receipt_dir"
 
 install_executable() {
   local source_path="$1"
@@ -52,12 +53,15 @@ create_secret_placeholder "$secret_dir/slack-channel-id" \
 
 find "$install_root/secrets" -type d -exec chmod 700 {} \;
 find "$install_root/secrets" -type f -exec chmod 600 {} \;
+find "$receipt_dir" -type d -exec chmod 700 {} \;
+find "$receipt_dir" -type f -exec chmod 600 {} \;
 
 cat <<EOF
 
 Slack delivery runner files are ready:
   tools:   $bin_dir
   secrets: $secret_dir
+  receipts: $receipt_dir
 
 Fill the first non-comment line of each secret file, then run a trusted Slack delivery workflow on this runner.
 EOF

@@ -227,6 +227,19 @@ jobs:
           end
           RUBY
 
+      - name: Reset current BuildCommit logs
+        if: steps.detect.outputs.should_build == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_log_dir="$UNITY_PROJECT_DIR/Logs"
+          if [ "$UNITY_LOG_DIR" != "$expected_log_dir" ]; then
+            echo "::error::Refusing to reset an unexpected Unity log path: $UNITY_LOG_DIR"
+            exit 1
+          fi
+          rm -rf "$UNITY_LOG_DIR"
+          mkdir -p "$UNITY_LOG_DIR"
+
       - name: Prepare private package access
         if: steps.detect.outputs.should_build == 'true'
         shell: bash
@@ -416,46 +429,43 @@ jobs:
           /usr/bin/ruby "$REPOSITORY_ROOT/.github/scripts/store-upload-worker.rb" cancel ios
 
       - name: Upload deferred Android AAB artifact
-        if: always() && steps.android_first.outputs.store-upload-deferred == 'true'
-        continue-on-error: true
+        if: always() && steps.android_first.outputs.store-upload-deferred == 'true' && steps.android_first.outputs.store-binary-path != '' && steps.first_store_upload.outcome != 'success'
         uses: actions/upload-artifact@v4
         with:
           name: Android-BuildCommit-AAB
           path: |
-            ${{ env.ANDROID_UPLOAD_DIR }}/*.aab
-            ${{ env.ANDROID_UPLOAD_DIR }}/*.zip
-            ${{ env.ANDROID_UPLOAD_DIR }}/mapping.txt
-            ${{ env.UNITY_BUILD_DIR }}/**/*.aab
-            ${{ env.UNITY_BUILD_DIR }}/**/*.zip
-            ${{ env.UNITY_BUILD_DIR }}/**/*mapping.txt
-          if-no-files-found: warn
+            ${{ steps.android_first.outputs.store-binary-path }}
+            ${{ steps.android_first.outputs.store-debug-symbols-path }}
+            ${{ steps.android_first.outputs.store-mapping-path }}
+          if-no-files-found: error
           compression-level: 0
+          retention-days: 3
 
       - name: Upload deferred Android logs
-        if: always() && steps.android_first.outputs.store-upload-deferred == 'true'
+        if: always() && steps.android_first.outputs.store-upload-deferred == 'true' && steps.first_store_upload.outcome != 'success'
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: Android-BuildCommit-Logs
           path: ${{ env.UNITY_LOG_DIR }}/**
           if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload deferred iOS app artifact
-        if: always() && steps.ios_first.outputs.store-upload-deferred == 'true'
-        continue-on-error: true
+        if: always() && steps.ios_first.outputs.store-upload-deferred == 'true' && steps.ios_first.outputs.store-binary-path != '' && steps.first_store_upload.outcome != 'success'
         uses: actions/upload-artifact@v4
         with:
           name: iOS-BuildCommit-App
-          path: |
-            ${{ env.IOS_EXPORT_PATH }}/**/*.ipa
-            ${{ env.IOS_EXPORT_PATH }}/*.plist
-            ${{ env.UNITY_LOG_DIR }}/**
-            ${{ env.IOS_EXPORT_OPTIONS_PATH }}
-          if-no-files-found: warn
-          retention-days: 7
+          path: ${{ steps.ios_first.outputs.store-binary-path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
 
       - name: Upload deferred store upload diagnostics
-        if: always() && (steps.android_first.outputs.store-upload-deferred == 'true' || steps.ios_first.outputs.store-upload-deferred == 'true')
+        if: >-
+          always() &&
+          steps.first_store_upload.outcome != 'success' &&
+          (steps.android_first.outputs.store-upload-deferred == 'true' || steps.ios_first.outputs.store-upload-deferred == 'true')
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:

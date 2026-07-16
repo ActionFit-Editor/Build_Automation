@@ -8,6 +8,7 @@ bot_token="${SLACK_BUILD_BOT_TOKEN:-}"
 channel_id="${SLACK_BUILD_CHANNEL_ID:-}"
 file_path="${SLACK_FILE_PATH:-${1:-}}"
 api_base_url="${SLACK_API_BASE_URL:-https://slack.com/api}"
+upload_phase_path="${SLACK_UPLOAD_PHASE_PATH:-}"
 
 read_first_value() {
   local path="$1"
@@ -23,6 +24,19 @@ read_first_value() {
     -e 'p' \
     -e 'q' \
     "$path"
+}
+
+write_upload_phase() {
+  local phase="$1"
+  if [ -z "$upload_phase_path" ]; then
+    return 0
+  fi
+  if [ -L "$upload_phase_path" ]; then
+    echo "::warning::Slack upload phase path must not be a symbolic link."
+    return 2
+  fi
+  printf '%s\n' "$phase" > "$upload_phase_path"
+  chmod 600 "$upload_phase_path"
 }
 
 if [ -z "$bot_token" ]; then
@@ -44,6 +58,7 @@ if [ -z "$file_path" ] || [ ! -r "$file_path" ]; then
   echo "::warning::Development APK is not readable; use the GitHub Artifact fallback."
   exit 2
 fi
+write_upload_phase preflight-complete
 
 echo "::add-mask::$bot_token"
 file_name="$(basename "$file_path")"
@@ -76,6 +91,11 @@ upload_values="$(
 }
 upload_url="$(printf '%s\n' "$upload_values" | sed -n '1p')"
 file_id="$(printf '%s\n' "$upload_values" | sed -n '2p')"
+if [[ ! "$file_id" =~ ^F[A-Z0-9]+$ ]]; then
+  echo "::warning::Slack upload URL response contained an invalid file ID."
+  exit 2
+fi
+write_upload_phase upload-url-allocated
 echo "::add-mask::$upload_url"
 
 if ! curl --fail --silent --show-error \
@@ -84,6 +104,7 @@ if ! curl --fail --silent --show-error \
   echo "::warning::Slack file transfer failed; use the GitHub Artifact fallback."
   exit 2
 fi
+write_upload_phase file-transferred
 
 initial_comment="$(
   BUILD_PROJECT_NAME="${BUILD_PROJECT_NAME:-UnknownProject}" \
@@ -127,6 +148,7 @@ complete_payload="$(
     })
   '
 )"
+write_upload_phase completion-attempted
 complete_response="$(
   curl --fail --silent --show-error \
     -X POST \
@@ -143,5 +165,9 @@ if ! COMPLETE_RESPONSE="$complete_response" ruby -rjson -e 'response = JSON.pars
   echo "::warning::Slack rejected the file attachment; use the GitHub Artifact fallback."
   exit 2
 fi
+write_upload_phase completed
 
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  printf 'slack_file_id=%s\n' "$file_id" >> "$GITHUB_OUTPUT"
+fi
 echo "Development APK attached to Slack: $file_name"

@@ -16,7 +16,7 @@ BuildCommit Auto Build
 
 Unity runners never read Slack credentials and never post directly to Slack. `BuildCommit Slack Delivery` listens to exact `BuildCommit Auto Build` `in_progress` and `completed` events. It runs only for same-repository `push` or `workflow_dispatch` sources and requests both the `slack-delivery` runner group and `slack-delivery` label.
 
-The delivery workflow does not use `actions/checkout` and does not execute source repository scripts. It fetches only `.build/build_request.json` from `workflow_run.head_sha` through `gh api`, validates that metadata with the fixed host-local delivery executable, and uses read-only `contents` and `actions` permissions. On successful Development Android completion it downloads only the uniquely named APK Artifact from that exact source run and attempt.
+The delivery workflow does not use `actions/checkout` and does not execute source repository scripts. It fetches only `.build/build_request.json` from `workflow_run.head_sha` through `gh api`, validates that metadata with the fixed host-local delivery executable, and uses read-only `contents` and `actions` permissions on the Slack runner. The only third-party code on this credential-bearing runner is the official Artifact downloader pinned to a reviewed full commit SHA. On successful Development Android completion it downloads only the uniquely named APK Artifact from that exact source run and attempt. After Slack confirms the file post, a separate GitHub-hosted cleanup job receives only `actions: write` and deletes that exact Artifact.
 
 ## Host Layout
 
@@ -33,9 +33,11 @@ The default installation root is fixed for the workflow template. Executables li
       slack-webhook-url
       slack-bot-token
       slack-channel-id
+  receipts/
+    <source-identity-sha256>.json
 ```
 
-Directories use mode `700`, secret files use mode `600`, and installed tools use mode `700`. Do not put these three Slack files under `/Users/lydia/workspace/build-automation`; that location belongs to Unity mobile build credentials.
+Directories use mode `700`, secret and receipt files use mode `600`, and installed tools use mode `700`. Receipt names are SHA-256 keys derived from the validated repository, source run ID, and run attempt; their JSON binds that identity, source SHA, state, Slack file ID, and timestamps. `pending` is written before upload and atomically becomes `delivered` after Slack completion. Do not edit receipts during normal operation. Do not put the three Slack secret files under `/Users/lydia/workspace/build-automation`; that location belongs to Unity mobile build credentials.
 
 ## Install Host Tools
 
@@ -63,6 +65,7 @@ Reapply permissions after editing:
 find "/Users/lydia/workspace/slack-delivery/secrets" -type d -exec chmod 700 {} \;
 find "/Users/lydia/workspace/slack-delivery/secrets" -type f -exec chmod 600 {} \;
 test -x "/Users/lydia/workspace/slack-delivery/bin/deliver-buildcommit-slack"
+test "$(stat -f '%Lp' /Users/lydia/workspace/slack-delivery/receipts)" = 700
 ```
 
 ## Configure GitHub Runner Access
@@ -91,17 +94,17 @@ Synchronize both package workflow templates into every trusted repository:
 GitHub validates selected-workflow entries when the runner group is updated and rejects an entry if that workflow file does not exist in the referenced repository and branch. Therefore use this order:
 
 1. Keep group `slack-delivery` restricted to selected trusted repositories while rolling out.
-2. Merge `.github/workflows/buildcommit-slack-delivery.yml` into each selected repository's `main` branch.
+2. Merge `.github/workflows/buildcommit-slack-delivery.yml` into each selected repository's default branch.
 3. Set `restricted_to_workflows=true` and add one exact allowlist entry per repository:
 
 ```text
-<org>/<repo>/.github/workflows/buildcommit-slack-delivery.yml@refs/heads/main
+<org>/<repo>/.github/workflows/buildcommit-slack-delivery.yml@refs/heads/<default-branch>
 ```
 
 For example, the Cat Merge Cafe entry is:
 
 ```text
-ActionFitGames/Cat_Merge_Cafe/.github/workflows/buildcommit-slack-delivery.yml@refs/heads/main
+ActionFitGames/Cat_Merge_Cafe/.github/workflows/buildcommit-slack-delivery.yml@refs/heads/dev
 ```
 
 The organization runner-group API can apply the final restriction after all listed files exist. Replace the sample list with every trusted repository and no others:
@@ -119,7 +122,7 @@ gh api --method PATCH "orgs/$ORG/actions/runner-groups/$GROUP_ID" --input - <<'J
   "allows_public_repositories": false,
   "restricted_to_workflows": true,
   "selected_workflows": [
-    "ActionFitGames/Cat_Merge_Cafe/.github/workflows/buildcommit-slack-delivery.yml@refs/heads/main"
+    "ActionFitGames/Cat_Merge_Cafe/.github/workflows/buildcommit-slack-delivery.yml@refs/heads/dev"
   ]
 }
 JSON
@@ -138,12 +141,15 @@ For an `in_progress` event:
 For a `completed` event:
 
 1. The same metadata inspection runs again against the exact source `head_sha`.
-2. A successful Development Android request downloads `Android-BuildCommit-Development-APK-<run-id>-<run-attempt>` from that source run only.
+2. When no valid receipt exists, a successful Development Android request downloads `Android-BuildCommit-Development-APK-<run-id>-<run-attempt>` from that source run only.
 3. The host tool sends the success text and APK together as one Slack file post. Its initial comment includes the Development Build `[OK] ... BuildCommit SUCCESS` summary, so no separate success webhook is sent after a successful file post.
-4. Other success, failure, and cancellation results use the webhook path.
-5. Temporary metadata and Artifact files are removed with an `always()` cleanup step.
+4. Before upload, the host tool atomically creates a `pending` receipt. It validates Slack's file ID, atomically commits that receipt as `delivered`, and only then emits `apk_delivered=true`.
+5. A rerun reuses a valid delivered receipt, skips APK download and Slack upload, and proceeds directly to cleanup. A pending, malformed, mismatched, symlinked, or overly permissive receipt fails closed instead of risking a duplicate post.
+6. A separate GitHub-hosted cleanup job resolves the exact source run/attempt Artifact ID and deletes it with `actions: write`; an already absent Artifact is treated as success.
+7. Other success, failure, and cancellation results use the webhook path.
+8. Temporary metadata and downloaded files are removed with an `always()` cleanup step.
 
-Notification, credential, Artifact download, and Slack API failures are advisory. They can produce warnings in `BuildCommit Slack Delivery`, but they never change the source Unity build conclusion. A Development APK remains in GitHub Artifacts when Slack delivery is unavailable.
+Start notification failures remain advisory. A required successful Development Android completion fails the separate `BuildCommit Slack Delivery` workflow when the Artifact is missing, APK validation fails, Slack rejects the upload, or the durable receipt cannot be validated. The source Unity build conclusion is never changed. The fallback message explicitly says `BUILD SUCCESS / APK DELIVERY FAILED`, and the one-day Artifact remains available for a delivery rerun when it was created successfully. Receipts are local durable state, so keep this runner registration on one Mac; before adding another Slack delivery host, move receipts to a shared strongly consistent store.
 
 ## Security Boundary
 
@@ -165,4 +171,5 @@ Regardless of host placement:
 - **No delivery workflow run appears:** confirm `buildcommit-slack-delivery.yml` is on the default branch and the source workflow name is exactly `BuildCommit Auto Build`.
 - **Start/result webhook is missing:** check `secrets/shared/slack-webhook-url` on the delivery host. Do not move it to a repository Secret or Unity runner bundle.
 - **Development APK is not attached:** confirm the source run succeeded, the request is Development Android, and the unique source-run Artifact exists. Then verify Bot `files:write`, `slack-channel-id`, and Bot channel membership.
-- **Delivery shows warnings while the build is green:** this is the intended advisory failure boundary. Recover Slack delivery separately; do not rebuild solely to change the source build conclusion.
+- **Source build is green but Slack Delivery is red:** the build itself succeeded, but required APK delivery or post-delivery Artifact cleanup failed. Rerun the Slack Delivery workflow. A valid receipt makes the rerun skip duplicate Slack upload, and cleanup is safe when the Artifact is already absent. Rebuild only when no receipt exists and the source Artifact was never created or has expired.
+- **A pending receipt blocks rerun:** use the receipt path printed in the failed delivery log and inspect the shared Slack channel first. If no APK post exists, remove only that pending file and rerun. If the APK post exists or the result is uncertain, keep the pending tombstone to prevent duplicates and delete the exact GitHub Artifact manually; the next source run attempt uses a different receipt key.

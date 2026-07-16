@@ -54,6 +54,10 @@ abort("TestFlight attempt timeout is missing") unless workflow_environment.fetch
 abort("TestFlight retry delay is missing") unless workflow_environment.fetch("TESTFLIGHT_UPLOAD_RETRY_DELAY_SECONDS") == 10
 
 steps = mobile_build.fetch("steps")
+log_reset = steps.find { |step| step["name"] == "Reset current BuildCommit logs" }
+abort("current-run log reset is missing") unless log_reset
+abort("log reset must run only for an approved build") unless log_reset.fetch("if") == "steps.detect.outputs.should_build == 'true'"
+abort("log reset must reject an unexpected path") unless log_reset.fetch("run").include?("Refusing to reset an unexpected Unity log path")
 checkout = steps.find { |step| step["uses"] == "actions/checkout@v4" }
 abort("checkout clean:false is required") unless checkout && checkout.fetch("with").fetch("clean") == false
 
@@ -118,6 +122,33 @@ abort("Android deferred upload cancellation is missing") unless cancel_upload.fe
 abort("iOS deferred upload cancellation is missing") unless cancel_upload.fetch("run").include?("cancel ios")
 abort("Store upload cancellation must follow finalization") unless step_index.call("store_upload_cleanup") > step_index.call("first_store_upload")
 
+deferred_aab = steps.find { |step| step["name"] == "Upload deferred Android AAB artifact" }
+abort("deferred Android recovery Artifact is missing") unless deferred_aab
+abort("successful deferred Android uploads must not retain a duplicate AAB") unless deferred_aab.fetch("if").include?("steps.first_store_upload.outcome != 'success'")
+abort("deferred Android recovery must require a staged binary") unless deferred_aab.fetch("if").include?("steps.android_first.outputs.store-binary-path != ''")
+abort("deferred Android recovery upload failure must be visible") if deferred_aab["continue-on-error"] == true
+abort("deferred Android recovery must fail when its staged binary is missing") unless deferred_aab.dig("with", "if-no-files-found") == "error"
+abort("deferred Android recovery Artifact must expire after three days") unless deferred_aab.dig("with", "retention-days") == 3
+deferred_aab_paths = deferred_aab.dig("with", "path")
+abort("deferred Android recovery must use only fresh composite outputs") unless deferred_aab_paths.include?("steps.android_first.outputs.store-binary-path")
+abort("deferred Android recovery must not scan the affinity build directory") if deferred_aab_paths.include?("UNITY_BUILD_DIR")
+deferred_android_logs = steps.find { |step| step["name"] == "Upload deferred Android logs" }
+abort("deferred Android failure logs are missing") unless deferred_android_logs
+abort("successful deferred Android uploads must not retain logs") unless deferred_android_logs.fetch("if").include?("steps.first_store_upload.outcome != 'success'")
+abort("deferred Android logs must expire after seven days") unless deferred_android_logs.dig("with", "retention-days") == 7
+deferred_ios = steps.find { |step| step["name"] == "Upload deferred iOS app artifact" }
+abort("deferred iOS recovery Artifact is missing") unless deferred_ios
+abort("successful deferred iOS uploads must not retain a duplicate IPA") unless deferred_ios.fetch("if").include?("steps.first_store_upload.outcome != 'success'")
+abort("deferred iOS recovery must require a staged binary") unless deferred_ios.fetch("if").include?("steps.ios_first.outputs.store-binary-path != ''")
+abort("deferred iOS recovery upload failure must be visible") if deferred_ios["continue-on-error"] == true
+abort("deferred iOS recovery must fail when its staged binary is missing") unless deferred_ios.dig("with", "if-no-files-found") == "error"
+abort("deferred iOS recovery Artifact must expire after three days") unless deferred_ios.dig("with", "retention-days") == 3
+abort("deferred iOS recovery must use the fresh composite output") unless deferred_ios.dig("with", "path") == "${{ steps.ios_first.outputs.store-binary-path }}"
+deferred_diagnostics = steps.find { |step| step["name"] == "Upload deferred store upload diagnostics" }
+abort("deferred Store diagnostics are missing") unless deferred_diagnostics
+abort("successful deferred Store uploads must not retain diagnostics") unless deferred_diagnostics.fetch("if").include?("steps.first_store_upload.outcome != 'success'")
+abort("deferred Store diagnostics must expire after seven days") unless deferred_diagnostics.dig("with", "retention-days") == 7
+
 failure_step = steps.find { |step| step["name"] == "Fail when a requested platform failed" }
 abort("final build failure aggregation is missing") unless failure_step
 abort("deferred Store upload failure is not aggregated") unless failure_step.dig("env", "FIRST_STORE_UPLOAD_OUTCOME") == "${{ steps.first_store_upload.outcome }}"
@@ -148,6 +179,7 @@ end
   abort("#{platform} Development Build input is missing") unless action.dig("inputs", "development-build", "default") == "false"
   expected_output = "${{ steps.upload_mode.outputs.deferred }}"
   abort("#{platform} deferred output is missing") unless action.dig("outputs", "store-upload-deferred", "value") == expected_output
+  abort("#{platform} fresh Store binary output is missing") unless action.dig("outputs", "store-binary-path", "value")
   upload_mode = action.dig("runs", "steps").find { |step| step["id"] == "upload_mode" }
   abort("#{platform} upload mode resolver is missing") unless upload_mode
   abort("#{platform} upload mode must validate the defer input") unless upload_mode.fetch("run").include?("defer-store-upload must be true or false")
@@ -157,6 +189,7 @@ end
 android_steps = android_action.dig("runs", "steps")
 android_sync_upload = android_steps.find { |step| step["uses"] == "r0adkll/upload-google-play@v1" }
 abort("synchronous Google Play upload is missing") unless android_sync_upload
+abort("synchronous Google Play upload must expose its exact outcome") unless android_sync_upload.fetch("id") == "google_play_upload"
 abort("synchronous Google Play upload must be disabled in deferred mode") unless android_sync_upload.fetch("if").include?("steps.upload_mode.outputs.deferred != 'true'")
 android_deferred_upload = android_steps.find { |step| step["name"] == "Start Google Play upload in background" }
 abort("deferred Google Play upload is missing") unless android_deferred_upload
@@ -170,10 +203,31 @@ development_artifact = android_steps.find { |step| step["name"] == "Upload Devel
 abort("Development APK GitHub Artifact fallback is missing") unless development_artifact
 expected_apk_artifact_name = "Android-BuildCommit-Development-APK-${{ github.run_id }}-${{ github.run_attempt }}"
 abort("Development APK artifact must be unique to the workflow run attempt") unless development_artifact.dig("with", "name") == expected_apk_artifact_name
+abort("Development APK artifact must expire after one day") unless development_artifact.dig("with", "retention-days") == 1
+abort("Development APK artifact quota failures must not change the source build result") unless development_artifact.fetch("continue-on-error") == true
+aab_locator = android_steps.find { |step| step["id"] == "aab" }
+abort("fresh AAB staging is missing") unless aab_locator
+abort("non-Development AAB staging must support non-Store recovery") unless aab_locator.fetch("if") == "inputs.development-build != 'true'"
+abort("AAB staging must use the current build marker") unless aab_locator.fetch("run").include?("steps.build_timer.outputs.marker_path")
+android_aab_artifact = android_steps.find { |step| step["name"] == "Upload Android AAB artifact" }
+abort("Android recovery AAB Artifact is missing") unless android_aab_artifact
+abort("successful Google Play uploads must not retain a duplicate AAB") unless android_aab_artifact.fetch("if").include?("steps.google_play_upload.outcome != 'success'")
+abort("Android recovery must require the fresh staged AAB") unless android_aab_artifact.fetch("if").include?("steps.aab.outputs.path != ''")
+android_aab_paths = android_aab_artifact.dig("with", "path")
+abort("Android recovery must use the fresh AAB output") unless android_aab_paths.include?("steps.aab.outputs.path")
+abort("Android recovery must not scan the affinity build directory") if android_aab_paths.include?("UNITY_BUILD_DIR")
+abort("Android recovery upload failure must be visible") if android_aab_artifact["continue-on-error"] == true
+abort("Android recovery must fail when its staged binary is missing") unless android_aab_artifact.dig("with", "if-no-files-found") == "error"
+abort("Android recovery AAB Artifact must expire after three days") unless android_aab_artifact.dig("with", "retention-days") == 3
+android_logs = android_steps.find { |step| step["name"] == "Upload Android logs" }
+abort("Android failure logs are missing") unless android_logs
+abort("Android logs must be failure-only") unless android_logs.fetch("if").include?("failure()")
+abort("Android logs must expire after seven days") unless android_logs.dig("with", "retention-days") == 7
 
 ios_steps = ios_action.dig("runs", "steps")
 ios_sync_upload = ios_steps.find { |step| step["name"] == "Upload to TestFlight" }
 abort("synchronous TestFlight upload is missing") unless ios_sync_upload
+abort("synchronous TestFlight upload must expose its exact outcome") unless ios_sync_upload.fetch("id") == "testflight_upload"
 abort("synchronous TestFlight upload must be disabled in deferred mode") unless ios_sync_upload.fetch("if").include?("steps.upload_mode.outputs.deferred != 'true'")
 abort("synchronous TestFlight upload must use the bounded retry wrapper") unless ios_sync_upload.fetch("run").include?("upload-testflight.rb")
 ios_deferred_upload = ios_steps.find { |step| step["name"] == "Start TestFlight upload in background" }
@@ -184,6 +238,20 @@ abort("deferred TestFlight retry wrapper is missing") unless ios_deferred_upload
 testflight_collision = ios_steps.find { |step| step["name"] == "Check fixed Development TestFlight build number" }
 abort("Development TestFlight collision check is missing") unless testflight_collision
 abort("TestFlight collision check must use the package-owned checker") unless testflight_collision.fetch("run").include?("check-testflight-build-number.rb")
+ios_app_artifact = ios_steps.find { |step| step["name"] == "Upload iOS app artifact" }
+abort("iOS recovery app Artifact is missing") unless ios_app_artifact
+abort("successful TestFlight uploads must not retain a duplicate IPA") unless ios_app_artifact.fetch("if").include?("steps.testflight_upload.outcome != 'success'")
+abort("iOS recovery must require the fresh exported IPA") unless ios_app_artifact.fetch("if").include?("steps.ipa.outputs.path != ''")
+abort("iOS recovery must use only the fresh IPA output") unless ios_app_artifact.dig("with", "path") == "${{ steps.ipa.outputs.path }}"
+abort("iOS recovery upload failure must be visible") if ios_app_artifact["continue-on-error"] == true
+abort("iOS recovery must fail when its staged binary is missing") unless ios_app_artifact.dig("with", "if-no-files-found") == "error"
+abort("iOS recovery app Artifact must expire after three days") unless ios_app_artifact.dig("with", "retention-days") == 3
+abort("iOS recovery app Artifact must not duplicate diagnostic logs") if ios_app_artifact.dig("with", "path").include?("UNITY_LOG_DIR")
+ios_diagnostics = ios_steps.find { |step| step["name"] == "Upload iOS diagnostic artifact" }
+abort("iOS failure diagnostics are missing") unless ios_diagnostics
+abort("iOS diagnostics must be failure-only") unless ios_diagnostics.fetch("if") == "failure()"
+abort("iOS diagnostics must expire after seven days") unless ios_diagnostics.dig("with", "retention-days") == 7
+abort("iOS diagnostics must not duplicate the IPA") if ios_diagnostics.dig("with", "path").include?("IOS_EXPORT_PATH")
 RUBY
 
 if grep -Fq 'File.write(path, JSON.pretty_generate(request))' "$workflow"; then

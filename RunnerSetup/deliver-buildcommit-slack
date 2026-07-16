@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 delivery_root="${SLACK_DELIVERY_ROOT:-$(cd "$script_dir/.." && pwd -P)}"
+receipt_root="$delivery_root/receipts"
 notify_script="${SLACK_NOTIFY_SCRIPT:-$script_dir/notify-slack-build-result.sh}"
 upload_script="${SLACK_UPLOAD_SCRIPT:-$script_dir/upload-slack-file.sh}"
 request_path="${BUILD_REQUEST_PATH:-}"
@@ -44,6 +45,7 @@ source_event = ENV.fetch("SOURCE_EVENT", "")
 started_at = ENV.fetch("SOURCE_RUN_STARTED_AT", "")
 
 abort("SOURCE_REPOSITORY is invalid") unless repository.match?(%r{\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\z})
+abort("SOURCE_REPOSITORY contains an invalid path component") if repository.split("/").any? { |component| [".", ".."].include?(component) }
 abort("SOURCE_SHA is invalid") unless sha.match?(/\A[0-9a-fA-F]{40}\z/)
 abort("SOURCE_RUN_ID is invalid") unless run_id.match?(/\A[1-9][0-9]*\z/)
 abort("SOURCE_RUN_ATTEMPT is invalid") unless run_attempt.match?(/\A[1-9][0-9]*\z/)
@@ -196,6 +198,234 @@ source_started_at_epoch() {
   SOURCE_RUN_STARTED_AT="${SOURCE_RUN_STARTED_AT:-}" ruby -rtime -e 'print(Time.iso8601(ENV.fetch("SOURCE_RUN_STARTED_AT")).to_i)'
 }
 
+validate_receipt_root() {
+  RECEIPT_ROOT="$receipt_root" ruby <<'RUBY'
+root = File.expand_path(ENV.fetch("RECEIPT_ROOT"))
+abort("Slack delivery receipt directory is missing: #{root}") unless File.exist?(root)
+abort("Slack delivery receipt directory must not be a symbolic link: #{root}") if File.symlink?(root)
+abort("Slack delivery receipt path is not a directory: #{root}") unless File.directory?(root)
+stat = File.stat(root)
+abort("Slack delivery receipt directory owner does not match the runner user") unless stat.uid == Process.uid
+abort("Slack delivery receipt directory mode must be 0700") unless (stat.mode & 0o777) == 0o700
+RUBY
+}
+
+manage_delivery_receipt() {
+  local operation="$1"
+  local slack_file_id="${2:-}"
+
+  RECEIPT_OPERATION="$operation" \
+  RECEIPT_ROOT="$receipt_root" \
+  SOURCE_REPOSITORY="$SOURCE_REPOSITORY" \
+  SOURCE_RUN_ID="$SOURCE_RUN_ID" \
+  SOURCE_RUN_ATTEMPT="$SOURCE_RUN_ATTEMPT" \
+  SOURCE_SHA="$SOURCE_SHA" \
+  SLACK_FILE_ID="$slack_file_id" \
+  ruby -rdigest -rjson -rsecurerandom -rtime <<'RUBY'
+operation = ENV.fetch("RECEIPT_OPERATION")
+root = File.expand_path(ENV.fetch("RECEIPT_ROOT"))
+repository = ENV.fetch("SOURCE_REPOSITORY")
+run_id = ENV.fetch("SOURCE_RUN_ID")
+run_attempt = ENV.fetch("SOURCE_RUN_ATTEMPT")
+source_sha = ENV.fetch("SOURCE_SHA")
+file_id = ENV.fetch("SLACK_FILE_ID", "")
+identity = ["v1", repository, run_id, run_attempt].join("\0")
+receipt_key = Digest::SHA256.hexdigest(identity)
+path = File.join(root, "#{receipt_key}.json")
+
+invalid = lambda do |message|
+  warn("Slack delivery receipt is invalid: #{message}")
+  exit(2)
+end
+
+invalid.call("receipt directory is missing") unless File.exist?(root)
+invalid.call("receipt directory must not be a symbolic link") if File.symlink?(root)
+invalid.call("receipt path is not a directory") unless File.directory?(root)
+root_stat = File.stat(root)
+invalid.call("receipt directory owner does not match the runner user") unless root_stat.uid == Process.uid
+invalid.call("receipt directory mode must be 0700") unless (root_stat.mode & 0o777) == 0o700
+
+sync_directory = lambda do
+  begin
+    File.open(root) { |directory| directory.fsync }
+  rescue Errno::EINVAL, Errno::EISDIR
+    # Directory fsync is not supported on every host filesystem.
+  end
+end
+
+read_payload = lambda do
+  invalid.call("receipt path is not a private regular file") if File.symlink?(path) || !File.file?(path)
+  stat = File.stat(path)
+  invalid.call("receipt owner does not match the runner user") unless stat.uid == Process.uid
+  invalid.call("receipt mode must be 0600") unless (stat.mode & 0o777) == 0o600
+  invalid.call("receipt exceeds 16 KiB") if stat.size > 16 * 1024
+
+  begin
+    payload = JSON.parse(File.binread(path))
+  rescue JSON::ParserError, SystemCallError => error
+    invalid.call("cannot be read safely (#{error.class})")
+  end
+
+  expected_keys = %w[
+    schema_version state source_repository source_run_id source_run_attempt source_sha
+    slack_file_id created_at updated_at
+  ]
+  invalid.call("unexpected schema fields") unless payload.is_a?(Hash) && payload.keys.sort == expected_keys.sort
+  invalid.call("unsupported schema version") unless payload["schema_version"] == 1
+  invalid.call("receipt state is invalid") unless ["pending", "delivered"].include?(payload["state"])
+  invalid.call("source repository mismatch") unless payload["source_repository"] == repository
+  invalid.call("source run mismatch") unless payload["source_run_id"] == run_id
+  invalid.call("source run attempt mismatch") unless payload["source_run_attempt"] == run_attempt
+  invalid.call("source SHA mismatch") unless payload["source_sha"] == source_sha
+  begin
+    Time.iso8601(payload.fetch("created_at"))
+    Time.iso8601(payload.fetch("updated_at"))
+  rescue KeyError, ArgumentError, TypeError
+    invalid.call("receipt timestamp is invalid")
+  end
+
+  receipt_file_id = payload["slack_file_id"]
+  if payload["state"] == "pending"
+    invalid.call("pending receipt must not contain a Slack file ID") unless receipt_file_id == ""
+  else
+    invalid.call("Slack file ID is invalid") unless receipt_file_id.is_a?(String) && receipt_file_id.match?(/\AF[A-Z0-9]+\z/)
+  end
+  payload
+end
+
+write_payload = lambda do |payload, replace|
+  temporary_path = File.join(root, ".#{receipt_key}.#{Process.pid}.#{SecureRandom.hex(8)}.tmp")
+  begin
+    File.open(temporary_path, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
+      file.write(JSON.generate(payload))
+      file.flush
+      file.fsync
+    end
+    if replace
+      File.rename(temporary_path, path)
+    else
+      File.link(temporary_path, path)
+    end
+    File.chmod(0o600, path)
+    sync_directory.call
+  ensure
+    File.delete(temporary_path) if File.exist?(temporary_path)
+  end
+end
+
+begin
+  case operation
+  when "lookup"
+    exit(3) unless File.exist?(path) || File.symlink?(path)
+    payload = read_payload.call
+    if payload["state"] == "pending"
+      warn("Slack delivery receipt is pending and requires reconciliation: #{path}")
+      exit(4)
+    end
+    puts payload.fetch("slack_file_id")
+  when "begin"
+    invalid.call("receipt already exists") if File.exist?(path) || File.symlink?(path)
+    timestamp = Time.now.utc.iso8601
+    write_payload.call({
+      "schema_version" => 1,
+      "state" => "pending",
+      "source_repository" => repository,
+      "source_run_id" => run_id,
+      "source_run_attempt" => run_attempt,
+      "source_sha" => source_sha,
+      "slack_file_id" => "",
+      "created_at" => timestamp,
+      "updated_at" => timestamp
+    }, false)
+  when "complete"
+    invalid.call("Slack file ID is invalid") unless file_id.match?(/\AF[A-Z0-9]+\z/)
+    invalid.call("pending receipt is missing") unless File.exist?(path) || File.symlink?(path)
+    payload = read_payload.call
+    invalid.call("only a pending receipt can be completed") unless payload["state"] == "pending"
+    payload["state"] = "delivered"
+    payload["slack_file_id"] = file_id
+    payload["updated_at"] = Time.now.utc.iso8601
+    write_payload.call(payload, true)
+  when "discard"
+    invalid.call("pending receipt is missing") unless File.exist?(path) || File.symlink?(path)
+    payload = read_payload.call
+    invalid.call("only a pending receipt can be discarded") unless payload["state"] == "pending"
+    File.delete(path)
+    sync_directory.call
+  else
+    invalid.call("unsupported receipt operation")
+  end
+rescue SystemExit
+  raise
+rescue StandardError => error
+  invalid.call("operation failed safely (#{error.class})")
+end
+RUBY
+}
+
+lookup_delivery_receipt() {
+  local receipt_file_id status
+
+  receipt_file_id=""
+  status=0
+  receipt_file_id="$(manage_delivery_receipt lookup)" || status=$?
+  case "$status" in
+    0)
+      DELIVERY_RECEIPT_FILE_ID="$receipt_file_id"
+      return 0
+      ;;
+    3)
+      DELIVERY_RECEIPT_FILE_ID=""
+      return 1
+      ;;
+    4)
+      DELIVERY_RECEIPT_FILE_ID=""
+      return 4
+      ;;
+    *)
+      DELIVERY_RECEIPT_FILE_ID=""
+      return "$status"
+      ;;
+  esac
+}
+
+begin_delivery_receipt() {
+  manage_delivery_receipt begin
+}
+
+complete_delivery_receipt() {
+  manage_delivery_receipt complete "$1"
+}
+
+discard_pending_delivery_receipt() {
+  manage_delivery_receipt discard
+}
+
+handle_failed_delivery_attempt() {
+  local phase_path="$1"
+  local phase=""
+
+  if [ -r "$phase_path" ]; then
+    phase="$(sed -n '1p' "$phase_path")"
+  fi
+
+  case "$phase" in
+    ''|preflight-complete|upload-url-allocated|file-transferred)
+      if discard_pending_delivery_receipt; then
+        echo "Discarded a retry-safe pending Slack delivery receipt after phase: ${phase:-not-started}"
+      else
+        warning "Pending Slack delivery receipt could not be discarded; automatic retry remains blocked."
+      fi
+      ;;
+    completion-attempted|completed)
+      warning "Slack completion may have succeeded; preserving the pending receipt to block a duplicate upload."
+      ;;
+    *)
+      warning "Slack upload phase is invalid; preserving the pending receipt to fail closed."
+      ;;
+  esac
+}
+
 export_notification_context() {
   local metadata_path="$1"
 
@@ -253,15 +483,35 @@ RUBY
 
 inspect_request() {
   local metadata_path="$1"
-  local state reason development_android
+  local state reason development_android receipt_status
 
   state="$(metadata_value "$metadata_path" request_state)"
   reason="$(metadata_value "$metadata_path" reason)"
   development_android="$(metadata_value "$metadata_path" development_android)"
   write_output request_state "$state"
+  write_output apk_already_delivered false
   if [ "$state" = "build" ]; then
     write_output should_build true
     write_output development_android "$development_android"
+    if [ "$development_android" = "true" ]; then
+      receipt_status=0
+      lookup_delivery_receipt || receipt_status=$?
+      case "$receipt_status" in
+        0)
+          write_output apk_already_delivered true
+          write_output slack_file_id "$DELIVERY_RECEIPT_FILE_ID"
+          ;;
+        1) ;;
+        4)
+          warning "A pending Slack delivery attempt requires operator reconciliation; refusing a possible duplicate upload."
+          return 4
+          ;;
+        *)
+          warning "Existing Slack delivery receipt could not be validated; refusing a possible duplicate upload."
+          return "$receipt_status"
+          ;;
+      esac
+    fi
     echo "Approved BuildCommit request for Slack delivery."
   else
     write_output should_build false
@@ -286,7 +536,7 @@ run_start() {
 
 run_complete() {
   local metadata_path="$1"
-  local conclusion notification_status development_android apk_path
+  local conclusion notification_status development_android apk_path slack_file_id receipt_status upload_output upload_phase_path
 
   conclusion="${SOURCE_CONCLUSION:-}"
   case "$conclusion" in
@@ -301,18 +551,73 @@ run_complete() {
 
   export_notification_context "$metadata_path"
   development_android="$(metadata_value "$metadata_path" development_android)"
+  write_output apk_delivered false
 
   if [ "$notification_status" = "success" ] && [ "$development_android" = "true" ]; then
+    receipt_status=0
+    lookup_delivery_receipt || receipt_status=$?
+      case "$receipt_status" in
+      0)
+        write_output slack_file_id "$DELIVERY_RECEIPT_FILE_ID"
+        write_output apk_delivered true
+        echo "Development APK was already delivered to Slack; reusing the persisted receipt."
+        return 0
+        ;;
+      1) ;;
+      4)
+        warning "A pending Slack delivery attempt requires operator reconciliation; refusing a possible duplicate upload."
+        return 4
+        ;;
+      *)
+        warning "Existing Slack delivery receipt could not be validated; refusing a possible duplicate upload."
+        return "$receipt_status"
+        ;;
+    esac
+
     apk_path=""
     if apk_path="$(find_single_apk 2>/dev/null)"; then
-      if [ -x "$upload_script" ] && SLACK_FILE_PATH="$apk_path" "$upload_script"; then
+      if ! begin_delivery_receipt; then
+        warning "Slack delivery intent could not be persisted; refusing to upload without duplicate protection."
+        notify_advisory apk_delivery_failure
+        return 2
+      fi
+      upload_output="$tmp_dir/upload-output"
+      upload_phase_path="$tmp_dir/upload-phase"
+      : > "$upload_output"
+      : > "$upload_phase_path"
+      chmod 600 "$upload_output" "$upload_phase_path"
+      if [ -x "$upload_script" ] && GITHUB_OUTPUT="$upload_output" SLACK_UPLOAD_PHASE_PATH="$upload_phase_path" SLACK_FILE_PATH="$apk_path" "$upload_script"; then
+        slack_file_id=""
+        if ! slack_file_id="$(ruby -e '
+          receipts = File.readlines(ARGV.fetch(0), chomp: true).each_with_object([]) do |line, values|
+            values << line.delete_prefix("slack_file_id=") if line.start_with?("slack_file_id=")
+          end
+          abort("expected exactly one Slack file receipt") unless receipts.length == 1
+          abort("Slack file receipt is invalid") unless receipts.first.match?(/\AF[A-Z0-9]+\z/)
+          puts receipts.first
+        ' "$upload_output")"; then
+          handle_failed_delivery_attempt "$upload_phase_path"
+          warning "Slack APK upload did not produce a valid file receipt."
+          notify_advisory apk_delivery_failure
+          return 2
+        fi
+        if ! complete_delivery_receipt "$slack_file_id"; then
+          warning "Slack accepted the APK, but its pending receipt could not be committed as delivered. Automatic retry remains blocked."
+          return 2
+        fi
+        write_output slack_file_id "$slack_file_id"
+        write_output apk_delivered true
         echo "Development BuildCommit success was delivered as one Slack APK post."
         return 0
       fi
-      warning "Development APK delivery failed; sending the webhook success fallback."
+      handle_failed_delivery_attempt "$upload_phase_path"
+      warning "Development APK delivery failed; sending an explicit delivery failure notification."
     else
-      warning "Development APK artifact validation failed; sending the webhook success fallback."
+      warning "Development APK artifact validation failed; sending an explicit delivery failure notification."
     fi
+
+    notify_advisory apk_delivery_failure
+    return 2
   fi
 
   notify_advisory "$notification_status"
@@ -340,8 +645,19 @@ if ! validate_source_context >/dev/null 2>"$tmp_dir/source-error"; then
   write_output request_state invalid
   write_output should_build false
   write_output development_android false
+  write_output apk_already_delivered false
   warning "${source_error:-Source workflow_run metadata is invalid}"
   exit 0
+fi
+
+if ! validate_receipt_root >/dev/null 2>"$tmp_dir/receipt-root-error"; then
+  receipt_root_error="$(sed -n '1p' "$tmp_dir/receipt-root-error")"
+  write_output request_state invalid
+  write_output should_build false
+  write_output development_android false
+  write_output apk_already_delivered false
+  warning "${receipt_root_error:-Slack delivery receipt directory is invalid}"
+  exit 2
 fi
 
 parse_request "$metadata_path"
