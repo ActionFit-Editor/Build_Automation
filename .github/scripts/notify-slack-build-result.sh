@@ -5,6 +5,7 @@ secret_root="${CI_SECRET_ROOT:-$HOME/ci-secrets/build-automation}"
 webhook_file="${SLACK_WEBHOOK_URL_FILE:-$secret_root/shared/slack-webhook-url}"
 webhook_url="${SLACK_BUILD_WEBHOOK_URL:-${SLACK_WEBHOOK_URL:-}}"
 mentions="${SLACK_BUILD_MENTIONS:-${SLACK_MENTIONS:-}}"
+api_timeout_seconds="${SLACK_API_TIMEOUT_SECONDS:-60}"
 
 read_first_value() {
   local path="$1"
@@ -24,6 +25,11 @@ read_first_value() {
 
 if [ -z "$webhook_url" ]; then
   webhook_url="$(read_first_value "$webhook_file")"
+fi
+
+if ! [[ "$api_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+  echo "::warning::Slack notification timeout must be a positive integer; skipping build notification."
+  exit 0
 fi
 
 if [ -z "$webhook_url" ]; then
@@ -188,6 +194,8 @@ RUBY
 )"
 
 if ! curl --fail --silent --show-error \
+  --connect-timeout 15 \
+  --max-time "$api_timeout_seconds" \
   -X POST \
   -H "Content-type: application/json" \
   --data "$payload" \

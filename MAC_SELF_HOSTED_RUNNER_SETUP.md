@@ -145,13 +145,25 @@ App Store Connect API key는 TestFlight upload에 사용됩니다. signing/expor
 
 ## 6. 로컬 시크릿 번들 준비
 
-self-hosted Unity runner는 Android BuildRequest의 keystore Base64와 signing 비밀번호를 우선 사용하고, 누락된 Android 값 및 Google Play/iOS/App Store Connect credential은 Mac 로컬 파일에서 읽습니다. 기본 workflow template은 기존 ActionFit runner bundle을 사용하도록 `CI_SECRET_ROOT=/Users/lydia/workspace/build-automation`을 명시합니다. Setup/validation script를 workflow 밖에서 직접 실행해 이 환경변수가 없으면 `$HOME/ci-secrets/build-automation`을 사용합니다. BuildCommit request에는 runner 로컬 경로를 넣지 않습니다. Slack credential은 이 번들에 두지 않고 전용 `slack-delivery` runner가 별도 경로에서 관리합니다.
+self-hosted Unity runner는 Android BuildRequest의 keystore Base64와 signing 비밀번호를 우선 사용하고, 누락된 Android 값 및 Google Play/iOS/App Store Connect/Slack credential은 공유 runner bundle에서 읽습니다. Mac Studio runner는 `/Users/lydia/workspace/build-automation`, MacBook runner는 Mac Studio SMB 공유의 고정 mountpoint를 `CI_SECRET_ROOT`로 설정합니다. workflow resolver는 runner 환경을 우선하며 `/Volumes/ActionFitBuildAutomation`을 fallback으로 지원합니다. BuildCommit request에는 runner 로컬 경로나 Slack credential을 넣지 않습니다.
 
 기본 workflow template 경로:
 
 ```bash
 /Users/lydia/workspace/build-automation
 ```
+
+각 runner 설치 디렉터리의 `.env`에 host별 경로를 지정하고 서비스를 재시작합니다.
+
+```bash
+# Mac Studio build runners
+CI_SECRET_ROOT=/Users/lydia/workspace/build-automation
+
+# MacBook build runners: replace with the fixed SMB automount path
+CI_SECRET_ROOT=/path/to/ActionFitBuildAutomation
+```
+
+Finder에서 수동 연결한 `/Volumes/ActionFitBuildAutomation`은 재연결 시 suffix가 붙거나 로그인 전 service에서 보이지 않을 수 있으므로 운영 기본값이 아니라 fallback으로만 사용합니다.
 
 runner를 실행하는 macOS 사용자 계정에서 템플릿을 생성합니다.
 
@@ -172,6 +184,9 @@ workspace/build-automation/
     android-signing.env
     ios-keychain.env
     github-package-read-token
+    slack-webhook-url
+    slack-bot-token
+    slack-channel-id
   profiles/
     actionfit/
       profile.env
@@ -233,24 +248,24 @@ gh auth setup-git --hostname github.com
 
 `gh auth`를 사용할 수 없는 runner라면 `shared/github-package-read-token` 파일의 첫 non-comment line에 private ActionFit package repo read 권한이 있는 fine-grained token을 넣습니다. workflow는 Unity 실행 전에 이 credential을 준비하고 `$UNITY_PROJECT_DIR/Packages/manifest.json`의 ActionFit GitHub package 접근을 `git ls-remote`로 사전 확인합니다.
 
-Slack 알림과 Development APK 전송은 Unity build runner가 직접 수행하지 않습니다. 별도 `BuildCommit Slack Delivery` workflow와 `slack-delivery` runner가 `/Users/lydia/workspace/slack-delivery/secrets/shared`의 webhook, Bot token, channel ID를 사용합니다. Runner group, host tool, default-branch 배포와 보안 경계는 `RunnerSetup/SLACK_DELIVERY_RUNNER_SETUP.md`를 따릅니다.
+Slack 알림과 Development APK 전송은 성공한 `mobile-build` job이 직접 수행합니다. `shared/slack-webhook-url`은 시작/실패 알림, `shared/slack-bot-token`과 `shared/slack-channel-id`는 APK 파일 게시에 사용합니다. Android가 먼저 끝난 Both 요청도 iOS와 지연 Store 업로드가 모두 성공한 뒤 APK를 전송하며, 성공 메시지는 APK 게시물에 포함됩니다. Slack 실패는 빌드 결과를 바꾸지 않고 `BUILD SUCCESS / APK DELIVERY FAILED` 경고를 시도합니다.
 
-Slack 사람 태그는 AutoBuild 창의 `Slack Mentions` 행 목록에서 설정합니다. 각 행은 `Mention` 체크박스, `Member ID`, `Memo`를 가지며 BuildAutomation 패키지의 `BuildAutomationSettingsSO`에 저장되어 프로젝트에서 공유됩니다. 기본 에셋 경로는 `Assets/_Data/_BuildAutomation/BuildAutomationSettingsSO.asset`입니다. `Mention`이 체크된 행의 `Member ID`만 `.build/build_request.json`의 `slackMentions` JSON 배열로 직렬화되어 delivery workflow에 전달됩니다. `Memo`는 request에 포함되지 않고 AutoBuild 창에서 식별용으로 보입니다. 표시 이름이나 Slack markup이 아니라 raw `U12345678` 또는 `W12345678` 형식만 사용합니다.
+Slack 사람 태그는 AutoBuild 창의 `Slack Mentions` 행 목록에서 설정합니다. 각 행은 `Mention` 체크박스, `Member ID`, `Memo`를 가지며 BuildAutomation 패키지의 `BuildAutomationSettingsSO`에 저장되어 프로젝트에서 공유됩니다. 기본 에셋 경로는 `Assets/_Data/_BuildAutomation/BuildAutomationSettingsSO.asset`입니다. `Mention`이 체크된 행의 `Member ID`만 `.build/build_request.json`의 `slackMentions` JSON 배열로 직렬화되어 mobile build workflow에 전달됩니다. `Memo`는 request에 포함되지 않고 AutoBuild 창에서 식별용으로 보입니다. 표시 이름이나 Slack markup이 아니라 raw `U12345678` 또는 `W12345678` 형식만 사용합니다.
 
 회사별 `profile.env`에는 실제 파일 경로와 iOS/App Store Connect 값을 넣습니다.
 
 ```bash
-ANDROID_KEYSTORE_PATH="/Users/lydia/workspace/build-automation/profiles/actionfit/android/upload.keystore"
+ANDROID_KEYSTORE_PATH="${CI_SECRET_ROOT}/profiles/actionfit/android/upload.keystore"
 # Optional: overrides the request's non-secret Android alias metadata.
 # ANDROID_KEYALIAS_NAME="upload"
-GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="/Users/lydia/workspace/build-automation/profiles/actionfit/android/google-play-service-account.json"
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="${CI_SECRET_ROOT}/profiles/actionfit/android/google-play-service-account.json"
 IOS_DEVELOPMENT_TEAM_ID="49W7A8489P"
 APP_STORE_CONNECT_API_KEY_ID="..."
 APP_STORE_CONNECT_ISSUER_ID="..."
-APP_STORE_CONNECT_API_KEY_P8_PATH="/Users/lydia/workspace/build-automation/profiles/actionfit/ios/AuthKey_Actionfit.p8"
-IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="/Users/lydia/workspace/build-automation/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
+APP_STORE_CONNECT_API_KEY_P8_PATH="${CI_SECRET_ROOT}/profiles/actionfit/ios/AuthKey_Actionfit.p8"
+IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="${CI_SECRET_ROOT}/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
 IOS_DISTRIBUTION_CERTIFICATE_PASSWORD="..."
-IOS_APP_STORE_PROVISIONING_PROFILE_DIR="/Users/lydia/workspace/build-automation/profiles/actionfit/ios/profiles"
+IOS_APP_STORE_PROVISIONING_PROFILE_DIR="${CI_SECRET_ROOT}/profiles/actionfit/ios/profiles"
 IOS_PROVISIONING_PROFILE_AUTO_GENERATE="true"
 ```
 

@@ -21,11 +21,15 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: '- Resolves Development iOS TestFlight build numbers from 1 by selecting
-    one greater than the highest completed build or active upload for the marketing
-    version.
-
-    - Applies the resolved number only to the iOS working request before
-    Unity builds, with bounded same-origin pagination and fail-closed API validation.'
-  _dependenciesOverride: com.actionfit.githubauth@1.0.6, com.actionfit.buildsetting@1.1.11,
-    com.actionfit.customsymbols@1.0.6
+  _releaseNote: "- Development APK\uB97C \uBAA8\uB4E0 \uC694\uCCAD \uBE4C\uB4DC\uC640
+    \uC9C0\uC5F0 Store upload \uC644\uB8CC \uD6C4 affinity Unity runner\uC5D0\uC11C
+    Slack\uC73C\uB85C \uC9C1\uC811 \uC804\uC1A1\uD558\uB3C4\uB85D \uBCC0\uACBD\uD588\uC2B5\uB2C8\uB2E4.\n-
+    Development APK Artifact relay\uC640 \uC804\uC6A9 Slack delivery workflow\uB97C
+    \uC81C\uAC70\uD558\uACE0 runner host\uBCC4 shared credential root\uB97C \uC0AC\uC6A9\uD558\uB3C4\uB85D
+    \uC815\uB9AC\uD588\uC2B5\uB2C8\uB2E4.\n- \uB0B4\uBD80 \uC758\uC874\uC131\uC744
+    `com.actionfit.githubauth@1.0.8`, `com.actionfit.buildsetting@1.1.11`, `com.actionfit.customsymbols@1.0.7`\uB85C
+    \uAC31\uC2E0\uD588\uC2B5\uB2C8\uB2E4.\n- PackageInfo dependency override\uC640
+    README\xB7`AI_GUIDE.md` \uC124\uCE58 \uBC0F \uB3D9\uC791 \uC548\uB0B4\uB97C \uD604\uC7AC
+    \uAD6C\uC131\uC5D0 \uB9DE\uCDC4\uC2B5\uB2C8\uB2E4."
+  _dependenciesOverride: com.actionfit.githubauth@1.0.8, com.actionfit.buildsetting@1.1.11,
+    com.actionfit.customsymbols@1.0.7

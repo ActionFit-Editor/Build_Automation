@@ -3,6 +3,8 @@ set -euo pipefail
 
 package_root="$(cd "$(dirname "$0")/../.." && pwd -P)"
 validator="$package_root/.github/scripts/validate-local-runner-secrets.sh"
+resolver="$package_root/.github/scripts/resolve-local-secret-root.sh"
+setup_script="$package_root/RunnerSetup/setup-local-runner-secrets.sh"
 fixture_root="$(mktemp -d)"
 trap 'rm -rf "$fixture_root"' EXIT
 
@@ -155,5 +157,36 @@ if HOME="$home_root" BUILD_REQUEST_PATH="$request_path" GITHUB_ACTIONS=false \
   echo "Expected validation to fail when request and runner keystore values are both missing" >&2
   exit 1
 fi
+
+resolver_home="$fixture_root/resolver-home"
+resolver_root="$resolver_home/workspace/build-automation"
+mkdir -p "$resolver_root/shared"
+resolver_root_physical="$(cd "$resolver_root" && pwd -P)"
+resolver_env="$fixture_root/resolver-env"
+resolver_output="$fixture_root/resolver-output"
+: > "$resolver_env"
+: > "$resolver_output"
+HOME="$resolver_home" GITHUB_ENV="$resolver_env" GITHUB_OUTPUT="$resolver_output" \
+  bash "$resolver" >/dev/null
+grep -Fx "$resolver_root_physical" "$resolver_env" >/dev/null
+grep -Fx "path=$resolver_root_physical" "$resolver_output" >/dev/null
+
+if CI_SECRET_ROOT="$fixture_root/missing-root" HOME="$resolver_home" \
+  bash "$resolver" >/dev/null 2>&1; then
+  echo "An invalid explicit CI_SECRET_ROOT must not silently fall back" >&2
+  exit 1
+fi
+
+generated_root="$fixture_root/generated-build-automation"
+bash "$setup_script" "$generated_root" >/dev/null
+for slack_file in slack-webhook-url slack-bot-token slack-channel-id; do
+  path="$generated_root/shared/$slack_file"
+  test -f "$path"
+  test "$(stat -f '%Lp' "$path")" = 600
+done
+test "$(stat -f '%Lp' "$generated_root/shared")" = 700
+test -d "$generated_root/state/slack-apk-delivery"
+test "$(stat -f '%Lp' "$generated_root/state")" = 700
+test "$(stat -f '%Lp' "$generated_root/state/slack-apk-delivery")" = 700
 
 echo "BuildRequest signing and runner fallback tests passed"

@@ -2,7 +2,7 @@
 
 This guide describes the mobile build secret bundle used by the `BuildCommit Auto Build` workflow on a macOS self-hosted Unity runner.
 
-BuildRequest schema 12 contains build metadata plus project-specific Android keystore Base64 and signing passwords. Android request values take precedence, while the Mac runner bundle provides optional Android fallbacks and remains the source for Google Play JSON, iOS team and App Store Connect credentials, Apple Distribution certificates, and provisioning profiles. Slack credentials are deliberately excluded and belong only to the dedicated Slack delivery runner described in `SLACK_DELIVERY_RUNNER_SETUP.md`.
+BuildRequest schema 12 contains build metadata plus project-specific Android keystore Base64 and signing passwords. Android request values take precedence, while the shared Mac runner bundle provides optional Android fallbacks and remains the source for Google Play JSON, iOS team and App Store Connect credentials, Apple Distribution certificates, provisioning profiles, and Slack delivery credentials.
 
 ## Directory Layout
 
@@ -12,7 +12,7 @@ Workflow root:
 /Users/lydia/workspace/build-automation
 ```
 
-The workflow template sets `CI_SECRET_ROOT=/Users/lydia/workspace/build-automation` so existing ActionFit self-hosted runners continue to use their current bundle. Setup and validation scripts invoked without that environment variable still default to `$HOME/ci-secrets/build-automation`. BuildCommit requests do not carry runner-local paths; override `CI_SECRET_ROOT` when a runner uses another location.
+Set `CI_SECRET_ROOT` in each `unity-mobile` runner service environment. Mac Studio runners use `/Users/lydia/workspace/build-automation`; MacBook runners use their fixed SMB mountpoint. When it is not explicitly set, the workflow resolver checks `$HOME/workspace/build-automation`, `/Volumes/ActionFitBuildAutomation`, then `$HOME/ci-secrets/build-automation`. BuildCommit requests never carry runner-local paths.
 
 Expected files:
 
@@ -22,6 +22,9 @@ workspace/build-automation/
     android-signing.env
     ios-keychain.env
     github-package-read-token
+    slack-webhook-url
+    slack-bot-token
+    slack-channel-id
   profiles/
     actionfit/
       profile.env
@@ -45,6 +48,9 @@ workspace/build-automation/
         AppleDistribution_Stormborn.p12
         profiles/
           com.stormborn.example.ios.mobileprovision
+  state/
+    slack-apk-delivery/
+      <repository-and-run-id-sha256>.json
 ```
 
 ## Create Template Files
@@ -99,20 +105,22 @@ REPLACE_WITH_READ_ONLY_GITHUB_TOKEN
 
 This file is used only when the runner user does not already have working `gh auth` Git credential setup. Put one read-only token on the first non-comment line. The token must be able to read private ActionFit GitHub package repositories used by `$UNITY_PROJECT_DIR/Packages/manifest.json`.
 
-Do not create `slack-webhook-url`, `slack-bot-token`, or `slack-channel-id` in this mobile build bundle. Install them once under `/Users/lydia/workspace/slack-delivery/secrets/shared` on the dedicated Slack delivery runner instead. Unity runner workflow steps never read that Slack bundle.
+`shared/slack-webhook-url` contains the optional Incoming Webhook URL used for one start notification and final failure/non-APK result notifications. `shared/slack-bot-token` contains a Bot token with `files:write`, and `shared/slack-channel-id` contains the common destination channel ID. The Bot must be a channel member. Development APKs are uploaded directly from the runner that created them; do not put these values in GitHub Secrets or BuildRequest.
+
+`state/slack-apk-delivery` is created automatically with mode `0700`; each `0600` receipt records only repository/run identity, source commit, attempt number, Slack file ID, timestamps, and pending/delivered state. It never stores a token, upload URL, APK path, or APK bytes. Because this state prevents duplicate posts across runners and GitHub reruns, every trusted Unity runner must see the same writable state directory.
 
 `profiles/actionfit/profile.env`
 
 ```bash
-ANDROID_KEYSTORE_PATH="/Users/lydia/workspace/build-automation/profiles/actionfit/android/upload.keystore"
-GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="/Users/lydia/workspace/build-automation/profiles/actionfit/android/google-play-service-account.json"
+ANDROID_KEYSTORE_PATH="${CI_SECRET_ROOT}/profiles/actionfit/android/upload.keystore"
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH="${CI_SECRET_ROOT}/profiles/actionfit/android/google-play-service-account.json"
 IOS_DEVELOPMENT_TEAM_ID="49W7A8489P"
 APP_STORE_CONNECT_API_KEY_ID="..."
 APP_STORE_CONNECT_ISSUER_ID="..."
-APP_STORE_CONNECT_API_KEY_P8_PATH="/Users/lydia/workspace/build-automation/profiles/actionfit/ios/AuthKey_Actionfit.p8"
-IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="/Users/lydia/workspace/build-automation/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
+APP_STORE_CONNECT_API_KEY_P8_PATH="${CI_SECRET_ROOT}/profiles/actionfit/ios/AuthKey_Actionfit.p8"
+IOS_DISTRIBUTION_CERTIFICATE_P12_PATH="${CI_SECRET_ROOT}/profiles/actionfit/ios/AppleDistribution_Actionfit.p12"
 IOS_DISTRIBUTION_CERTIFICATE_PASSWORD="..."
-IOS_APP_STORE_PROVISIONING_PROFILE_DIR="/Users/lydia/workspace/build-automation/profiles/actionfit/ios/profiles"
+IOS_APP_STORE_PROVISIONING_PROFILE_DIR="${CI_SECRET_ROOT}/profiles/actionfit/ios/profiles"
 IOS_PROVISIONING_PROFILE_AUTO_GENERATE="true"
 ```
 
@@ -139,7 +147,7 @@ find "/Users/lydia/workspace/build-automation" -type d -exec chmod 700 {} \;
 find "/Users/lydia/workspace/build-automation" -type f -exec chmod 600 {} \;
 ```
 
-Only the macOS user running the Unity GitHub Actions runner should be able to read these mobile build files.
+Only trusted macOS users running the Unity GitHub Actions runners should be able to read these files. When the bundle is exported from Mac Studio over SMB, disable guest access, require SMB3 encryption, and mount it before the MacBook runner service starts.
 
 ## Validate Locally
 
@@ -178,12 +186,13 @@ Private package access:
 
 Slack notification:
 
-- The mobile build workflow never reads Slack credentials or posts directly to Slack.
-- A separate `workflow_run` workflow handles `BuildCommit Auto Build` `in_progress` and `completed` events on runner group and label `slack-delivery`.
-- The delivery workflow does not check out or execute source repository content. It fetches only `.build/build_request.json` at the source `head_sha` through the GitHub API and validates it with a fixed host-local executable.
-- A successful Development Android build uploads a uniquely named APK Artifact. The delivery runner downloads that exact source-run Artifact and sends the success message and APK as one Slack file post.
-- Missing credentials, Artifact download failure, and Slack API failure are advisory. They do not change the source mobile build result, and the APK remains available as a GitHub Artifact.
-- See `SLACK_DELIVERY_RUNNER_SETUP.md` for the host paths, installer, GitHub runner group access, and security boundary.
+- The affinity `mobile-build` job sends one start webhook after resolving the shared bundle.
+- Android exposes only the APK produced after its current phase marker. The top-level workflow waits for all requested platforms and deferred Store uploads to succeed before uploading that local file directly to Slack.
+- A successful Development Android/Both request includes the success message in the APK post and skips a duplicate success webhook.
+- Missing credentials, an unreadable APK, timeout, and Slack API failure are advisory. They produce `BUILD SUCCESS / APK DELIVERY FAILED` when the webhook is available and do not change the successful Unity build result.
+- Direct API calls use bounded timeouts. No Development APK GitHub Artifact or separate Slack delivery runner is involved.
+- A durable receipt keyed by repository and GitHub `run_id` prevents a rerun from posting the APK twice. Failures before Slack completion discard retry-safe state. Once completion is attempted, the pending receipt is preserved and duplicate uploads are blocked until an operator reconciles it.
+- For an armed pending receipt, use the path and Slack file ID printed by the upload step. First check the destination channel. If the APK post exists, run the receipt manager's `complete <FILE_ID>` operation with the original repository/run/SHA environment to mark it delivered. If the post is definitely absent, stop all attempts for that run, remove only the logged receipt JSON, and rerun the GitHub job. Never delete pending receipts through automatic age/LRU cleanup. Delivered receipts are tiny and may be retained; prune them only under an explicit long-retention policy while no delivery is active.
 
 Android:
 
@@ -210,4 +219,4 @@ Project and symbols:
 
 ## Security Rule
 
-Do not allow untrusted workflow code to run on this runner. Any workflow running on the self-hosted Mac can read files that the runner user can read. Keep BuildCommit triggers limited to trusted tags/branches and do not run arbitrary pull request workflows on this runner. Android BuildRequest signing values must never be printed to workflow logs. Merely registering the Slack delivery runner separately under the same macOS user is operational separation, not credential isolation; use a separate OS user or machine when the Unity runner must be unable to read Slack credentials.
+Do not allow untrusted workflow code to run on these runners. Any workflow running as a user that can read the shared bundle can also read its Slack and Store credentials. Keep BuildCommit triggers limited to trusted tags/branches, restrict access to `unity-mobile` runners, and never run arbitrary pull request or `ci` workflows on them. Credential values must never be printed to workflow logs.

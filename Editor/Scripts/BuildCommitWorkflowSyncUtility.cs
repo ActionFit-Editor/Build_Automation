@@ -10,8 +10,6 @@ namespace ActionFit.BuildAutomation.Editor
     {
         internal const string TemplateRelativePath = "WorkflowTemplates/buildcommit-auto-build.yml";
         internal const string WorkflowRelativePath = ".github/workflows/buildcommit-auto-build.yml";
-        internal const string SlackDeliveryTemplateRelativePath = "WorkflowTemplates/buildcommit-slack-delivery.yml";
-        internal const string SlackDeliveryWorkflowRelativePath = ".github/workflows/buildcommit-slack-delivery.yml";
         internal const string AndroidBuildActionRelativePath = ".github/actions/build-android/action.yml";
         internal const string IosBuildActionRelativePath = ".github/actions/build-ios/action.yml";
         internal const string AllocateRunnerScriptRelativePath = ".github/scripts/allocate-unity-mobile-runner.js";
@@ -20,17 +18,20 @@ namespace ActionFit.BuildAutomation.Editor
         internal const string ResolveUnityScriptRelativePath = ".github/scripts/resolve-unity-editor.sh";
         internal const string EnsureUnityModulesScriptRelativePath = ".github/scripts/ensure-unity-editor-modules.sh";
         internal const string PreparePrivatePackageAccessScriptRelativePath = ".github/scripts/prepare-actionfit-private-package-access.sh";
+        internal const string ResolveLocalSecretRootScriptRelativePath = ".github/scripts/resolve-local-secret-root.sh";
+        internal const string NotifySlackScriptRelativePath = ".github/scripts/notify-slack-build-result.sh";
         internal const string CleanupOldBuildArtifactsScriptRelativePath = ".github/scripts/cleanup-old-build-artifacts.sh";
         internal const string StoreUploadWorkerScriptRelativePath = ".github/scripts/store-upload-worker.rb";
         internal const string UploadGooglePlayScriptRelativePath = ".github/scripts/upload-google-play.sh";
         internal const string UploadTestFlightScriptRelativePath = ".github/scripts/upload-testflight.rb";
         internal const string CheckTestFlightBuildNumberScriptRelativePath = ".github/scripts/check-testflight-build-number.rb";
+        internal const string UploadSlackFileScriptRelativePath = ".github/scripts/upload-slack-file.sh";
+        internal const string ManageSlackApkDeliveryReceiptScriptRelativePath = ".github/scripts/manage-slack-apk-delivery-receipt.rb";
 
         private const string PackageName = "com.actionfit.buildautomation";
         private static readonly string[] PackageAssetRelativePaths =
         {
             TemplateRelativePath,
-            SlackDeliveryTemplateRelativePath,
             AndroidBuildActionRelativePath,
             IosBuildActionRelativePath,
             AllocateRunnerScriptRelativePath,
@@ -39,17 +40,20 @@ namespace ActionFit.BuildAutomation.Editor
             ResolveUnityScriptRelativePath,
             EnsureUnityModulesScriptRelativePath,
             PreparePrivatePackageAccessScriptRelativePath,
+            ResolveLocalSecretRootScriptRelativePath,
+            NotifySlackScriptRelativePath,
             CleanupOldBuildArtifactsScriptRelativePath,
             StoreUploadWorkerScriptRelativePath,
             UploadGooglePlayScriptRelativePath,
             UploadTestFlightScriptRelativePath,
-            CheckTestFlightBuildNumberScriptRelativePath
+            CheckTestFlightBuildNumberScriptRelativePath,
+            UploadSlackFileScriptRelativePath,
+            ManageSlackApkDeliveryReceiptScriptRelativePath
         };
 
         private static readonly string[] ProjectAssetRelativePaths =
         {
             WorkflowRelativePath,
-            SlackDeliveryWorkflowRelativePath,
             AndroidBuildActionRelativePath,
             IosBuildActionRelativePath,
             AllocateRunnerScriptRelativePath,
@@ -58,17 +62,20 @@ namespace ActionFit.BuildAutomation.Editor
             ResolveUnityScriptRelativePath,
             EnsureUnityModulesScriptRelativePath,
             PreparePrivatePackageAccessScriptRelativePath,
+            ResolveLocalSecretRootScriptRelativePath,
+            NotifySlackScriptRelativePath,
             CleanupOldBuildArtifactsScriptRelativePath,
             StoreUploadWorkerScriptRelativePath,
             UploadGooglePlayScriptRelativePath,
             UploadTestFlightScriptRelativePath,
-            CheckTestFlightBuildNumberScriptRelativePath
+            CheckTestFlightBuildNumberScriptRelativePath,
+            UploadSlackFileScriptRelativePath,
+            ManageSlackApkDeliveryReceiptScriptRelativePath
         };
 
         private static readonly string[] ObsoleteProjectAssetRelativePaths =
         {
-            ".github/scripts/notify-slack-build-result.sh",
-            ".github/scripts/upload-slack-file.sh"
+            ".github/workflows/buildcommit-slack-delivery.yml"
         };
 
         internal static bool IsWorkflowCurrent()
@@ -79,13 +86,18 @@ namespace ActionFit.BuildAutomation.Editor
                     return false;
             }
 
+            foreach (string relativePath in ObsoleteProjectAssetRelativePaths)
+            {
+                if (File.Exists(GetProjectPath(relativePath)))
+                    return false;
+            }
+
             return true;
         }
 
         internal static bool WorkflowExists()
         {
-            return File.Exists(GetProjectPath(WorkflowRelativePath)) &&
-                   File.Exists(GetProjectPath(SlackDeliveryWorkflowRelativePath));
+            return File.Exists(GetProjectPath(WorkflowRelativePath));
         }
 
         internal static string GetStatusMessage()
@@ -137,7 +149,7 @@ namespace ActionFit.BuildAutomation.Editor
 
             int removedObsoleteAssets = RemoveObsoleteRepositoryAssets();
             if (removedObsoleteAssets > 0)
-                message += $"; Removed {removedObsoleteAssets} obsolete repository Slack script(s)";
+                message += $"; Removed {removedObsoleteAssets} obsolete repository delivery workflow(s)";
 
             int removedLegacyAssets = RemoveLegacyUnityProjectAssets();
             if (removedLegacyAssets > 0)
@@ -148,7 +160,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static string GetWorkflowAssetSummary()
         {
-            return $"{WorkflowRelativePath}, {SlackDeliveryWorkflowRelativePath}, {AndroidBuildActionRelativePath}, {IosBuildActionRelativePath}, {AllocateRunnerScriptRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}, {StoreUploadWorkerScriptRelativePath}, {UploadGooglePlayScriptRelativePath}, {UploadTestFlightScriptRelativePath}, {CheckTestFlightBuildNumberScriptRelativePath}";
+            return $"{WorkflowRelativePath}, {AndroidBuildActionRelativePath}, {IosBuildActionRelativePath}, {AllocateRunnerScriptRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {ResolveLocalSecretRootScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}, {StoreUploadWorkerScriptRelativePath}, {UploadGooglePlayScriptRelativePath}, {UploadTestFlightScriptRelativePath}, {CheckTestFlightBuildNumberScriptRelativePath}, {UploadSlackFileScriptRelativePath}, {ManageSlackApkDeliveryReceiptScriptRelativePath}";
         }
 
         private static bool PackageFileMatchesProjectFile(string packageRelativePath, string projectRelativePath)

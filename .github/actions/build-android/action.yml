@@ -44,6 +44,9 @@ inputs:
     required: true
 
 outputs:
+  development-apk-path:
+    description: Fresh Development APK produced by this build phase.
+    value: ${{ steps.apk.outputs.path }}
   store-upload-deferred:
     description: Whether the Google Play upload was delegated to the background worker.
     value: ${{ steps.upload_mode.outputs.deferred }}
@@ -315,17 +318,6 @@ runs:
         if-no-files-found: error
         compression-level: 0
         retention-days: 3
-
-    - name: Upload Development APK artifact
-      if: always() && inputs.development-build == 'true' && steps.apk.outputs.path != ''
-      continue-on-error: true
-      uses: actions/upload-artifact@v4
-      with:
-        name: Android-BuildCommit-Development-APK-${{ github.run_id }}-${{ github.run_attempt }}
-        path: ${{ steps.apk.outputs.path }}
-        if-no-files-found: error
-        compression-level: 0
-        retention-days: 1
 
     - name: Cleanup old Android build artifacts
       if: success() && steps.upload_mode.outputs.deferred != 'true' && (inputs.upload-target == 'GooglePlayInternal' || inputs.upload-target == 'GooglePlayInternalAndTestFlight')

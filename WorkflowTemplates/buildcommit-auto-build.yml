@@ -17,13 +17,14 @@ concurrency:
 env:
   UNITY_HUB_EDITOR_ROOT: "/Applications/Unity/Hub/Editor"
   DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer"
-  CI_SECRET_ROOT: "/Users/lydia/workspace/build-automation"
   IOS_DISTRIBUTION_SIGNING_IDENTITY: "Apple Distribution"
   BUILD_CLEANUP_RETENTION_DAYS: 5
   STORE_UPLOAD_TIMEOUT_SECONDS: 3600
   TESTFLIGHT_UPLOAD_ATTEMPTS: 2
   TESTFLIGHT_UPLOAD_ATTEMPT_TIMEOUT_SECONDS: 900
   TESTFLIGHT_UPLOAD_RETRY_DELAY_SECONDS: 10
+  SLACK_API_TIMEOUT_SECONDS: 60
+  SLACK_FILE_UPLOAD_TIMEOUT_SECONDS: 1800
 
 jobs:
   allocate:
@@ -65,7 +66,7 @@ jobs:
   mobile-build:
     name: Mobile Build & Deploy
     needs: allocate
-    timeout-minutes: 180
+    timeout-minutes: 220
     runs-on:
       - self-hosted
       - macOS
@@ -169,6 +170,8 @@ jobs:
           ios_bundle_id = ""
           build_version = ""
           bundle_no = ""
+          development_build = "false"
+          slack_mentions = ""
 
           if should_build && File.exist?(request_path)
             request = JSON.parse(File.read(request_path))
@@ -202,6 +205,18 @@ jobs:
             ios_bundle_id = request["iosBundleId"].to_s.strip
             build_version = request["buildVersion"].to_s.strip
             bundle_no = request["bundleNo"].to_s.strip
+            development_build = request["developmentBuild"] == true ? "true" : "false"
+            raw_slack_mentions = request["slackMentions"]
+            slack_mentions = case raw_slack_mentions
+                             when Array
+                               raw_slack_mentions.map(&:to_s)
+                             else
+                               raw_slack_mentions.to_s.split(/[,\s]+/)
+                             end
+                             .map(&:strip)
+                             .select { |value| value.match?(/\A[UW][A-Z0-9]+\z/) }
+                             .uniq
+                             .join(" ")
             should_build = false if platform == "None"
           else
             should_build = false
@@ -216,7 +231,9 @@ jobs:
             "android_package_name" => android_package_name,
             "ios_bundle_id" => ios_bundle_id,
             "build_version" => build_version,
-            "bundle_no" => bundle_no
+            "bundle_no" => bundle_no,
+            "development_build" => development_build,
+            "slack_mentions" => slack_mentions
           }
           outputs.each do |name, value|
             abort("BuildRequest field for #{name} contains control characters") if value.to_s.match?(/[[:cntrl:]]/)
@@ -226,6 +243,36 @@ jobs:
             outputs.each { |name, value| output.puts("#{name}=#{value}") }
           end
           RUBY
+
+      - name: Resolve shared runner secret root
+        id: secret_root
+        if: steps.detect.outputs.should_build == 'true'
+        shell: bash
+        run: bash "$REPOSITORY_ROOT/.github/scripts/resolve-local-secret-root.sh"
+
+      - name: Mark BuildCommit notification start
+        id: workflow_timer
+        if: steps.detect.outputs.should_build == 'true'
+        shell: bash
+        run: echo "started_at_epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Slack build start
+        if: steps.detect.outputs.should_build == 'true'
+        continue-on-error: true
+        shell: bash
+        env:
+          BUILD_JOB_STATUS: start
+          BUILD_PLATFORM: ${{ steps.detect.outputs.platform }}
+          BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
+          BUILD_VERSION: ${{ steps.detect.outputs.build_version }}
+          BUILD_BUNDLE_NO: ${{ steps.detect.outputs.bundle_no }}
+          BUILD_DEVELOPMENT_BUILD: ${{ steps.detect.outputs.development_build }}
+          BUILD_DISTRIBUTION_PROFILE: ${{ steps.detect.outputs.distribution_profile }}
+          SLACK_BUILD_MENTIONS: ${{ steps.detect.outputs.slack_mentions }}
+          BUILD_SHORT_SHA: ${{ github.sha }}
+          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BUILD_STARTED_AT_EPOCH: ${{ steps.workflow_timer.outputs.started_at_epoch }}
+        run: bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"
 
       - name: Reset current BuildCommit logs
         if: steps.detect.outputs.should_build == 'true'
@@ -485,6 +532,7 @@ jobs:
         run: bash "$REPOSITORY_ROOT/.github/scripts/cleanup-old-build-artifacts.sh"
 
       - name: Final cleanup while preserving Unity Library
+        id: final_cleanup
         if: always()
         shell: bash
         run: |
@@ -507,6 +555,7 @@ jobs:
           rm -rf "$upload_state_root"
 
       - name: Fail when a requested platform failed
+        id: build_result
         if: always() && steps.detect.outputs.should_build == 'true'
         shell: bash
         env:
@@ -528,12 +577,129 @@ jobs:
             "$IOS_SECOND_OUTCOME" \
             "$FIRST_STORE_UPLOAD_OUTCOME" \
             "$STORE_UPLOAD_CLEANUP_OUTCOME"; do
-            if [ "$outcome" = "failure" ]; then
-              failed=true
-            fi
+            case "$outcome" in
+              failure|cancelled) failed=true ;;
+            esac
           done
 
           if [ "$failed" = true ]; then
             echo "::error::One or more requested mobile build phases failed."
             exit 1
           fi
+
+      - name: Attach Development APK directly to Slack
+        id: direct_apk_delivery
+        if: >-
+          always() &&
+          steps.detect.outputs.should_build == 'true' &&
+          steps.final_cleanup.outcome == 'success' &&
+          steps.build_result.outcome == 'success' &&
+          steps.sequence.outputs.android_development_build == 'true' &&
+          steps.sequence.outcome == 'success' &&
+          steps.android_first.outcome != 'failure' &&
+          steps.ios_first.outcome != 'failure' &&
+          steps.android_second.outcome != 'failure' &&
+          steps.ios_second.outcome != 'failure' &&
+          steps.first_store_upload.outcome != 'failure' &&
+          steps.store_upload_cleanup.outcome != 'failure' &&
+          (steps.android_first.outputs.development-apk-path != '' || steps.android_second.outputs.development-apk-path != '')
+        continue-on-error: true
+        shell: bash
+        env:
+          SLACK_FILE_PATH: ${{ steps.android_first.outputs.development-apk-path || steps.android_second.outputs.development-apk-path }}
+          SLACK_UPLOAD_PHASE_PATH: ${{ runner.temp }}/buildcommit-slack-upload-${{ github.run_id }}-${{ github.run_attempt }}.phase
+          BUILD_PLATFORM: ${{ steps.detect.outputs.platform }}
+          BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
+          BUILD_VERSION: ${{ steps.detect.outputs.build_version }}
+          BUILD_BUNDLE_NO: ${{ steps.sequence.outputs.android_bundle_no }}
+          SLACK_BUILD_MENTIONS: ${{ steps.detect.outputs.slack_mentions }}
+          BUILD_SHORT_SHA: ${{ github.sha }}
+          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash "$REPOSITORY_ROOT/.github/scripts/upload-slack-file.sh"
+
+      - name: Notify Slack final result
+        if: always() && steps.detect.outputs.should_build == 'true'
+        continue-on-error: true
+        shell: bash
+        env:
+          CURRENT_JOB_STATUS: ${{ job.status }}
+          SEQUENCE_OUTCOME: ${{ steps.sequence.outcome }}
+          ANDROID_FIRST_OUTCOME: ${{ steps.android_first.outcome }}
+          IOS_FIRST_OUTCOME: ${{ steps.ios_first.outcome }}
+          ANDROID_SECOND_OUTCOME: ${{ steps.android_second.outcome }}
+          IOS_SECOND_OUTCOME: ${{ steps.ios_second.outcome }}
+          FIRST_STORE_UPLOAD_OUTCOME: ${{ steps.first_store_upload.outcome }}
+          STORE_UPLOAD_CLEANUP_OUTCOME: ${{ steps.store_upload_cleanup.outcome }}
+          DIRECT_APK_DELIVERY_OUTCOME: ${{ steps.direct_apk_delivery.outcome }}
+          DIRECT_APK_DELIVERY_PHASE_PATH: ${{ runner.temp }}/buildcommit-slack-upload-${{ github.run_id }}-${{ github.run_attempt }}.phase
+          ANDROID_DEVELOPMENT_BUILD: ${{ steps.sequence.outputs.android_development_build }}
+          ANDROID_BUNDLE_NO: ${{ steps.sequence.outputs.android_bundle_no }}
+          IOS_EFFECTIVE_BUNDLE_NO: ${{ steps.ios_first.outputs.effective-bundle-no || steps.ios_second.outputs.effective-bundle-no }}
+          REQUEST_BUNDLE_NO: ${{ steps.detect.outputs.bundle_no }}
+          BUILD_PLATFORM: ${{ steps.detect.outputs.platform }}
+          BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
+          BUILD_VERSION: ${{ steps.detect.outputs.build_version }}
+          BUILD_DEVELOPMENT_BUILD: ${{ steps.detect.outputs.development_build }}
+          BUILD_DISTRIBUTION_PROFILE: ${{ steps.detect.outputs.distribution_profile }}
+          SLACK_BUILD_MENTIONS: ${{ steps.detect.outputs.slack_mentions }}
+          BUILD_SHORT_SHA: ${{ github.sha }}
+          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BUILD_STARTED_AT_EPOCH: ${{ steps.workflow_timer.outputs.started_at_epoch }}
+        run: |
+          set -euo pipefail
+
+          build_status=success
+          case "$CURRENT_JOB_STATUS" in
+            failure|cancelled) build_status="$CURRENT_JOB_STATUS" ;;
+          esac
+
+          for outcome in \
+            "$SEQUENCE_OUTCOME" \
+            "$ANDROID_FIRST_OUTCOME" \
+            "$IOS_FIRST_OUTCOME" \
+            "$ANDROID_SECOND_OUTCOME" \
+            "$IOS_SECOND_OUTCOME" \
+            "$FIRST_STORE_UPLOAD_OUTCOME" \
+            "$STORE_UPLOAD_CLEANUP_OUTCOME"; do
+            case "$outcome" in
+              failure|cancelled) build_status=failure ;;
+            esac
+          done
+
+          case "$BUILD_PLATFORM" in
+            Android) export BUILD_BUNDLE_NO="${ANDROID_BUNDLE_NO:-$REQUEST_BUNDLE_NO}" ;;
+            iOS) export BUILD_BUNDLE_NO="${IOS_EFFECTIVE_BUNDLE_NO:-$REQUEST_BUNDLE_NO}" ;;
+            *) export BUILD_BUNDLE_NO="$REQUEST_BUNDLE_NO" ;;
+          esac
+
+          if [ "$build_status" = success ] && [ "$ANDROID_DEVELOPMENT_BUILD" = true ]; then
+            if [ "$DIRECT_APK_DELIVERY_OUTCOME" = success ]; then
+              echo "Slack success was delivered with the Development APK; skipping a duplicate webhook message."
+              exit 0
+            fi
+            direct_delivery_phase=""
+            if [ -r "$DIRECT_APK_DELIVERY_PHASE_PATH" ]; then
+              direct_delivery_phase="$(sed -n '1p' "$DIRECT_APK_DELIVERY_PHASE_PATH")"
+            fi
+            case "$direct_delivery_phase" in
+              completed|receipt-delivered)
+                echo "Slack delivery receipt confirms success; skipping a contradictory failure webhook."
+                exit 0
+                ;;
+              completion-attempted|completion-ambiguous|receipt-pending)
+                echo "::warning::Slack completion is indeterminate; a durable pending receipt blocks duplicate APK delivery."
+                echo "Reconcile or reset the pending receipt before retrying this GitHub run."
+                exit 0
+                ;;
+            esac
+            build_status=apk_delivery_failure
+          fi
+
+          export BUILD_JOB_STATUS="$build_status"
+          bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"
+
+      - name: Remove Slack delivery phase marker
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: rm -f "${RUNNER_TEMP:-/tmp}/buildcommit-slack-upload-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.phase"

@@ -37,21 +37,26 @@ abort("allocator project override is missing") unless allocator_script.include?(
 abort("allocator must not reference the hosted runner token") if allocator.to_s.include?("UNITY_RUNNER_ALLOCATOR_TOKEN")
 abort("workflow must not reference the hosted runner token") if workflow.to_s.include?("UNITY_RUNNER_ALLOCATOR_TOKEN")
 
+forbidden_slack_access = /(?:SLACK_(?:BUILD_)?(?:WEBHOOK_URL|BOT_TOKEN|CHANNEL_ID)|slack-(?:webhook-url|bot-token|channel-id)|notify-slack-build-result\.sh|upload-slack-file\.sh|hooks\.slack\.com)/i
+abort("allocator must not access Slack credentials or helpers") if allocate.to_s.match?(forbidden_slack_access)
+
 mobile_build = jobs.fetch("mobile-build")
 abort("mobile-build must wait for allocator") unless mobile_build.fetch("needs") == "allocate"
-abort("mobile-build timeout must bound both builds and Store uploads") unless mobile_build.fetch("timeout-minutes") == 180
+abort("mobile-build timeout must leave advisory Slack delivery headroom") unless mobile_build.fetch("timeout-minutes") == 220
 runs_on = mobile_build.fetch("runs-on")
 expected_labels = ["self-hosted", "macOS", "unity-mobile", "${{ needs.allocate.outputs.affinity_label }}"]
 abort("unexpected affinity runner labels: #{runs_on.inspect}") unless runs_on == expected_labels
-
-forbidden_slack_access = /(?:SLACK_(?:BUILD_)?(?:WEBHOOK_URL|BOT_TOKEN|CHANNEL_ID)|slack-(?:webhook-url|bot-token|channel-id)|notify-slack-build-result\.sh|upload-slack-file\.sh|hooks\.slack\.com)/i
-abort("mobile-build must not access Slack credentials or repository Slack helpers") if mobile_build.to_s.match?(forbidden_slack_access)
+abort("workflow must not use GitHub Secrets for runner-local credentials") if workflow.to_s.include?("${{ secrets.")
+abort("workflow must not embed a Slack Bot token") if workflow.to_s.match?(/xox[baprs]-[A-Za-z0-9-]+/i)
+abort("workflow must not embed a Slack webhook URL") if workflow.to_s.match?(%r{https://hooks\.slack\.com/services/}i)
 
 workflow_environment = workflow.fetch("env")
 abort("Store upload timeout is missing") unless workflow_environment.fetch("STORE_UPLOAD_TIMEOUT_SECONDS") == 3600
 abort("TestFlight retries must be limited to two attempts") unless workflow_environment.fetch("TESTFLIGHT_UPLOAD_ATTEMPTS") == 2
 abort("TestFlight attempt timeout is missing") unless workflow_environment.fetch("TESTFLIGHT_UPLOAD_ATTEMPT_TIMEOUT_SECONDS") == 900
 abort("TestFlight retry delay is missing") unless workflow_environment.fetch("TESTFLIGHT_UPLOAD_RETRY_DELAY_SECONDS") == 10
+abort("Slack metadata request timeout is missing") unless workflow_environment.fetch("SLACK_API_TIMEOUT_SECONDS") == 60
+abort("Slack APK transfer timeout is missing") unless workflow_environment.fetch("SLACK_FILE_UPLOAD_TIMEOUT_SECONDS") == 1800
 
 steps = mobile_build.fetch("steps")
 log_reset = steps.find { |step| step["name"] == "Reset current BuildCommit logs" }
@@ -60,6 +65,22 @@ abort("log reset must run only for an approved build") unless log_reset.fetch("i
 abort("log reset must reject an unexpected path") unless log_reset.fetch("run").include?("Refusing to reset an unexpected Unity log path")
 checkout = steps.find { |step| step["uses"] == "actions/checkout@v4" }
 abort("checkout clean:false is required") unless checkout && checkout.fetch("with").fetch("clean") == false
+
+secret_root = steps.find { |step| step["name"] == "Resolve shared runner secret root" }
+abort("shared runner secret-root resolver is missing") unless secret_root
+abort("secret-root resolver must expose its result") unless secret_root.fetch("id") == "secret_root"
+abort("secret-root resolver must run only for an approved build") unless secret_root.fetch("if") == "steps.detect.outputs.should_build == 'true'"
+abort("secret-root resolver must use the synchronized local helper") unless secret_root.fetch("run") == 'bash "$REPOSITORY_ROOT/.github/scripts/resolve-local-secret-root.sh"'
+
+start_notification = steps.find { |step| step["name"] == "Notify Slack build start" }
+abort("BuildCommit start notification is missing") unless start_notification
+abort("start notification failure must not change the build result") unless start_notification.fetch("continue-on-error") == true
+abort("start notification must use the synchronized local helper") unless start_notification.fetch("run") == 'bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"'
+abort("start notification status metadata is missing") unless start_notification.dig("env", "BUILD_JOB_STATUS") == "start"
+abort("start notification platform metadata is missing") unless start_notification.dig("env", "BUILD_PLATFORM") == "${{ steps.detect.outputs.platform }}"
+abort("start notification project metadata is missing") unless start_notification.dig("env", "BUILD_PROJECT_NAME") == "${{ steps.paths.outputs.unity_project_name }}"
+abort("start notification version metadata is missing") unless start_notification.dig("env", "BUILD_VERSION") == "${{ steps.detect.outputs.build_version }}"
+abort("start notification mentions metadata is missing") unless start_notification.dig("env", "SLACK_BUILD_MENTIONS") == "${{ steps.detect.outputs.slack_mentions }}"
 
 marker = steps.find { |step| step["name"] == "Refresh affinity workspace retention marker" }
 abort("affinity retention marker step is missing") unless marker
@@ -152,14 +173,64 @@ deferred_cleanup = steps.find { |step| step["name"] == "Cleanup old artifacts af
 expected_deferred_cleanup_number = "${{ steps.android_first.outputs.store-upload-deferred == 'true' && steps.sequence.outputs.android_bundle_no || steps.ios_first.outputs.effective-bundle-no }}"
 abort("deferred iOS cleanup must use the effective bundle number") unless deferred_cleanup.dig("env", "BUILD_CLEANUP_BUNDLE_NO") == expected_deferred_cleanup_number
 
-failure_step = steps.find { |step| step["name"] == "Fail when a requested platform failed" }
+direct_apk_delivery = step_by_id.call("direct_apk_delivery")
+abort("direct Development APK delivery step has an unexpected name") unless direct_apk_delivery.fetch("name") == "Attach Development APK directly to Slack"
+abort("direct Development APK delivery must not change the source build result") unless direct_apk_delivery.fetch("continue-on-error") == true
+direct_delivery_condition = direct_apk_delivery.fetch("if")
+abort("direct APK delivery must evaluate after final result aggregation") unless direct_delivery_condition.include?("always()")
+abort("direct APK delivery must require successful final cleanup") unless direct_delivery_condition.include?("steps.final_cleanup.outcome == 'success'")
+abort("direct APK delivery must require a successful aggregated build result") unless direct_delivery_condition.include?("steps.build_result.outcome == 'success'")
+abort("direct APK delivery must require Development Android") unless direct_delivery_condition.include?("steps.sequence.outputs.android_development_build == 'true'")
+abort("direct APK delivery must require successful build-sequence preparation") unless direct_delivery_condition.include?("steps.sequence.outcome == 'success'")
+%w[android_first ios_first android_second ios_second first_store_upload store_upload_cleanup].each do |step_id|
+  abort("direct APK delivery must reject #{step_id} failure") unless direct_delivery_condition.include?("steps.#{step_id}.outcome != 'failure'")
+end
+expected_direct_apk_path = "${{ steps.android_first.outputs.development-apk-path || steps.android_second.outputs.development-apk-path }}"
+abort("direct APK delivery must use only the fresh Android action output") unless direct_apk_delivery.dig("env", "SLACK_FILE_PATH") == expected_direct_apk_path
+abort("direct APK delivery phase metadata is missing") unless direct_apk_delivery.dig("env", "SLACK_UPLOAD_PHASE_PATH") == "${{ runner.temp }}/buildcommit-slack-upload-${{ github.run_id }}-${{ github.run_attempt }}.phase"
+abort("direct APK delivery platform metadata is missing") unless direct_apk_delivery.dig("env", "BUILD_PLATFORM") == "${{ steps.detect.outputs.platform }}"
+abort("direct APK delivery project metadata is missing") unless direct_apk_delivery.dig("env", "BUILD_PROJECT_NAME") == "${{ steps.paths.outputs.unity_project_name }}"
+abort("direct APK delivery version metadata is missing") unless direct_apk_delivery.dig("env", "BUILD_VERSION") == "${{ steps.detect.outputs.build_version }}"
+abort("direct APK delivery bundle metadata is missing") unless direct_apk_delivery.dig("env", "BUILD_BUNDLE_NO") == "${{ steps.sequence.outputs.android_bundle_no }}"
+abort("direct APK delivery mentions metadata is missing") unless direct_apk_delivery.dig("env", "SLACK_BUILD_MENTIONS") == "${{ steps.detect.outputs.slack_mentions }}"
+abort("direct APK delivery commit metadata is missing") unless direct_apk_delivery.dig("env", "BUILD_SHORT_SHA") == "${{ github.sha }}"
+abort("direct APK delivery run URL metadata is missing") unless direct_apk_delivery.dig("env", "BUILD_RUN_URL") == "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+abort("direct APK delivery must use the synchronized local helper") unless direct_apk_delivery.fetch("run") == 'bash "$REPOSITORY_ROOT/.github/scripts/upload-slack-file.sh"'
+abort("direct APK delivery must follow both possible second-platform builds") unless step_index.call("direct_apk_delivery") > last_second_index
+abort("direct APK delivery must follow deferred Store finalization") unless step_index.call("direct_apk_delivery") > step_index.call("first_store_upload")
+abort("direct APK delivery must follow deferred Store cleanup") unless step_index.call("direct_apk_delivery") > step_index.call("store_upload_cleanup")
+
+final_notification = steps.find { |step| step["name"] == "Notify Slack final result" }
+abort("final Slack notification is missing") unless final_notification
+abort("final Slack notification must always report approved builds") unless final_notification.fetch("if") == "always() && steps.detect.outputs.should_build == 'true'"
+abort("final Slack notification failure must not change the build result") unless final_notification.fetch("continue-on-error") == true
+abort("final Slack notification must consume the direct delivery outcome") unless final_notification.dig("env", "DIRECT_APK_DELIVERY_OUTCOME") == "${{ steps.direct_apk_delivery.outcome }}"
+abort("final Slack notification must consume durable delivery phase metadata") unless final_notification.dig("env", "DIRECT_APK_DELIVERY_PHASE_PATH") == "${{ runner.temp }}/buildcommit-slack-upload-${{ github.run_id }}-${{ github.run_attempt }}.phase"
+final_notification_script = final_notification.fetch("run")
+abort("successful direct APK delivery must suppress the duplicate success webhook") unless final_notification_script.include?("skipping a duplicate webhook message") && final_notification_script.include?("exit 0")
+abort("failed direct APK delivery must produce an explicit warning status") unless final_notification_script.include?("build_status=apk_delivery_failure")
+abort("ambiguous Slack completion must suppress a contradictory failure webhook") unless final_notification_script.include?("completion-ambiguous") && final_notification_script.include?("durable pending receipt blocks duplicate APK delivery")
+abort("confirmed durable delivery must suppress a contradictory failure webhook") unless final_notification_script.include?("receipt-delivered") && final_notification_script.include?("delivery receipt confirms success")
+abort("final Slack notification must use the synchronized local helper") unless final_notification_script.include?('bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"')
+
+failure_step = step_by_id.call("build_result")
 abort("final build failure aggregation is missing") unless failure_step
 abort("deferred Store upload failure is not aggregated") unless failure_step.dig("env", "FIRST_STORE_UPLOAD_OUTCOME") == "${{ steps.first_store_upload.outcome }}"
 abort("deferred Store cleanup failure is not aggregated") unless failure_step.dig("env", "STORE_UPLOAD_CLEANUP_OUTCOME") == "${{ steps.store_upload_cleanup.outcome }}"
 
+final_cleanup = steps.find { |step| step["name"] == "Final cleanup while preserving Unity Library" }
+abort("final cleanup must expose a stable step id") unless final_cleanup.fetch("id") == "final_cleanup"
+abort("final cleanup must finish before result aggregation") unless steps.index(final_cleanup) < steps.index(failure_step)
+abort("result aggregation must finish before direct APK delivery") unless steps.index(failure_step) < step_index.call("direct_apk_delivery")
+abort("direct APK delivery must run before final notification") unless step_index.call("direct_apk_delivery") < steps.index(final_notification)
+phase_cleanup = steps.find { |step| step["name"] == "Remove Slack delivery phase marker" }
+abort("Slack phase cleanup is missing") unless phase_cleanup
+abort("Slack phase cleanup must be advisory") unless phase_cleanup["continue-on-error"] == true
+abort("Slack phase cleanup must run after final notification") unless steps.index(final_notification) < steps.index(phase_cleanup)
+
 abort("Android composite action is not wired") unless steps.any? { |step| step["uses"] == "./.github/actions/build-android" }
 abort("iOS composite action is not wired") unless steps.any? { |step| step["uses"] == "./.github/actions/build-ios" }
-abort("final Library-preserving cleanup is missing") unless steps.any? { |step| step["name"] == "Final cleanup while preserving Unity Library" }
+abort("final Library-preserving cleanup is missing") unless final_cleanup
 
 android_action = YAML.load_file(android_action_path)
 ios_action = YAML.load_file(ios_action_path)
@@ -202,12 +273,10 @@ abort("deferred Google Play upload wrapper is missing") unless android_deferred_
 development_apk = android_steps.find { |step| step["id"] == "apk" }
 abort("fresh Development APK locator is missing") unless development_apk
 abort("Development APK locator must use the build marker") unless development_apk.fetch("run").include?("steps.build_timer.outputs.marker_path")
-development_artifact = android_steps.find { |step| step["name"] == "Upload Development APK artifact" }
-abort("Development APK GitHub Artifact fallback is missing") unless development_artifact
-expected_apk_artifact_name = "Android-BuildCommit-Development-APK-${{ github.run_id }}-${{ github.run_attempt }}"
-abort("Development APK artifact must be unique to the workflow run attempt") unless development_artifact.dig("with", "name") == expected_apk_artifact_name
-abort("Development APK artifact must expire after one day") unless development_artifact.dig("with", "retention-days") == 1
-abort("Development APK artifact quota failures must not change the source build result") unless development_artifact.fetch("continue-on-error") == true
+expected_development_apk_output = "${{ steps.apk.outputs.path }}"
+abort("Android action must expose the fresh Development APK path") unless android_action.dig("outputs", "development-apk-path", "value") == expected_development_apk_output
+abort("Development APK must not be relayed through GitHub Artifact") if android_steps.any? { |step| step["name"] == "Upload Development APK artifact" }
+abort("legacy Development APK Artifact name must be removed") if android_action.to_s.include?("Android-BuildCommit-Development-APK")
 aab_locator = android_steps.find { |step| step["id"] == "aab" }
 abort("fresh AAB staging is missing") unless aab_locator
 abort("non-Development AAB staging must support non-Store recovery") unless aab_locator.fetch("if") == "inputs.development-build != 'true'"

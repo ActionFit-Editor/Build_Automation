@@ -32,6 +32,9 @@ case "$last_argument" in
     printf 'uploaded\n'
     ;;
   */files.completeUploadExternal)
+    if [ "${FAKE_SLACK_COMPLETE_MODE:-success}" = "transport-failure" ]; then
+      exit 22
+    fi
     printf '{"ok":true}\n'
     ;;
   https://hooks.slack.com/services/*)
@@ -107,17 +110,26 @@ chmod +x "$fixture_root/bin/curl"
 
 apk_path="$fixture_root/development.apk"
 printf 'development-apk\n' > "$apk_path"
+slack_secret_root="$fixture_root/build-automation"
+mkdir -p "$slack_secret_root/shared"
+printf 'xoxb-fixture-token\n' > "$slack_secret_root/shared/slack-bot-token"
+printf 'C12345678\n' > "$slack_secret_root/shared/slack-channel-id"
 slack_github_output="$fixture_root/slack-github-output"
 slack_upload_phase="$fixture_root/slack-upload-phase"
+slack_fixture_repository="ActionFitGames/FixtureProject"
+slack_fixture_sha="0123456789abcdef0123456789abcdef01234567"
 : > "$slack_github_output"
 : > "$slack_upload_phase"
 slack_output="$(
   PATH="$fixture_root/bin:$PATH" \
   FAKE_CURL_LOG="$fixture_root/curl.log" \
   GITHUB_OUTPUT="$slack_github_output" \
+  GITHUB_REPOSITORY="$slack_fixture_repository" \
+  GITHUB_RUN_ID=1001 \
+  GITHUB_RUN_ATTEMPT=1 \
+  GITHUB_SHA="$slack_fixture_sha" \
   SLACK_UPLOAD_PHASE_PATH="$slack_upload_phase" \
-  SLACK_BUILD_BOT_TOKEN="xoxb-fixture-token" \
-  SLACK_BUILD_CHANNEL_ID="C12345678" \
+  CI_SECRET_ROOT="$slack_secret_root" \
   SLACK_FILE_PATH="$apk_path" \
   BUILD_PROJECT_NAME="FixtureProject" \
   BUILD_VERSION="5.5.5" \
@@ -133,6 +145,8 @@ if printf '%s\n' "$slack_output" | grep -v '^::add-mask::' | grep -F 'xoxb-fixtu
 fi
 grep -F 'files.getUploadURLExternal' "$fixture_root/curl.log" >/dev/null
 grep -F 'files.completeUploadExternal' "$fixture_root/curl.log" >/dev/null
+grep -Fx -- '--max-time' "$fixture_root/curl.log" >/dev/null
+grep -Fx '1800' "$fixture_root/curl.log" >/dev/null
 grep -Fx 'slack_file_id=F123' "$slack_github_output" >/dev/null
 grep -Fx 'completed' "$slack_upload_phase" >/dev/null
 grep -F '[DEVELOPMENT BUILD] [OK] FixtureProject Android BuildCommit SUCCESS - v5.5.5(555)' "$fixture_root/curl.log" >/dev/null
@@ -143,6 +157,73 @@ if grep -E '<!channel>|<@U99999999>' "$fixture_root/curl.log" >/dev/null; then
   exit 1
 fi
 
+completed_network_calls="$(grep -c 'files.getUploadURLExternal' "$fixture_root/curl.log")"
+: > "$slack_upload_phase"
+PATH="$fixture_root/bin:$PATH" \
+FAKE_CURL_LOG="$fixture_root/curl.log" \
+GITHUB_OUTPUT="$slack_github_output" \
+GITHUB_REPOSITORY="$slack_fixture_repository" \
+GITHUB_RUN_ID=1001 \
+GITHUB_RUN_ATTEMPT=2 \
+GITHUB_SHA="$slack_fixture_sha" \
+SLACK_UPLOAD_PHASE_PATH="$slack_upload_phase" \
+CI_SECRET_ROOT="$slack_secret_root" \
+SLACK_FILE_PATH="$apk_path" \
+  bash "$slack_uploader" >/dev/null
+grep -Fx 'receipt-delivered' "$slack_upload_phase" >/dev/null
+if [ "$(grep -c 'files.getUploadURLExternal' "$fixture_root/curl.log")" -ne "$completed_network_calls" ]; then
+  echo "Delivered Slack receipt must suppress duplicate network upload on rerun" >&2
+  exit 1
+fi
+
+ambiguous_phase="$fixture_root/ambiguous-upload-phase"
+ambiguous_log="$fixture_root/ambiguous-upload.log"
+: > "$ambiguous_phase"
+set +e
+PATH="$fixture_root/bin:$PATH" \
+FAKE_CURL_LOG="$ambiguous_log" \
+FAKE_SLACK_COMPLETE_MODE=transport-failure \
+GITHUB_REPOSITORY="$slack_fixture_repository" \
+GITHUB_RUN_ID=1004 \
+GITHUB_RUN_ATTEMPT=1 \
+GITHUB_SHA="$slack_fixture_sha" \
+SLACK_UPLOAD_PHASE_PATH="$ambiguous_phase" \
+CI_SECRET_ROOT="$slack_secret_root" \
+SLACK_FILE_PATH="$apk_path" \
+  bash "$slack_uploader" >/dev/null
+ambiguous_status=$?
+set -e
+if [ "$ambiguous_status" -ne 2 ]; then
+  echo "Ambiguous Slack completion must fail the advisory delivery step" >&2
+  exit 1
+fi
+grep -Fx 'completion-ambiguous' "$ambiguous_phase" >/dev/null
+ambiguous_network_calls="$(grep -c 'files.getUploadURLExternal' "$ambiguous_log")"
+
+: > "$ambiguous_phase"
+set +e
+PATH="$fixture_root/bin:$PATH" \
+FAKE_CURL_LOG="$ambiguous_log" \
+GITHUB_REPOSITORY="$slack_fixture_repository" \
+GITHUB_RUN_ID=1004 \
+GITHUB_RUN_ATTEMPT=2 \
+GITHUB_SHA="$slack_fixture_sha" \
+SLACK_UPLOAD_PHASE_PATH="$ambiguous_phase" \
+CI_SECRET_ROOT="$slack_secret_root" \
+SLACK_FILE_PATH="$apk_path" \
+  bash "$slack_uploader" >/dev/null
+pending_status=$?
+set -e
+if [ "$pending_status" -ne 4 ]; then
+  echo "Armed pending Slack receipt must block a duplicate rerun" >&2
+  exit 1
+fi
+grep -Fx 'receipt-pending' "$ambiguous_phase" >/dev/null
+if [ "$(grep -c 'files.getUploadURLExternal' "$ambiguous_log")" -ne "$ambiguous_network_calls" ]; then
+  echo "Pending Slack receipt must block duplicate network upload" >&2
+  exit 1
+fi
+
 invalid_receipt_output="$fixture_root/invalid-receipt-output"
 : > "$invalid_receipt_output"
 set +e
@@ -150,6 +231,11 @@ PATH="$fixture_root/bin:$PATH" \
 FAKE_CURL_LOG="$fixture_root/invalid-receipt-curl.log" \
 FAKE_SLACK_FILE_ID='invalid/file-id' \
 GITHUB_OUTPUT="$invalid_receipt_output" \
+CI_SECRET_ROOT="$slack_secret_root" \
+GITHUB_REPOSITORY="$slack_fixture_repository" \
+GITHUB_RUN_ID=1002 \
+GITHUB_RUN_ATTEMPT=1 \
+GITHUB_SHA="$slack_fixture_sha" \
 SLACK_BUILD_BOT_TOKEN="xoxb-fixture-token" \
 SLACK_BUILD_CHANNEL_ID="C12345678" \
 SLACK_FILE_PATH="$apk_path" \
@@ -167,6 +253,11 @@ fi
 
 PATH="$fixture_root/bin:$PATH" \
 FAKE_CURL_LOG="$fixture_root/hostile-upload.log" \
+CI_SECRET_ROOT="$slack_secret_root" \
+GITHUB_REPOSITORY="$slack_fixture_repository" \
+GITHUB_RUN_ID=1003 \
+GITHUB_RUN_ATTEMPT=1 \
+GITHUB_SHA="$slack_fixture_sha" \
 SLACK_BUILD_BOT_TOKEN="xoxb-fixture-token" \
 SLACK_BUILD_CHANNEL_ID="C12345678" \
 SLACK_FILE_PATH="$apk_path" \
@@ -234,8 +325,22 @@ missing_config_output="$(
 )"
 missing_config_status=$?
 set -e
-if [ "$missing_config_status" -ne 2 ] || ! printf '%s\n' "$missing_config_output" | grep -F 'GitHub Artifact fallback' >/dev/null; then
-  echo "Missing Slack Bot configuration must produce a nonfatal fallback signal" >&2
+if [ "$missing_config_status" -ne 2 ] || ! printf '%s\n' "$missing_config_output" | grep -F 'direct APK delivery failed' >/dev/null; then
+  echo "Missing Slack Bot configuration must produce a nonfatal direct-delivery signal" >&2
+  exit 1
+fi
+
+set +e
+invalid_timeout_output="$(
+  CI_SECRET_ROOT="$slack_secret_root" \
+  SLACK_FILE_PATH="$apk_path" \
+  SLACK_FILE_UPLOAD_TIMEOUT_SECONDS=invalid \
+    bash "$slack_uploader" 2>&1
+)"
+invalid_timeout_status=$?
+set -e
+if [ "$invalid_timeout_status" -ne 2 ] || ! printf '%s\n' "$invalid_timeout_output" | grep -F 'timeouts must be positive integers' >/dev/null; then
+  echo "Invalid Slack upload timeout must fail before any network request" >&2
   exit 1
 fi
 
