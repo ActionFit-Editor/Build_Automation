@@ -21,19 +21,10 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- \uC0AC\uB78C\uC774 \uC77D\uB294 README\uC758 \uC804\uCCB4 \uC124\uBA85\uC744
-    \uD55C\uAD6D\uC5B4 \uC911\uC2EC\uC73C\uB85C \uB2E4\uC2DC \uC791\uC131\uD588\uC2B5\uB2C8\uB2E4.\n-
-    \uD328\uD0A4\uC9C0 ID, API\xB7\uD0C0\uC785 \uC774\uB984, Unity \uBA54\uB274 \uACBD\uB85C,
-    \uBA85\uB839\uC5B4, \uC124\uC815 \uD0A4, \uD30C\uC77C \uACBD\uB85C\uC640 \uCF54\uB4DC
-    \uC608\uC81C\uB294 \uC815\uD655\uC131\uC744 \uC704\uD574 \uC6D0\uBB38 \uD45C\uAE30\uB97C
-    \uC720\uC9C0\uD588\uC2B5\uB2C8\uB2E4.\n- \uBB38\uC11C\uB9CC \uC815\uBE44\uD588\uC73C\uBA70
-    \uAE30\uC874 Runtime/Editor API, \uC9C1\uB82C\uD654 \uB370\uC774\uD130, \uD504\uB85C\uC81D\uD2B8
-    \uC124\uC815\uACFC \uB3D9\uC791\uC740 \uBCC0\uACBD\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.\n-
-    Caution: \uC678\uBD80 \uC81C\uD488\uBA85\uACFC \uC124\uCE58 \uBA85\uB839\uC758
-    \uACE0\uC720 \uD45C\uAE30\uB294 \uBC88\uC5ED \uB300\uC0C1\uC5D0\uC11C \uC81C\uC678\uD588\uC2B5\uB2C8\uB2E4.\n-
-    package.json\uC758 ActionFit dependency\uB97C \uCD5C\uC2E0 \uC900\uBE44 \uBC84\uC804\uC73C\uB85C
-    \uAC31\uC2E0\uD588\uC2B5\uB2C8\uB2E4: com.actionfit.buildsetting 1.1.11 -> 1.1.12,
-    com.actionfit.customsymbols 1.0.7 -> 1.0.8, com.actionfit.githubauth 1.0.8 ->
-    1.0.9."
-  _dependenciesOverride: com.actionfit.githubauth@1.0.8, com.actionfit.buildsetting@1.1.11,
-    com.actionfit.customsymbols@1.0.7
+  _releaseNote: "- BuildAutomationSettingsSO \uD0D0\uC0C9\uACFC \uC0DD\uC131\uC744
+    \uACF5\uD1B5 provider\uB85C \uD1B5\uD569\uD588\uC2B5\uB2C8\uB2E4.\n- Build Setting
+    1.1.13\uACFC Custom Symbols 1.0.9 \uC124\uC815 \uC218\uBA85\uC8FC\uAE30\uB97C
+    \uC5F0\uB3D9\uD588\uC2B5\uB2C8\uB2E4.\n- \uAE30\uC874 EditorPrefs \uC120\uD0DD\uACFC
+    \uBE4C\uB4DC \uC124\uC815 \uAC12\uC744 \uBCF4\uC874\uD569\uB2C8\uB2E4."
+  _dependenciesOverride: com.actionfit.githubauth@1.0.9, com.actionfit.buildsetting@1.1.13,
+    com.actionfit.customsymbols@1.0.9, com.actionfit.sosingleton@1.0.6

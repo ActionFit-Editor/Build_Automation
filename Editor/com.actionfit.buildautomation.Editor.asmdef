@@ -1,7 +1,10 @@
 {
     "name": "com.actionfit.buildautomation.Editor",
     "rootNamespace": "ActionFit.BuildAutomation.Editor",
-    "references": [],
+    "references": [
+        "com.actionfit.sosingleton",
+        "com.actionfit.sosingleton.Editor"
+    ],
     "includePlatforms": [
         "Editor"
     ],
