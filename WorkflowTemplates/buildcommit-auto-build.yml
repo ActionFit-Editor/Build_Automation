@@ -675,7 +675,7 @@ jobs:
 
           if [ "$build_status" = success ] && [ "$ANDROID_DEVELOPMENT_BUILD" = true ]; then
             if [ "$DIRECT_APK_DELIVERY_OUTCOME" = success ]; then
-              echo "Slack success was delivered with the Development APK; skipping a duplicate webhook message."
+              echo "Slack success was delivered with the Development APK; skipping a duplicate result message."
               exit 0
             fi
             direct_delivery_phase=""
@@ -684,7 +684,7 @@ jobs:
             fi
             case "$direct_delivery_phase" in
               completed|receipt-delivered)
-                echo "Slack delivery receipt confirms success; skipping a contradictory failure webhook."
+                echo "Slack delivery receipt confirms success; skipping a contradictory failure message."
                 exit 0
                 ;;
               completion-attempted|completion-ambiguous|receipt-pending)

@@ -2,8 +2,11 @@
 set -euo pipefail
 
 secret_root="${CI_SECRET_ROOT:-$HOME/ci-secrets/build-automation}"
-webhook_file="${SLACK_WEBHOOK_URL_FILE:-$secret_root/shared/slack-webhook-url}"
-webhook_url="${SLACK_BUILD_WEBHOOK_URL:-${SLACK_WEBHOOK_URL:-}}"
+token_file="${SLACK_BOT_TOKEN_FILE:-$secret_root/shared/slack-bot-token}"
+channel_file="${SLACK_CHANNEL_ID_FILE:-$secret_root/shared/slack-channel-id}"
+bot_token="${SLACK_BUILD_BOT_TOKEN:-}"
+channel_id="${SLACK_BUILD_CHANNEL_ID:-}"
+api_base_url="${SLACK_API_BASE_URL:-https://slack.com/api}"
 mentions="${SLACK_BUILD_MENTIONS:-${SLACK_MENTIONS:-}}"
 api_timeout_seconds="${SLACK_API_TIMEOUT_SECONDS:-60}"
 
@@ -23,8 +26,11 @@ read_first_value() {
     "$path"
 }
 
-if [ -z "$webhook_url" ]; then
-  webhook_url="$(read_first_value "$webhook_file")"
+if [ -z "$bot_token" ]; then
+  bot_token="$(read_first_value "$token_file")"
+fi
+if [ -z "$channel_id" ]; then
+  channel_id="$(read_first_value "$channel_file")"
 fi
 
 if ! [[ "$api_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
@@ -32,17 +38,17 @@ if ! [[ "$api_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
   exit 0
 fi
 
-if [ -z "$webhook_url" ]; then
-  echo "Slack webhook URL is not configured; skipping build notification."
+if [ -z "$bot_token" ] || [ -z "$channel_id" ]; then
+  echo "Slack Bot token or channel ID is not configured; skipping build notification."
   exit 0
 fi
 
-if [[ "$webhook_url" != https://hooks.slack.com/services/* ]]; then
-  echo "::warning::Slack webhook URL is not a Slack Incoming Webhook URL; skipping build notification."
+if [[ ! "$channel_id" =~ ^[CGD][A-Z0-9]+$ ]]; then
+  echo "::warning::Slack channel ID is invalid; skipping build notification."
   exit 0
 fi
 
-echo "::add-mask::$webhook_url"
+echo "::add-mask::$bot_token"
 
 status="${BUILD_JOB_STATUS:-${1:-unknown}}"
 status_normalized="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
@@ -143,6 +149,7 @@ if [ "$status_symbol" != "Start" ] \
 fi
 
 payload="$(
+  CHANNEL_ID="$channel_id" \
   PROJECT_NAME="$project_name" \
   PLATFORM="$platform" \
   STATUS_LABEL="$status_label" \
@@ -158,6 +165,7 @@ payload="$(
   RUN_URL="$run_url" \
   SLACK_MENTIONS="$mentions" \
   ruby -rjson <<'RUBY'
+channel_id = ENV.fetch("CHANNEL_ID")
 project_name = ENV.fetch("PROJECT_NAME", "")
 platform = ENV.fetch("PLATFORM", "")
 status_label = ENV.fetch("STATUS_LABEL", "")
@@ -201,18 +209,24 @@ lines << "Profile: #{distribution_profile}" unless distribution_profile.empty?
 lines << "Commit: #{short_sha}" unless short_sha.empty?
 lines << "Run: #{run_url}" unless run_url.empty?
 
-puts JSON.generate({ text: lines.join("\n") })
+puts JSON.generate({ channel: channel_id, text: lines.join("\n") })
 RUBY
 )"
 
-if ! curl --fail --silent --show-error \
+response="$(curl --fail --silent --show-error \
   --connect-timeout 15 \
   --max-time "$api_timeout_seconds" \
   -X POST \
-  -H "Content-type: application/json" \
+  -H "Authorization: Bearer $bot_token" \
+  -H "Content-Type: application/json; charset=utf-8" \
   --data "$payload" \
-  "$webhook_url" >/dev/null; then
+  "$api_base_url/chat.postMessage")" || {
   echo "::warning::Slack build notification failed."
+  exit 0
+}
+
+if ! SLACK_RESPONSE="$response" ruby -rjson -e 'response = JSON.parse(ENV.fetch("SLACK_RESPONSE")); exit(response["ok"] ? 0 : 1)' 2>/dev/null; then
+  echo "::warning::Slack rejected the build notification."
   exit 0
 fi
 

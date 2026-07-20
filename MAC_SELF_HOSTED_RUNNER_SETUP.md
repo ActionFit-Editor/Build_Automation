@@ -248,7 +248,7 @@ gh auth setup-git --hostname github.com
 
 `gh auth`를 사용할 수 없는 runner라면 `shared/github-package-read-token` 파일의 첫 non-comment line에 private ActionFit package repo read 권한이 있는 fine-grained token을 넣습니다. workflow는 Unity 실행 전에 이 credential을 준비하고 `$UNITY_PROJECT_DIR/Packages/manifest.json`의 ActionFit GitHub package 접근을 `git ls-remote`로 사전 확인합니다.
 
-Slack 알림과 Development APK 전송은 성공한 `mobile-build` job이 직접 수행합니다. `shared/slack-webhook-url`은 시작/실패 알림, `shared/slack-bot-token`과 `shared/slack-channel-id`는 APK 파일 게시에 사용합니다. Android가 먼저 끝난 Both 요청도 iOS와 지연 Store 업로드가 모두 성공한 뒤 APK를 전송하며, 성공 메시지는 APK 게시물에 포함됩니다. Slack 실패는 빌드 결과를 바꾸지 않고 `BUILD SUCCESS / APK DELIVERY FAILED` 경고를 시도합니다.
+Slack 알림과 Development APK 전송은 성공한 `mobile-build` job이 직접 수행합니다. 시작·실패·일반 성공 메시지와 APK 파일 게시 모두 `shared/slack-bot-token`과 `shared/slack-channel-id`를 사용합니다. Bot에는 `chat:write`, `files:write` 권한과 대상 채널 참여가 필요하며 `shared/slack-webhook-url`은 구버전 호환용으로만 남습니다. Android가 먼저 끝난 Both 요청도 iOS와 지연 Store 업로드가 모두 성공한 뒤 APK를 전송하며, 성공 메시지는 APK 게시물에 포함됩니다. Slack 실패는 빌드 결과를 바꾸지 않고 같은 채널에 `BUILD SUCCESS / APK DELIVERY FAILED` 경고를 시도합니다.
 
 Slack 사람 태그는 AutoBuild 창의 `Slack Mentions` 행 목록에서 설정합니다. 각 행은 `Mention` 체크박스, `Member ID`, `Memo`를 가지며 BuildAutomation 패키지의 `BuildAutomationSettingsSO`에 저장되어 프로젝트에서 공유됩니다. 기본 에셋 경로는 `Assets/_Data/_BuildAutomation/BuildAutomationSettingsSO.asset`입니다. `Mention`이 체크된 행의 `Member ID`만 `.build/build_request.json`의 `slackMentions` JSON 배열로 직렬화되어 mobile build workflow에 전달됩니다. `Memo`는 request에 포함되지 않고 AutoBuild 창에서 식별용으로 보입니다. 표시 이름이나 Slack markup이 아니라 raw `U12345678` 또는 `W12345678` 형식만 사용합니다.
 

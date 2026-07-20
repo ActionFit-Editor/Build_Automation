@@ -57,16 +57,16 @@ write_if_missing "$secret_root/shared/github-package-read-token" \
   "# Required access: read-only Contents access to private ActionFit package repositories."
 
 write_if_missing "$secret_root/shared/slack-webhook-url" \
-  "# Optional Slack Incoming Webhook URL for BuildCommit start/result notifications." \
-  "# Put one https://hooks.slack.com/services/... URL on the first non-comment line."
+  "# Legacy only: older Build Automation versions may use this Incoming Webhook URL." \
+  "# Current versions use slack-bot-token and slack-channel-id for every Slack post."
 
 write_if_missing "$secret_root/shared/slack-bot-token" \
-  "# Slack Bot token for direct Development APK uploads." \
-  "# Required scope: files:write. The bot must be a member of the target channel." \
+  "# Slack Bot token for BuildCommit notifications and Development APK uploads." \
+  "# Required scopes: chat:write and files:write. The bot must be a member of the target channel." \
   "# Put one xoxb-... token on the first non-comment line."
 
 write_if_missing "$secret_root/shared/slack-channel-id" \
-  "# Shared Slack destination channel ID for Development APK uploads." \
+  "# Shared Slack destination channel ID for every BuildCommit notification and APK upload." \
   "# Put one C..., G..., or D... channel ID on the first non-comment line."
 
 write_if_missing "$secret_root/profiles/actionfit/profile.env" \
@@ -108,9 +108,9 @@ Next:
      - $secret_root/shared/android-signing.env
      - $secret_root/shared/ios-keychain.env
      - $secret_root/shared/github-package-read-token (optional, only when gh auth is unavailable)
-     - $secret_root/shared/slack-webhook-url (optional, for build notifications)
-     - $secret_root/shared/slack-bot-token (for direct Development APK upload)
-     - $secret_root/shared/slack-channel-id (for direct Development APK upload)
+     - $secret_root/shared/slack-webhook-url (legacy, for older package versions only)
+     - $secret_root/shared/slack-bot-token (for all BuildCommit Slack posts)
+     - $secret_root/shared/slack-channel-id (shared destination for all BuildCommit Slack posts)
      - $secret_root/profiles/actionfit/profile.env
      - $secret_root/profiles/actionfit/android-signing.env (optional override)
      - $secret_root/profiles/stormborn/profile.env

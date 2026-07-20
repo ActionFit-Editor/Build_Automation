@@ -5,9 +5,10 @@ package_root="$(cd "$(dirname "$0")/../.." && pwd -P)"
 workflow="$package_root/WorkflowTemplates/buildcommit-auto-build.yml"
 android_action="$package_root/.github/actions/build-android/action.yml"
 ios_action="$package_root/.github/actions/build-ios/action.yml"
+slack_notifier="$package_root/.github/scripts/notify-slack-build-result.sh"
 
-ruby -ryaml - "$workflow" "$android_action" "$ios_action" <<'RUBY'
-workflow_path, android_action_path, ios_action_path = ARGV
+ruby -ryaml - "$workflow" "$android_action" "$ios_action" "$slack_notifier" <<'RUBY'
+workflow_path, android_action_path, ios_action_path, slack_notifier_path = ARGV
 workflow = YAML.load_file(workflow_path)
 jobs = workflow.fetch("jobs")
 abort("expected allocate then mobile-build jobs") unless jobs.keys == ["allocate", "mobile-build"]
@@ -49,6 +50,12 @@ abort("unexpected affinity runner labels: #{runs_on.inspect}") unless runs_on ==
 abort("workflow must not use GitHub Secrets for runner-local credentials") if workflow.to_s.include?("${{ secrets.")
 abort("workflow must not embed a Slack Bot token") if workflow.to_s.match?(/xox[baprs]-[A-Za-z0-9-]+/i)
 abort("workflow must not embed a Slack webhook URL") if workflow.to_s.match?(%r{https://hooks\.slack\.com/services/}i)
+
+slack_notifier = File.read(slack_notifier_path)
+abort("Slack notifier must use the shared Bot token") unless slack_notifier.include?("shared/slack-bot-token")
+abort("Slack notifier must use the shared channel ID") unless slack_notifier.include?("shared/slack-channel-id")
+abort("Slack notifier must post through chat.postMessage") unless slack_notifier.include?("chat.postMessage")
+abort("Slack notifier must not use the legacy Incoming Webhook") if slack_notifier.match?(/slack-webhook-url|hooks\.slack\.com|SLACK_(?:BUILD_)?WEBHOOK_URL/i)
 
 workflow_environment = workflow.fetch("env")
 abort("Store upload timeout is missing") unless workflow_environment.fetch("STORE_UPLOAD_TIMEOUT_SECONDS") == 3600
@@ -210,10 +217,10 @@ abort("final Slack notification must consume durable delivery phase metadata") u
 abort("final Slack notification must consume the effective iOS build number") unless final_notification.dig("env", "BUILD_IOS_EFFECTIVE_BUNDLE_NO") == "${{ steps.ios_first.outputs.effective-bundle-no || steps.ios_second.outputs.effective-bundle-no }}"
 final_notification_script = final_notification.fetch("run")
 abort("iOS-only Slack metadata must use the effective TestFlight build number") unless final_notification_script.include?('BUILD_IOS_EFFECTIVE_BUNDLE_NO:-$REQUEST_BUNDLE_NO')
-abort("successful direct APK delivery must suppress the duplicate success webhook") unless final_notification_script.include?("skipping a duplicate webhook message") && final_notification_script.include?("exit 0")
+abort("successful direct APK delivery must suppress the duplicate success message") unless final_notification_script.include?("skipping a duplicate result message") && final_notification_script.include?("exit 0")
 abort("failed direct APK delivery must produce an explicit warning status") unless final_notification_script.include?("build_status=apk_delivery_failure")
-abort("ambiguous Slack completion must suppress a contradictory failure webhook") unless final_notification_script.include?("completion-ambiguous") && final_notification_script.include?("durable pending receipt blocks duplicate APK delivery")
-abort("confirmed durable delivery must suppress a contradictory failure webhook") unless final_notification_script.include?("receipt-delivered") && final_notification_script.include?("delivery receipt confirms success")
+abort("ambiguous Slack completion must suppress a contradictory failure message") unless final_notification_script.include?("completion-ambiguous") && final_notification_script.include?("durable pending receipt blocks duplicate APK delivery")
+abort("confirmed durable delivery must suppress a contradictory failure message") unless final_notification_script.include?("receipt-delivered") && final_notification_script.include?("delivery receipt confirms success")
 abort("final Slack notification must use the synchronized local helper") unless final_notification_script.include?('bash "$REPOSITORY_ROOT/.github/scripts/notify-slack-build-result.sh"')
 
 failure_step = step_by_id.call("build_result")

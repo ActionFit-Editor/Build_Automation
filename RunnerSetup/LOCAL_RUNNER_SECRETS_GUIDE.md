@@ -105,7 +105,7 @@ REPLACE_WITH_READ_ONLY_GITHUB_TOKEN
 
 This file is used only when the runner user does not already have working `gh auth` Git credential setup. Put one read-only token on the first non-comment line. The token must be able to read private ActionFit GitHub package repositories used by `$UNITY_PROJECT_DIR/Packages/manifest.json`.
 
-`shared/slack-webhook-url` contains the optional Incoming Webhook URL used for one start notification and final failure/non-APK result notifications. `shared/slack-bot-token` contains a Bot token with `files:write`, and `shared/slack-channel-id` contains the common destination channel ID. The Bot must be a channel member. Development APKs are uploaded directly from the runner that created them; do not put these values in GitHub Secrets or BuildRequest.
+`shared/slack-bot-token` contains the Bot token used for every BuildCommit message and Development APK upload. It requires `chat:write` and `files:write`. `shared/slack-channel-id` is the single destination for all of those posts, and the Bot must be a channel member. `shared/slack-webhook-url` may remain for older package versions, but current helpers do not read it. Development APKs are uploaded directly from the runner that created them; do not put these values in GitHub Secrets or BuildRequest.
 
 `state/slack-apk-delivery` is created automatically with mode `0700`; each `0600` receipt records only repository/run identity, source commit, attempt number, Slack file ID, timestamps, and pending/delivered state. It never stores a token, upload URL, APK path, or APK bytes. Because this state prevents duplicate posts across runners and GitHub reruns, every trusted Unity runner must see the same writable state directory.
 
@@ -186,10 +186,10 @@ Private package access:
 
 Slack notification:
 
-- The affinity `mobile-build` job sends one start webhook after resolving the shared bundle.
+- The affinity `mobile-build` job sends its start and result messages through the same Bot and channel used for APK delivery.
 - Android exposes only the APK produced after its current phase marker. The top-level workflow waits for all requested platforms and deferred Store uploads to succeed before uploading that local file directly to Slack.
-- A successful Development Android/Both request includes the success message in the APK post and skips a duplicate success webhook.
-- Missing credentials, an unreadable APK, timeout, and Slack API failure are advisory. They produce `BUILD SUCCESS / APK DELIVERY FAILED` when the webhook is available and do not change the successful Unity build result.
+- A successful Development Android/Both request includes the success message in the APK post and skips a duplicate success message.
+- Missing credentials, an unreadable APK, timeout, and Slack API failure are advisory. They produce `BUILD SUCCESS / APK DELIVERY FAILED` through `chat.postMessage` when possible and do not change the successful Unity build result.
 - Direct API calls use bounded timeouts. No Development APK GitHub Artifact or separate Slack delivery runner is involved.
 - A durable receipt keyed by repository and GitHub `run_id` prevents a rerun from posting the APK twice. Failures before Slack completion discard retry-safe state. Once completion is attempted, the pending receipt is preserved and duplicate uploads are blocked until an operator reconciles it.
 - For an armed pending receipt, use the path and Slack file ID printed by the upload step. First check the destination channel. If the APK post exists, run the receipt manager's `complete <FILE_ID>` operation with the original repository/run/SHA environment to mark it delivered. If the post is definitely absent, stop all attempts for that run, remove only the logged receipt JSON, and rerun the GitHub job. Never delete pending receipts through automatic age/LRU cleanup. Delivered receipts are tiny and may be retained; prune them only under an explicit long-retention policy while no delivery is active.

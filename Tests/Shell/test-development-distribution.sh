@@ -37,6 +37,9 @@ case "$last_argument" in
     fi
     printf '{"ok":true}\n'
     ;;
+  */chat.postMessage)
+    printf '{"ok":true,"channel":"C12345678","ts":"1234567890.000001"}\n'
+    ;;
   https://hooks.slack.com/services/*)
     ;;
   https://api.appstoreconnect.apple.com/v1/apps)
@@ -276,7 +279,7 @@ fi
 
 PATH="$fixture_root/bin:$PATH" \
 FAKE_CURL_LOG="$fixture_root/curl.log" \
-SLACK_BUILD_WEBHOOK_URL="https://hooks.slack.com/services/fixture" \
+CI_SECRET_ROOT="$slack_secret_root" \
 BUILD_JOB_STATUS=success \
 BUILD_PLATFORM=iOS \
 BUILD_PROJECT_NAME="FixtureProject" \
@@ -288,6 +291,8 @@ SLACK_BUILD_MENTIONS="W87654321 <!channel>" \
   bash "$slack_notifier" >/dev/null
 grep -F '[DEVELOPMENT BUILD] [OK] FixtureProject iOS BuildCommit SUCCESS - v5.5.5(42)' "$fixture_root/curl.log" >/dev/null
 grep -F 'iOS TestFlight: v5.5.5(42)' "$fixture_root/curl.log" >/dev/null
+grep -F 'chat.postMessage' "$fixture_root/curl.log" >/dev/null
+grep -F '"channel":"C12345678"' "$fixture_root/curl.log" >/dev/null
 grep -F '<@W87654321>' "$fixture_root/curl.log" >/dev/null
 if grep -F '<!channel>' "$fixture_root/curl.log" >/dev/null; then
   echo "Slack notifier must discard values outside the raw member ID allowlist" >&2
@@ -296,7 +301,7 @@ fi
 
 PATH="$fixture_root/bin:$PATH" \
 FAKE_CURL_LOG="$fixture_root/apk-delivery-failure.log" \
-SLACK_BUILD_WEBHOOK_URL="https://hooks.slack.com/services/fixture" \
+CI_SECRET_ROOT="$slack_secret_root" \
 BUILD_JOB_STATUS=apk_delivery_failure \
 BUILD_PLATFORM=Both \
 BUILD_PROJECT_NAME="FixtureProject" \
@@ -310,7 +315,7 @@ grep -F 'iOS TestFlight: v5.5.5(42)' "$fixture_root/apk-delivery-failure.log" >/
 
 PATH="$fixture_root/bin:$PATH" \
 FAKE_CURL_LOG="$fixture_root/failure-notify.log" \
-SLACK_BUILD_WEBHOOK_URL="https://hooks.slack.com/services/fixture" \
+CI_SECRET_ROOT="$slack_secret_root" \
 BUILD_JOB_STATUS=failure \
 BUILD_PLATFORM=Both \
 BUILD_PROJECT_NAME="FixtureProject" \
@@ -327,7 +332,7 @@ fi
 
 PATH="$fixture_root/bin:$PATH" \
 FAKE_CURL_LOG="$fixture_root/hostile-notify.log" \
-SLACK_BUILD_WEBHOOK_URL="https://hooks.slack.com/services/fixture" \
+CI_SECRET_ROOT="$slack_secret_root" \
 BUILD_JOB_STATUS=success \
 BUILD_PLATFORM=Android \
 BUILD_PROJECT_NAME="FixtureProject" \
