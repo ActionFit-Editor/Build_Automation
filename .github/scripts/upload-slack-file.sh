@@ -188,6 +188,7 @@ initial_comment="$(
   BUILD_PLATFORM="${BUILD_PLATFORM:-Android}" \
   BUILD_VERSION="${BUILD_VERSION:-}" \
   BUILD_BUNDLE_NO="${BUILD_BUNDLE_NO:-}" \
+  BUILD_IOS_EFFECTIVE_BUNDLE_NO="${BUILD_IOS_EFFECTIVE_BUNDLE_NO:-}" \
   BUILD_SHORT_SHA="${BUILD_SHORT_SHA:-${GITHUB_SHA:-}}" \
   BUILD_RUN_URL="${BUILD_RUN_URL:-}" \
   SLACK_BUILD_MENTIONS="${SLACK_BUILD_MENTIONS:-}" \
@@ -204,12 +205,17 @@ escape_mrkdwn = lambda do |value|
 end
 version = escape_mrkdwn.call(ENV.fetch("BUILD_VERSION", ""))
 bundle = escape_mrkdwn.call(ENV.fetch("BUILD_BUNDLE_NO", ""))
+ios_bundle = ENV.fetch("BUILD_IOS_EFFECTIVE_BUNDLE_NO", "").strip
 project = escape_mrkdwn.call(ENV.fetch("BUILD_PROJECT_NAME", "UnknownProject"))
 platform = escape_mrkdwn.call(ENV.fetch("BUILD_PLATFORM", "Android"))
 version_label = version.empty? ? "version unknown" : "v#{version.sub(/\A[vV]/, "")}"
 version_label += "(#{bundle})" unless bundle.empty?
 lines = ["[DEVELOPMENT BUILD] [OK] #{project} #{platform} BuildCommit SUCCESS - #{version_label}"]
 lines.unshift(mentions.join(" ")) unless mentions.empty?
+if ios_bundle.match?(/\A[1-9][0-9]*\z/)
+  ios_version_label = version.empty? ? "build #{ios_bundle}" : "v#{version.sub(/\A[vV]/, "")}(#{ios_bundle})"
+  lines << "iOS TestFlight: #{ios_version_label}"
+end
 sha = ENV.fetch("BUILD_SHORT_SHA", "")[0, 7]
 lines << "Commit: #{sha}" unless sha.empty?
 run_url = ENV.fetch("BUILD_RUN_URL", "")

@@ -54,6 +54,7 @@ if [ -z "$project_name" ]; then
 fi
 version="${BUILD_VERSION:-}"
 bundle_no="${BUILD_BUNDLE_NO:-}"
+ios_effective_bundle_no="${BUILD_IOS_EFFECTIVE_BUNDLE_NO:-}"
 distribution_profile="${BUILD_DISTRIBUTION_PROFILE:-}"
 development_build="$(printf '%s' "${BUILD_DEVELOPMENT_BUILD:-false}" | tr '[:upper:]' '[:lower:]')"
 run_url="${BUILD_RUN_URL:-${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-}}"
@@ -146,7 +147,10 @@ payload="$(
   PLATFORM="$platform" \
   STATUS_LABEL="$status_label" \
   STATUS_SYMBOL="$status_symbol" \
+  STATUS_NORMALIZED="$status_normalized" \
   VERSION_LABEL="$version_label" \
+  BUILD_VERSION="$version" \
+  IOS_EFFECTIVE_BUNDLE_NO="$ios_effective_bundle_no" \
   DURATION_LABEL="$duration_label" \
   DISTRIBUTION_PROFILE="$distribution_profile" \
   DEVELOPMENT_BUILD="$development_build" \
@@ -158,7 +162,10 @@ project_name = ENV.fetch("PROJECT_NAME", "")
 platform = ENV.fetch("PLATFORM", "")
 status_label = ENV.fetch("STATUS_LABEL", "")
 status_symbol = ENV.fetch("STATUS_SYMBOL", "")
+status_normalized = ENV.fetch("STATUS_NORMALIZED", "")
 version_label = ENV.fetch("VERSION_LABEL", "")
+build_version = ENV.fetch("BUILD_VERSION", "").strip
+ios_effective_bundle_no = ENV.fetch("IOS_EFFECTIVE_BUNDLE_NO", "").strip
 duration_label = ENV.fetch("DURATION_LABEL", "")
 distribution_profile = ENV.fetch("DISTRIBUTION_PROFILE", "")
 development_build = ENV.fetch("DEVELOPMENT_BUILD", "false") == "true"
@@ -184,6 +191,11 @@ development_label = development_build ? "[DEVELOPMENT BUILD] " : ""
 lines = ["#{development_label}[#{status_symbol}] #{project_name} #{platform} BuildCommit #{status_label} - #{version_label}"]
 
 lines.unshift(mentions) unless mentions.empty?
+if development_build && %w[success apk_delivery_failure].include?(status_normalized) && ios_effective_bundle_no.match?(/\A[1-9][0-9]*\z/)
+  escaped_build_version = escape_mrkdwn.call(build_version)
+  ios_version_label = escaped_build_version.empty? ? "build #{ios_effective_bundle_no}" : "v#{escaped_build_version.sub(/\A[vV]/, "")}(#{ios_effective_bundle_no})"
+  lines << "iOS TestFlight: #{ios_version_label}"
+end
 lines << "Time: #{duration_label}" unless duration_label.empty?
 lines << "Profile: #{distribution_profile}" unless distribution_profile.empty?
 lines << "Commit: #{short_sha}" unless short_sha.empty?

@@ -192,6 +192,7 @@ abort("direct APK delivery platform metadata is missing") unless direct_apk_deli
 abort("direct APK delivery project metadata is missing") unless direct_apk_delivery.dig("env", "BUILD_PROJECT_NAME") == "${{ steps.paths.outputs.unity_project_name }}"
 abort("direct APK delivery version metadata is missing") unless direct_apk_delivery.dig("env", "BUILD_VERSION") == "${{ steps.detect.outputs.build_version }}"
 abort("direct APK delivery bundle metadata is missing") unless direct_apk_delivery.dig("env", "BUILD_BUNDLE_NO") == "${{ steps.sequence.outputs.android_bundle_no }}"
+abort("direct APK delivery iOS version metadata is missing") unless direct_apk_delivery.dig("env", "BUILD_IOS_EFFECTIVE_BUNDLE_NO") == "${{ steps.ios_first.outputs.effective-bundle-no || steps.ios_second.outputs.effective-bundle-no }}"
 abort("direct APK delivery mentions metadata is missing") unless direct_apk_delivery.dig("env", "SLACK_BUILD_MENTIONS") == "${{ steps.detect.outputs.slack_mentions }}"
 abort("direct APK delivery commit metadata is missing") unless direct_apk_delivery.dig("env", "BUILD_SHORT_SHA") == "${{ github.sha }}"
 abort("direct APK delivery run URL metadata is missing") unless direct_apk_delivery.dig("env", "BUILD_RUN_URL") == "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -206,7 +207,9 @@ abort("final Slack notification must always report approved builds") unless fina
 abort("final Slack notification failure must not change the build result") unless final_notification.fetch("continue-on-error") == true
 abort("final Slack notification must consume the direct delivery outcome") unless final_notification.dig("env", "DIRECT_APK_DELIVERY_OUTCOME") == "${{ steps.direct_apk_delivery.outcome }}"
 abort("final Slack notification must consume durable delivery phase metadata") unless final_notification.dig("env", "DIRECT_APK_DELIVERY_PHASE_PATH") == "${{ runner.temp }}/buildcommit-slack-upload-${{ github.run_id }}-${{ github.run_attempt }}.phase"
+abort("final Slack notification must consume the effective iOS build number") unless final_notification.dig("env", "BUILD_IOS_EFFECTIVE_BUNDLE_NO") == "${{ steps.ios_first.outputs.effective-bundle-no || steps.ios_second.outputs.effective-bundle-no }}"
 final_notification_script = final_notification.fetch("run")
+abort("iOS-only Slack metadata must use the effective TestFlight build number") unless final_notification_script.include?('BUILD_IOS_EFFECTIVE_BUNDLE_NO:-$REQUEST_BUNDLE_NO')
 abort("successful direct APK delivery must suppress the duplicate success webhook") unless final_notification_script.include?("skipping a duplicate webhook message") && final_notification_script.include?("exit 0")
 abort("failed direct APK delivery must produce an explicit warning status") unless final_notification_script.include?("build_status=apk_delivery_failure")
 abort("ambiguous Slack completion must suppress a contradictory failure webhook") unless final_notification_script.include?("completion-ambiguous") && final_notification_script.include?("durable pending receipt blocks duplicate APK delivery")

@@ -21,10 +21,7 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: "- BuildAutomationSettingsSO \uD0D0\uC0C9\uACFC \uC0DD\uC131\uC744
-    \uACF5\uD1B5 provider\uB85C \uD1B5\uD569\uD588\uC2B5\uB2C8\uB2E4.\n- Build Setting
-    1.1.13\uACFC Custom Symbols 1.0.9 \uC124\uC815 \uC218\uBA85\uC8FC\uAE30\uB97C
-    \uC5F0\uB3D9\uD588\uC2B5\uB2C8\uB2E4.\n- \uAE30\uC874 EditorPrefs \uC120\uD0DD\uACFC
-    \uBE4C\uB4DC \uC124\uC815 \uAC12\uC744 \uBCF4\uC874\uD569\uB2C8\uB2E4."
+  _releaseNote: '- Development Build success Slack messages now include the actual
+    TestFlight iOS version and build number.'
   _dependenciesOverride: com.actionfit.githubauth@1.0.9, com.actionfit.buildsetting@1.1.13,
     com.actionfit.customsymbols@1.0.9, com.actionfit.sosingleton@1.0.6

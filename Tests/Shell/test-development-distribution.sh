@@ -132,8 +132,10 @@ slack_output="$(
   CI_SECRET_ROOT="$slack_secret_root" \
   SLACK_FILE_PATH="$apk_path" \
   BUILD_PROJECT_NAME="FixtureProject" \
+  BUILD_PLATFORM="Both" \
   BUILD_VERSION="5.5.5" \
   BUILD_BUNDLE_NO="555" \
+  BUILD_IOS_EFFECTIVE_BUNDLE_NO="42" \
   BUILD_SHORT_SHA="0123456789" \
   BUILD_RUN_URL="https://example.invalid/run" \
   SLACK_BUILD_MENTIONS="U12345678 <!channel> <@U99999999>" \
@@ -149,7 +151,8 @@ grep -Fx -- '--max-time' "$fixture_root/curl.log" >/dev/null
 grep -Fx '1800' "$fixture_root/curl.log" >/dev/null
 grep -Fx 'slack_file_id=F123' "$slack_github_output" >/dev/null
 grep -Fx 'completed' "$slack_upload_phase" >/dev/null
-grep -F '[DEVELOPMENT BUILD] [OK] FixtureProject Android BuildCommit SUCCESS - v5.5.5(555)' "$fixture_root/curl.log" >/dev/null
+grep -F '[DEVELOPMENT BUILD] [OK] FixtureProject Both BuildCommit SUCCESS - v5.5.5(555)' "$fixture_root/curl.log" >/dev/null
+grep -F 'iOS TestFlight: v5.5.5(42)' "$fixture_root/curl.log" >/dev/null
 grep -F '"channel_id":"C12345678"' "$fixture_root/curl.log" >/dev/null
 grep -F '<@U12345678>' "$fixture_root/curl.log" >/dev/null
 if grep -E '<!channel>|<@U99999999>' "$fixture_root/curl.log" >/dev/null; then
@@ -278,11 +281,13 @@ BUILD_JOB_STATUS=success \
 BUILD_PLATFORM=iOS \
 BUILD_PROJECT_NAME="FixtureProject" \
 BUILD_VERSION="5.5.5" \
-BUILD_BUNDLE_NO="1" \
+BUILD_BUNDLE_NO="42" \
+BUILD_IOS_EFFECTIVE_BUNDLE_NO="42" \
 BUILD_DEVELOPMENT_BUILD=true \
 SLACK_BUILD_MENTIONS="W87654321 <!channel>" \
   bash "$slack_notifier" >/dev/null
-grep -F '[DEVELOPMENT BUILD] [OK] FixtureProject iOS BuildCommit SUCCESS - v5.5.5(1)' "$fixture_root/curl.log" >/dev/null
+grep -F '[DEVELOPMENT BUILD] [OK] FixtureProject iOS BuildCommit SUCCESS - v5.5.5(42)' "$fixture_root/curl.log" >/dev/null
+grep -F 'iOS TestFlight: v5.5.5(42)' "$fixture_root/curl.log" >/dev/null
 grep -F '<@W87654321>' "$fixture_root/curl.log" >/dev/null
 if grep -F '<!channel>' "$fixture_root/curl.log" >/dev/null; then
   echo "Slack notifier must discard values outside the raw member ID allowlist" >&2
@@ -293,13 +298,31 @@ PATH="$fixture_root/bin:$PATH" \
 FAKE_CURL_LOG="$fixture_root/apk-delivery-failure.log" \
 SLACK_BUILD_WEBHOOK_URL="https://hooks.slack.com/services/fixture" \
 BUILD_JOB_STATUS=apk_delivery_failure \
-BUILD_PLATFORM=Android \
+BUILD_PLATFORM=Both \
 BUILD_PROJECT_NAME="FixtureProject" \
 BUILD_VERSION="5.5.5" \
 BUILD_BUNDLE_NO="555" \
+BUILD_IOS_EFFECTIVE_BUNDLE_NO="42" \
 BUILD_DEVELOPMENT_BUILD=true \
   bash "$slack_notifier" >/dev/null
-grep -F '[DEVELOPMENT BUILD] [WARNING] FixtureProject Android BuildCommit BUILD SUCCESS / APK DELIVERY FAILED - v5.5.5(555)' "$fixture_root/apk-delivery-failure.log" >/dev/null
+grep -F '[DEVELOPMENT BUILD] [WARNING] FixtureProject Both BuildCommit BUILD SUCCESS / APK DELIVERY FAILED - v5.5.5(555)' "$fixture_root/apk-delivery-failure.log" >/dev/null
+grep -F 'iOS TestFlight: v5.5.5(42)' "$fixture_root/apk-delivery-failure.log" >/dev/null
+
+PATH="$fixture_root/bin:$PATH" \
+FAKE_CURL_LOG="$fixture_root/failure-notify.log" \
+SLACK_BUILD_WEBHOOK_URL="https://hooks.slack.com/services/fixture" \
+BUILD_JOB_STATUS=failure \
+BUILD_PLATFORM=Both \
+BUILD_PROJECT_NAME="FixtureProject" \
+BUILD_VERSION="5.5.5" \
+BUILD_BUNDLE_NO="555" \
+BUILD_IOS_EFFECTIVE_BUNDLE_NO="42" \
+BUILD_DEVELOPMENT_BUILD=true \
+  bash "$slack_notifier" >/dev/null
+if grep -F 'iOS TestFlight:' "$fixture_root/failure-notify.log" >/dev/null; then
+  echo "Failed Development notifications must not claim a TestFlight upload version" >&2
+  exit 1
+fi
 
 
 PATH="$fixture_root/bin:$PATH" \

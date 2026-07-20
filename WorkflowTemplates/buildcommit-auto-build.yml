@@ -612,6 +612,7 @@ jobs:
           BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
           BUILD_VERSION: ${{ steps.detect.outputs.build_version }}
           BUILD_BUNDLE_NO: ${{ steps.sequence.outputs.android_bundle_no }}
+          BUILD_IOS_EFFECTIVE_BUNDLE_NO: ${{ steps.ios_first.outputs.effective-bundle-no || steps.ios_second.outputs.effective-bundle-no }}
           SLACK_BUILD_MENTIONS: ${{ steps.detect.outputs.slack_mentions }}
           BUILD_SHORT_SHA: ${{ github.sha }}
           BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -634,7 +635,7 @@ jobs:
           DIRECT_APK_DELIVERY_PHASE_PATH: ${{ runner.temp }}/buildcommit-slack-upload-${{ github.run_id }}-${{ github.run_attempt }}.phase
           ANDROID_DEVELOPMENT_BUILD: ${{ steps.sequence.outputs.android_development_build }}
           ANDROID_BUNDLE_NO: ${{ steps.sequence.outputs.android_bundle_no }}
-          IOS_EFFECTIVE_BUNDLE_NO: ${{ steps.ios_first.outputs.effective-bundle-no || steps.ios_second.outputs.effective-bundle-no }}
+          BUILD_IOS_EFFECTIVE_BUNDLE_NO: ${{ steps.ios_first.outputs.effective-bundle-no || steps.ios_second.outputs.effective-bundle-no }}
           REQUEST_BUNDLE_NO: ${{ steps.detect.outputs.bundle_no }}
           BUILD_PLATFORM: ${{ steps.detect.outputs.platform }}
           BUILD_PROJECT_NAME: ${{ steps.paths.outputs.unity_project_name }}
@@ -668,7 +669,7 @@ jobs:
 
           case "$BUILD_PLATFORM" in
             Android) export BUILD_BUNDLE_NO="${ANDROID_BUNDLE_NO:-$REQUEST_BUNDLE_NO}" ;;
-            iOS) export BUILD_BUNDLE_NO="${IOS_EFFECTIVE_BUNDLE_NO:-$REQUEST_BUNDLE_NO}" ;;
+            iOS) export BUILD_BUNDLE_NO="${BUILD_IOS_EFFECTIVE_BUNDLE_NO:-$REQUEST_BUNDLE_NO}" ;;
             *) export BUILD_BUNDLE_NO="$REQUEST_BUNDLE_NO" ;;
           esac
 
