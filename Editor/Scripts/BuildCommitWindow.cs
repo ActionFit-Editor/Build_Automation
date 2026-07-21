@@ -175,20 +175,33 @@ namespace ActionFit.BuildAutomation.Editor
             EditorGUILayout.EndHorizontal();
         }
 
-        // 버전 / 번들ID 입력 및 저장 커밋 메시지 미리보기
+        // 버전 / 빌드 번호 입력 및 저장 커밋 메시지 미리보기
         private void DrawVersionInput()
         {
             EditorGUILayout.LabelField("Version Info", EditorStyles.boldLabel);
 
             var versionProp = _serializedSettings.FindProperty("buildVersion");
             var bundleProp = _serializedSettings.FindProperty("bundleNo");
+            var developmentBuildProp = _serializedSettings.FindProperty("developmentBuild");
+            bool developmentBuild = developmentBuildProp?.boolValue == true;
 
             EditorGUILayout.PropertyField(versionProp, new GUIContent("Version"));
-            EditorGUILayout.PropertyField(bundleProp, new GUIContent("Bundle ID"));
+            using (new EditorGUI.DisabledScope(developmentBuild))
+            {
+                EditorGUILayout.PropertyField(bundleProp, new GUIContent("Build Number"));
+            }
+
+            if (developmentBuild)
+            {
+                EditorGUILayout.HelpBox(
+                    "Development Build 번호는 자동 관리됩니다. Android/Both 요청은 현재 번호를 1 증가시키고, iOS는 마케팅 버전별 TestFlight 번호를 1부터 증가시킵니다.",
+                    MessageType.Info);
+            }
 
             EditorGUILayout.Space(5);
 
-            string preview = CreateCommitMessage(versionProp.stringValue, bundleProp.stringValue);
+            string previewBundleNo = ResolveBuildCommitBundleNoForPreview(bundleProp.stringValue, developmentBuild);
+            string preview = CreateCommitMessage(versionProp.stringValue, previewBundleNo);
             EditorGUILayout.LabelField("Storage Commit Preview:", EditorStyles.miniLabel);
             GUI.enabled = false;
             EditorGUILayout.TextField(preview);
@@ -222,7 +235,9 @@ namespace ActionFit.BuildAutomation.Editor
 
             string version = _serializedSettings.FindProperty("buildVersion").stringValue;
             string bundleNo = _serializedSettings.FindProperty("bundleNo").stringValue;
-            string tagPreview = CreateBuildTag(version, bundleNo, "commit");
+            bool developmentBuild = _serializedSettings.FindProperty("developmentBuild")?.boolValue == true;
+            string previewBundleNo = ResolveBuildCommitBundleNoForPreview(bundleNo, developmentBuild);
+            string tagPreview = CreateBuildTag(version, previewBundleNo, "commit");
             EditorGUILayout.LabelField("Build Tag Preview:", EditorStyles.miniLabel);
             GUI.enabled = false;
             EditorGUILayout.TextField(tagPreview);
@@ -619,7 +634,22 @@ namespace ActionFit.BuildAutomation.Editor
             }
 
             string version = BuildSettingBridge.GetString(_settings, "buildVersion");
-            string bundleNo = BuildSettingBridge.GetString(_settings, "bundleNo");
+            string currentBundleNo = BuildSettingBridge.GetString(_settings, "bundleNo");
+            bool developmentBuild = BuildSettingBridge.TryGetBool(_settings, "developmentBuild", out bool enabled) && enabled;
+            BuildRequestPlatform resolvedPlatform = ResolvePlatform(_requestPlatform);
+            if (!BuildRequestUtility.TryResolveBuildCommitBundleNo(
+                    currentBundleNo,
+                    developmentBuild,
+                    resolvedPlatform,
+                    out string bundleNo,
+                    out string bundleNoError))
+            {
+                AddLog($"[ERROR] {bundleNoError}");
+                EditorUtility.DisplayDialog("Automatic Build Number", bundleNoError, "OK");
+                Repaint();
+                return;
+            }
+
             string commitMessage = CreateCommitMessage(version, bundleNo);
             string tagPreview = CreateBuildTag(version, bundleNo, "commit");
 
@@ -638,6 +668,12 @@ namespace ActionFit.BuildAutomation.Editor
                 return;
 
             if (!SyncWorkflowAssetsForCommit())
+            {
+                Repaint();
+                return;
+            }
+
+            if (!ApplyAutomaticDevelopmentBundleNo(currentBundleNo, bundleNo))
             {
                 Repaint();
                 return;
@@ -863,6 +899,40 @@ namespace ActionFit.BuildAutomation.Editor
         private string CreateCommitMessage(string version, string bundleNo)
         {
             return $"[BuildRequest] v{version}({bundleNo})";
+        }
+
+        private string ResolveBuildCommitBundleNoForPreview(string currentBundleNo, bool developmentBuild)
+        {
+            return BuildRequestUtility.TryResolveBuildCommitBundleNo(
+                currentBundleNo,
+                developmentBuild,
+                ResolvePlatform(_requestPlatform),
+                out string buildBundleNo,
+                out _)
+                ? buildBundleNo
+                : currentBundleNo;
+        }
+
+        private bool ApplyAutomaticDevelopmentBundleNo(string currentBundleNo, string buildBundleNo)
+        {
+            if (string.Equals(currentBundleNo, buildBundleNo, StringComparison.Ordinal))
+                return true;
+
+            SerializedProperty bundleProp = _serializedSettings?.FindProperty("bundleNo");
+            if (bundleProp == null)
+            {
+                const string error = "BuildSettingsSO does not expose bundleNo.";
+                AddLog($"[ERROR] {error}");
+                EditorUtility.DisplayDialog("Automatic Build Number", error, "OK");
+                return false;
+            }
+
+            bundleProp.stringValue = buildBundleNo;
+            _serializedSettings.ApplyModifiedProperties();
+            EditorUtility.SetDirty(_settings);
+            AssetDatabase.SaveAssets();
+            AddLog($"[Build Number] Development Android: {currentBundleNo} -> {buildBundleNo}");
+            return true;
         }
 
         private string CreateBuildTag(string version, string bundleNo, string uniqueSuffix)

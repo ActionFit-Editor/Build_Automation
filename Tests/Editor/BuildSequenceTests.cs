@@ -110,6 +110,59 @@ namespace ActionFit.BuildAutomation.Editor.Tests
             Assert.That(request.androidKeyaliasName, Is.Empty);
         }
 
+        [TestCase("0", BuildRequestPlatform.Android, "1")]
+        [TestCase("133", BuildRequestPlatform.Android, "134")]
+        [TestCase("134", BuildRequestPlatform.Both, "135")]
+        public void DevelopmentAndroidBuildCommitIncrementsBundleNumber(
+            string currentBundleNo,
+            BuildRequestPlatform platform,
+            string expectedBundleNo)
+        {
+            bool resolved = BuildRequestUtility.TryResolveBuildCommitBundleNo(
+                currentBundleNo,
+                true,
+                platform,
+                out string buildBundleNo,
+                out string error);
+
+            Assert.That(resolved, Is.True, error);
+            Assert.That(buildBundleNo, Is.EqualTo(expectedBundleNo));
+        }
+
+        [TestCase(false, BuildRequestPlatform.Android)]
+        [TestCase(true, BuildRequestPlatform.iOS)]
+        public void NonDevelopmentAndroidBuildCommitPreservesBundleNumber(
+            bool developmentBuild,
+            BuildRequestPlatform platform)
+        {
+            bool resolved = BuildRequestUtility.TryResolveBuildCommitBundleNo(
+                " 133 ",
+                developmentBuild,
+                platform,
+                out string buildBundleNo,
+                out string error);
+
+            Assert.That(resolved, Is.True, error);
+            Assert.That(buildBundleNo, Is.EqualTo(" 133 "));
+        }
+
+        [TestCase("")]
+        [TestCase("not-a-number")]
+        [TestCase("-1")]
+        [TestCase("2100000000")]
+        public void DevelopmentAndroidBuildCommitRejectsInvalidBundleNumber(string currentBundleNo)
+        {
+            bool resolved = BuildRequestUtility.TryResolveBuildCommitBundleNo(
+                currentBundleNo,
+                true,
+                BuildRequestPlatform.Android,
+                out _,
+                out string error);
+
+            Assert.That(resolved, Is.False);
+            Assert.That(error, Is.Not.Empty);
+        }
+
         [Test]
         public void ReleaseWorkingRequestsPreserveStoreBehavior()
         {

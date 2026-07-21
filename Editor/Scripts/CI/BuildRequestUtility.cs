@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using UnityEditor;
@@ -20,6 +21,7 @@ namespace ActionFit.BuildAutomation.Editor
         private const string EmptyKeystoreAliasPlaceholder = "[Enter Keystore Alias]";
         private const string EmptyKeystorePasswordPlaceholder = "[Enter KeyStore Password]";
         private const string EmptyAliasPasswordPlaceholder = "[Enter Alias Password]";
+        private const int MaximumAndroidBundleVersionCode = 2100000000;
 
         public static string UnityProjectRoot => BuildAutomationProjectPaths.UnityProjectRoot;
         public static string RepositoryRoot => BuildAutomationProjectPaths.GetRepositoryRootOrThrow();
@@ -106,6 +108,42 @@ namespace ActionFit.BuildAutomation.Editor
             if (settings == null) return "";
 
             return SanitizeSettingValue(BuildSettingBridge.GetString(settings, "keyStoreAlias"), EmptyKeystoreAliasPlaceholder);
+        }
+
+        internal static bool TryResolveBuildCommitBundleNo(
+            string currentBundleNo,
+            bool developmentBuild,
+            BuildRequestPlatform resolvedPlatform,
+            out string buildBundleNo,
+            out string error)
+        {
+            buildBundleNo = currentBundleNo ?? "";
+            error = "";
+
+            if (!developmentBuild || !UsesAndroid(resolvedPlatform))
+                return true;
+
+            string normalizedBundleNo = buildBundleNo.Trim();
+
+            if (!int.TryParse(
+                    normalizedBundleNo,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out int currentNumber) ||
+                currentNumber < 0)
+            {
+                error = "Development Android Build Number must be a non-negative integer before automatic increment.";
+                return false;
+            }
+
+            if (currentNumber >= MaximumAndroidBundleVersionCode)
+            {
+                error = $"Development Android Build Number cannot be incremented beyond {MaximumAndroidBundleVersionCode}.";
+                return false;
+            }
+
+            buildBundleNo = (currentNumber + 1).ToString(CultureInfo.InvariantCulture);
+            return true;
         }
 
         private static string GetAndroidKeystoreFileName(ScriptableObject settings)
