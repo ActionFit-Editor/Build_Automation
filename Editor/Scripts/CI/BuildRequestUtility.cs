@@ -22,6 +22,7 @@ namespace ActionFit.BuildAutomation.Editor
         private const string EmptyKeystorePasswordPlaceholder = "[Enter KeyStore Password]";
         private const string EmptyAliasPasswordPlaceholder = "[Enter Alias Password]";
         private const int MaximumAndroidBundleVersionCode = 2100000000;
+        internal const string AndroidBuildNumberReservationTagPrefix = "build-number/android/";
 
         public static string UnityProjectRoot => BuildAutomationProjectPaths.UnityProjectRoot;
         public static string RepositoryRoot => BuildAutomationProjectPaths.GetRepositoryRootOrThrow();
@@ -117,10 +118,27 @@ namespace ActionFit.BuildAutomation.Editor
             out string buildBundleNo,
             out string error)
         {
+            return TryResolveBuildCommitBundleNo(
+                currentBundleNo,
+                developmentBuild,
+                resolvedPlatform,
+                "",
+                out buildBundleNo,
+                out error);
+        }
+
+        internal static bool TryResolveBuildCommitBundleNo(
+            string currentBundleNo,
+            bool developmentBuild,
+            BuildRequestPlatform resolvedPlatform,
+            string remoteTagListing,
+            out string buildBundleNo,
+            out string error)
+        {
             buildBundleNo = currentBundleNo ?? "";
             error = "";
 
-            if (!developmentBuild || !UsesAndroid(resolvedPlatform))
+            if (!UsesAutomaticDevelopmentAndroidBuildNumber(developmentBuild, resolvedPlatform))
                 return true;
 
             string normalizedBundleNo = buildBundleNo.Trim();
@@ -136,14 +154,95 @@ namespace ActionFit.BuildAutomation.Editor
                 return false;
             }
 
-            if (currentNumber >= MaximumAndroidBundleVersionCode)
+            long highestNumber = currentNumber;
+            foreach (string line in (remoteTagListing ?? "").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (!TryExtractAndroidBuildNumberToken(line, out string numberToken))
+                    continue;
+
+                if (!long.TryParse(numberToken, NumberStyles.None, CultureInfo.InvariantCulture, out long remoteNumber))
+                {
+                    error = $"Remote Android build tag contains an invalid Build Number: {numberToken}.";
+                    return false;
+                }
+
+                highestNumber = Math.Max(highestNumber, remoteNumber);
+            }
+
+            if (highestNumber >= MaximumAndroidBundleVersionCode)
             {
                 error = $"Development Android Build Number cannot be incremented beyond {MaximumAndroidBundleVersionCode}.";
                 return false;
             }
 
-            buildBundleNo = (currentNumber + 1).ToString(CultureInfo.InvariantCulture);
+            buildBundleNo = (highestNumber + 1).ToString(CultureInfo.InvariantCulture);
             return true;
+        }
+
+        internal static bool UsesAutomaticDevelopmentAndroidBuildNumber(
+            bool developmentBuild,
+            BuildRequestPlatform resolvedPlatform)
+        {
+            return developmentBuild && UsesAndroid(resolvedPlatform);
+        }
+
+        internal static bool TryGetRemoteTagObjectId(
+            string remoteTagListing,
+            string fullRefName,
+            out string objectId)
+        {
+            objectId = "";
+            if (string.IsNullOrWhiteSpace(fullRefName)) return false;
+
+            foreach (string line in (remoteTagListing ?? "").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string[] fields = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+                if (fields.Length < 2 || !string.Equals(fields[1], fullRefName, StringComparison.Ordinal))
+                    continue;
+
+                if ((fields[0].Length != 40 && fields[0].Length != 64) ||
+                    fields[0].Any(character => !Uri.IsHexDigit(character)))
+                    return false;
+
+                objectId = fields[0];
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryExtractAndroidBuildNumberToken(string remoteTagLine, out string numberToken)
+        {
+            numberToken = "";
+            string[] fields = (remoteTagLine ?? "").Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            string refName = fields.LastOrDefault(field => field.StartsWith("refs/tags/", StringComparison.Ordinal));
+            if (string.IsNullOrEmpty(refName)) return false;
+
+            if (refName.EndsWith("^{}", StringComparison.Ordinal))
+                refName = refName.Substring(0, refName.Length - 3);
+
+            const string buildTagPrefix = "refs/tags/build/";
+            if (refName.StartsWith(buildTagPrefix, StringComparison.Ordinal))
+            {
+                string[] segments = refName.Substring(buildTagPrefix.Length).Split('/');
+                if (segments.Length != 3 ||
+                    (!segments[0].StartsWith("aos-", StringComparison.Ordinal) &&
+                     !segments[0].StartsWith("both-", StringComparison.Ordinal)))
+                {
+                    return false;
+                }
+
+                int suffixSeparator = segments[2].IndexOf('-');
+                if (suffixSeparator <= 0) return false;
+                numberToken = segments[2].Substring(0, suffixSeparator);
+                return numberToken.All(char.IsDigit);
+            }
+
+            string reservationRefPrefix = $"refs/tags/{AndroidBuildNumberReservationTagPrefix}";
+            if (!refName.StartsWith(reservationRefPrefix, StringComparison.Ordinal)) return false;
+
+            numberToken = refName.Substring(reservationRefPrefix.Length);
+            return numberToken.Length > 0 && numberToken.All(char.IsDigit);
         }
 
         private static string GetAndroidKeystoreFileName(ScriptableObject settings)

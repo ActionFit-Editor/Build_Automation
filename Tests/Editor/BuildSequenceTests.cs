@@ -164,6 +164,61 @@ namespace ActionFit.BuildAutomation.Editor.Tests
         }
 
         [Test]
+        public void DevelopmentAndroidBuildCommitUsesRepositoryWideMaximum()
+        {
+            const string remoteTags =
+                "1111111111111111111111111111111111111111\trefs/tags/build/aos-play/5.6.7/568-first\n" +
+                "2222222222222222222222222222222222222222\trefs/tags/build/both-store/5.7.0/569-second\n" +
+                "3333333333333333333333333333333333333333\trefs/tags/build/ios-testflight/9.9.9/999-ios\n" +
+                "4444444444444444444444444444444444444444\trefs/tags/build-number/android/570\n";
+
+            bool resolved = BuildRequestUtility.TryResolveBuildCommitBundleNo(
+                "567",
+                true,
+                BuildRequestPlatform.Android,
+                remoteTags,
+                out string buildBundleNo,
+                out string error);
+
+            Assert.That(resolved, Is.True, error);
+            Assert.That(buildBundleNo, Is.EqualTo("571"));
+        }
+
+        [Test]
+        public void DevelopmentAndroidBuildCommitRejectsExhaustedRemoteNumber()
+        {
+            const string remoteTags =
+                "1111111111111111111111111111111111111111\trefs/tags/build/aos-play/5.6.7/2100000000-last";
+
+            bool resolved = BuildRequestUtility.TryResolveBuildCommitBundleNo(
+                "567",
+                true,
+                BuildRequestPlatform.Android,
+                remoteTags,
+                out _,
+                out string error);
+
+            Assert.That(resolved, Is.False);
+            Assert.That(error, Does.Contain("2100000000"));
+        }
+
+        [Test]
+        public void RemoteTagObjectIdUsesExactReservationRef()
+        {
+            const string remoteTags =
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/build-number/android/568\n" +
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\trefs/tags/build-number/android/568^{}\n";
+
+            bool found = BuildRequestUtility.TryGetRemoteTagObjectId(
+                remoteTags,
+                "refs/tags/build-number/android/568",
+                out string objectId);
+
+            Assert.That(found, Is.True);
+            Assert.That(objectId, Is.EqualTo("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+        }
+
+        [Test]
         public void ReleaseWorkingRequestsPreserveStoreBehavior()
         {
             var androidRequest = new BuildRequest

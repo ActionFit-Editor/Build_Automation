@@ -194,7 +194,7 @@ namespace ActionFit.BuildAutomation.Editor
             if (developmentBuild)
             {
                 EditorGUILayout.HelpBox(
-                    "Development Build 번호는 자동 관리됩니다. Android/Both 요청은 현재 번호를 1 증가시키고, iOS는 마케팅 버전별 TestFlight 번호를 1부터 증가시킵니다.",
+                    "Development Build 번호는 자동 관리됩니다. Android/Both 요청은 저장소 전체에서 다음 번호를 원격 예약하고, iOS는 마케팅 버전별 TestFlight 번호를 1부터 증가시킵니다.",
                     MessageType.Info);
             }
 
@@ -650,8 +650,14 @@ namespace ActionFit.BuildAutomation.Editor
                 return;
             }
 
-            string commitMessage = CreateCommitMessage(version, bundleNo);
+            string previewCommitMessage = CreateCommitMessage(version, bundleNo);
             string tagPreview = CreateBuildTag(version, bundleNo, "commit");
+            bool requiresAndroidReservation = BuildRequestUtility.UsesAutomaticDevelopmentAndroidBuildNumber(
+                developmentBuild,
+                resolvedPlatform);
+            string reservationNotice = requiresAndroidReservation
+                ? "\n\nAndroid Build Number는 확인 후 저장소 전체 태그를 기준으로 원격 예약되며, 동시 요청이 있으면 표시된 예상 번호보다 커질 수 있습니다."
+                : "";
 
             _logs.Clear();
 
@@ -663,7 +669,7 @@ namespace ActionFit.BuildAutomation.Editor
 
             if (!EditorUtility.DisplayDialog(
                     "Commit, Tag & Push",
-                    $"다음 저장 커밋과 빌드 태그를 푸시합니다:\n\n{commitMessage}\n{tagPreview}\n\n계속하시겠습니까?",
+                    $"다음 저장 커밋과 빌드 태그를 푸시합니다:\n\n{previewCommitMessage}\n{tagPreview}{reservationNotice}\n\n계속하시겠습니까?",
                     "Push", "Cancel"))
                 return;
 
@@ -673,6 +679,14 @@ namespace ActionFit.BuildAutomation.Editor
                 return;
             }
 
+            if (requiresAndroidReservation &&
+                !TryReserveDevelopmentAndroidBundleNo(currentBundleNo, out bundleNo))
+            {
+                Repaint();
+                return;
+            }
+
+            string commitMessage = CreateCommitMessage(version, bundleNo);
             if (!ApplyAutomaticDevelopmentBundleNo(currentBundleNo, bundleNo))
             {
                 Repaint();
@@ -935,6 +949,35 @@ namespace ActionFit.BuildAutomation.Editor
             return true;
         }
 
+        private bool TryReserveDevelopmentAndroidBundleNo(string currentBundleNo, out string bundleNo)
+        {
+            bundleNo = "";
+            if (!BuildRequestUtility.TryGetRepositoryRoot(out string repositoryRoot, out string repositoryError))
+            {
+                AddLog($"[ERROR] {repositoryError}");
+                EditorUtility.DisplayDialog("Automatic Build Number", repositoryError, "OK");
+                return false;
+            }
+
+            if (!AndroidBuildNumberReservation.TryReserve(
+                    repositoryRoot,
+                    currentBundleNo,
+                    out bundleNo,
+                    out string reservationTag,
+                    out int collisionCount,
+                    out string reservationError))
+            {
+                AddLog($"[ERROR] {reservationError}");
+                EditorUtility.DisplayDialog("Automatic Build Number", reservationError, "OK");
+                return false;
+            }
+
+            if (collisionCount > 0)
+                AddLog($"[Build Number] Retried {collisionCount} occupied Android reservation(s).");
+            AddLog($"[Build Number] Reserved repository-wide Android number {bundleNo}: {reservationTag}");
+            return true;
+        }
+
         private string CreateBuildTag(string version, string bundleNo, string uniqueSuffix)
         {
             string platform = GetPlatformToken(_requestPlatform);
@@ -1192,6 +1235,152 @@ namespace ActionFit.BuildAutomation.Editor
         }
 
         #endregion
+    }
+
+    internal static class AndroidBuildNumberReservation
+    {
+        private const int MaximumReservationAttempts = 20;
+        private const string RemoteTagQuery =
+            "ls-remote --tags origin \"refs/tags/build/*\" \"refs/tags/build-number/android/*\"";
+
+        internal static bool TryReserve(
+            string repositoryRoot,
+            string currentBundleNo,
+            out string bundleNo,
+            out string reservationTag,
+            out int collisionCount,
+            out string error)
+        {
+            bundleNo = "";
+            reservationTag = "";
+            collisionCount = 0;
+            error = "";
+
+            GitCommandResult listResult = GitProcessRunner.Run(repositoryRoot, RemoteTagQuery);
+            if (!TryRequireSuccess(listResult, RemoteTagQuery, out string remoteTagListing, out error))
+                return false;
+
+            for (int attempt = 0; attempt < MaximumReservationAttempts; attempt++)
+            {
+                if (!BuildRequestUtility.TryResolveBuildCommitBundleNo(
+                        currentBundleNo,
+                        true,
+                        BuildRequestPlatform.Android,
+                        remoteTagListing,
+                        out bundleNo,
+                        out error))
+                {
+                    return false;
+                }
+
+                reservationTag = $"{BuildRequestUtility.AndroidBuildNumberReservationTagPrefix}{bundleNo}";
+                string fullReservationRef = $"refs/tags/{reservationTag}";
+                string reservationId = Guid.NewGuid().ToString("N");
+                string createArguments =
+                    $"tag -a {reservationTag} -m \"Reserve Android Development Build Number {bundleNo} ({reservationId})\" HEAD";
+                GitCommandResult createResult = GitProcessRunner.RunWithIndexLockRetry(repositoryRoot, createArguments);
+
+                if (createResult.TimedOut || createResult.ExitCode != 0)
+                {
+                    GitCommandResult existingLocalTag =
+                        GitProcessRunner.Run(repositoryRoot, $"rev-parse --verify {fullReservationRef}");
+                    if (!existingLocalTag.TimedOut && existingLocalTag.ExitCode == 0)
+                    {
+                        remoteTagListing += $"\nlocal\t{fullReservationRef}";
+                        collisionCount++;
+                        continue;
+                    }
+
+                    error = FormatFailure(createArguments, createResult);
+                    return false;
+                }
+
+                string pushArguments = $"push origin {fullReservationRef}:{fullReservationRef}";
+                GitCommandResult pushResult = GitProcessRunner.Run(repositoryRoot, pushArguments);
+                if (!pushResult.TimedOut && pushResult.ExitCode == 0)
+                    return true;
+
+                GitCommandResult localObjectResult = GitProcessRunner.Run(repositoryRoot, $"rev-parse {fullReservationRef}");
+                GitCommandResult remoteObjectResult =
+                    GitProcessRunner.Run(repositoryRoot, $"ls-remote --tags origin {fullReservationRef}");
+
+                if (remoteObjectResult.TimedOut || remoteObjectResult.ExitCode != 0)
+                {
+                    error =
+                        $"Android Build Number reservation result is indeterminate. Keep local tag {reservationTag} and verify the remote tag before retrying. " +
+                        FormatFailure(pushArguments, pushResult);
+                    return false;
+                }
+
+                bool hasRemoteReservation = BuildRequestUtility.TryGetRemoteTagObjectId(
+                    remoteObjectResult.Output,
+                    fullReservationRef,
+                    out string remoteObjectId);
+                string localObjectId = localObjectResult.ExitCode == 0 ? localObjectResult.Output.Trim() : "";
+
+                if (hasRemoteReservation &&
+                    !string.IsNullOrEmpty(localObjectId) &&
+                    string.Equals(localObjectId, remoteObjectId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (!TryDeleteOwnedLocalTag(repositoryRoot, reservationTag, out error))
+                    return false;
+
+                if (!hasRemoteReservation)
+                {
+                    error = FormatFailure(pushArguments, pushResult);
+                    return false;
+                }
+
+                remoteTagListing += $"\n{remoteObjectResult.Output}";
+                collisionCount++;
+            }
+
+            error = $"Could not reserve a unique Android Build Number after {MaximumReservationAttempts} attempts.";
+            return false;
+        }
+
+        private static bool TryDeleteOwnedLocalTag(string repositoryRoot, string tagName, out string error)
+        {
+            string deleteArguments = $"tag -d {tagName}";
+            GitCommandResult deleteResult = GitProcessRunner.Run(repositoryRoot, deleteArguments);
+            if (!deleteResult.TimedOut && deleteResult.ExitCode == 0)
+            {
+                error = "";
+                return true;
+            }
+
+            error = FormatFailure(deleteArguments, deleteResult);
+            return false;
+        }
+
+        private static bool TryRequireSuccess(
+            GitCommandResult result,
+            string arguments,
+            out string output,
+            out string error)
+        {
+            output = result.Output ?? "";
+            if (!result.TimedOut && result.ExitCode == 0)
+            {
+                error = "";
+                return true;
+            }
+
+            error = FormatFailure(arguments, result);
+            return false;
+        }
+
+        private static string FormatFailure(string arguments, GitCommandResult result)
+        {
+            if (result.TimedOut)
+                return $"git {arguments} timed out after {GitProcessRunner.DefaultTimeoutMilliseconds / 1000} seconds.";
+
+            string detail = string.IsNullOrWhiteSpace(result.Error) ? result.Output : result.Error;
+            return $"git {arguments} failed: {detail.Trim()}";
+        }
     }
 
     internal readonly struct GitCommandResult

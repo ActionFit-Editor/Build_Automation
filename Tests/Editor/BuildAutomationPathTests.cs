@@ -194,6 +194,95 @@ namespace ActionFit.BuildAutomation.Editor.Tests
             }
         }
 
+        [Test]
+        [Timeout(60000)]
+        public void AndroidBuildNumberReservationIsUniqueAcrossConcurrentBranches()
+        {
+            string operationRoot = Path.Combine(
+                Path.GetTempPath(),
+                "ActionFitBuildAutomationTests",
+                Guid.NewGuid().ToString("N"),
+                "android-build-number-reservation");
+            string remoteRoot = Path.Combine(operationRoot, "remote.git");
+            string firstRoot = Path.Combine(operationRoot, "first");
+            string secondRoot = Path.Combine(operationRoot, "second");
+            Directory.CreateDirectory(operationRoot);
+
+            try
+            {
+                AssertGit(operationRoot, $"init --bare \"{remoteRoot}\"");
+                AssertGit(operationRoot, $"clone \"{remoteRoot}\" \"{firstRoot}\"");
+                ConfigureGitIdentity(firstRoot);
+                File.WriteAllText(Path.Combine(firstRoot, "request.txt"), "initial");
+                AssertGit(firstRoot, "add request.txt");
+                AssertGit(firstRoot, "commit -m initial");
+                AssertGit(firstRoot, "push origin HEAD:main");
+                AssertGit(operationRoot, $"clone --branch main \"{remoteRoot}\" \"{secondRoot}\"");
+                ConfigureGitIdentity(secondRoot);
+
+                var numbers = new string[2];
+                var tags = new string[2];
+                var errors = new string[2];
+                var successes = new bool[2];
+                Task firstTask = Task.Run(() =>
+                {
+                    successes[0] = AndroidBuildNumberReservation.TryReserve(
+                        firstRoot,
+                        "568",
+                        out numbers[0],
+                        out tags[0],
+                        out _,
+                        out errors[0]);
+                });
+                Task secondTask = Task.Run(() =>
+                {
+                    successes[1] = AndroidBuildNumberReservation.TryReserve(
+                        secondRoot,
+                        "568",
+                        out numbers[1],
+                        out tags[1],
+                        out _,
+                        out errors[1]);
+                });
+
+                Assert.That(Task.WaitAll(new[] { firstTask, secondTask }, 30000), Is.True);
+                Assert.That(successes[0], Is.True, errors[0]);
+                Assert.That(successes[1], Is.True, errors[1]);
+                Assert.That(numbers, Is.EquivalentTo(new[] { "569", "570" }));
+                Assert.That(tags, Is.EquivalentTo(new[]
+                {
+                    "build-number/android/569",
+                    "build-number/android/570"
+                }));
+
+                GitCommandResult remoteTags = GitProcessRunner.Run(
+                    firstRoot,
+                    "ls-remote --tags origin \"refs/tags/build-number/android/*\"",
+                    10000);
+                Assert.That(remoteTags.ExitCode, Is.EqualTo(0), remoteTags.Error);
+                Assert.That(remoteTags.Output, Does.Contain("refs/tags/build-number/android/569"));
+                Assert.That(remoteTags.Output, Does.Contain("refs/tags/build-number/android/570"));
+            }
+            finally
+            {
+                if (Directory.Exists(operationRoot))
+                    DeleteDirectory(operationRoot);
+            }
+        }
+
+        private static void ConfigureGitIdentity(string repositoryRoot)
+        {
+            AssertGit(repositoryRoot, "config user.name ActionFitBuildAutomationTests");
+            AssertGit(repositoryRoot, "config user.email buildautomation-tests@actionfit.local");
+        }
+
+        private static void AssertGit(string workingDirectory, string arguments)
+        {
+            GitCommandResult result = GitProcessRunner.Run(workingDirectory, arguments, 10000);
+            Assert.That(result.TimedOut, Is.False, $"git {arguments} timed out");
+            Assert.That(result.ExitCode, Is.EqualTo(0), result.Error);
+        }
+
         private static void DeleteDirectory(string path)
         {
             foreach (string file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
