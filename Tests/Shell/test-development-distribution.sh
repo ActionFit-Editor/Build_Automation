@@ -38,7 +38,17 @@ case "$last_argument" in
     printf '{"ok":true}\n'
     ;;
   */chat.postMessage)
-    printf '{"ok":true,"channel":"C12345678","ts":"1234567890.000001"}\n'
+    case "${FAKE_SLACK_MESSAGE_MODE:-success}" in
+      rejected)
+        printf '{"ok":false,"error":"not_in_channel","private_detail":"xoxb-response-secret"}\n'
+        ;;
+      hostile-rejection)
+        printf '{"ok":false,"error":"not_in_channel\\n::error::injected","private_detail":"xoxb-response-secret"}\n'
+        ;;
+      *)
+        printf '{"ok":true,"channel":"C12345678","ts":"1234567890.000001"}\n'
+        ;;
+    esac
     ;;
   https://hooks.slack.com/services/*)
     ;;
@@ -296,6 +306,36 @@ grep -F '"channel":"C12345678"' "$fixture_root/curl.log" >/dev/null
 grep -F '<@W87654321>' "$fixture_root/curl.log" >/dev/null
 if grep -F '<!channel>' "$fixture_root/curl.log" >/dev/null; then
   echo "Slack notifier must discard values outside the raw member ID allowlist" >&2
+  exit 1
+fi
+
+rejected_notification_output="$(
+  PATH="$fixture_root/bin:$PATH" \
+  FAKE_CURL_LOG="$fixture_root/rejected-notify.log" \
+  FAKE_SLACK_MESSAGE_MODE=rejected \
+  CI_SECRET_ROOT="$slack_secret_root" \
+  BUILD_JOB_STATUS=start \
+  BUILD_PROJECT_NAME="FixtureProject" \
+    bash "$slack_notifier" 2>&1
+)"
+printf '%s\n' "$rejected_notification_output" | grep -F 'Slack rejected the build notification: error=not_in_channel' >/dev/null
+if printf '%s\n' "$rejected_notification_output" | grep -E 'xoxb-response-secret|private_detail' >/dev/null; then
+  echo "Slack notifier must not print the complete rejected response" >&2
+  exit 1
+fi
+
+hostile_rejection_output="$(
+  PATH="$fixture_root/bin:$PATH" \
+  FAKE_CURL_LOG="$fixture_root/hostile-rejected-notify.log" \
+  FAKE_SLACK_MESSAGE_MODE=hostile-rejection \
+  CI_SECRET_ROOT="$slack_secret_root" \
+  BUILD_JOB_STATUS=start \
+  BUILD_PROJECT_NAME="FixtureProject" \
+    bash "$slack_notifier" 2>&1
+)"
+printf '%s\n' "$hostile_rejection_output" | grep -F 'Slack rejected the build notification: error=unknown_error' >/dev/null
+if printf '%s\n' "$hostile_rejection_output" | grep -E '::error::injected|xoxb-response-secret|private_detail' >/dev/null; then
+  echo "Slack notifier must reject unsafe API error values without workflow-command injection" >&2
   exit 1
 fi
 

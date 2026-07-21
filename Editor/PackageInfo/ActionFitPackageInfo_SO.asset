@@ -21,7 +21,7 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: '- BuildCommit messages and Development APK posts now use one Slack
-    Bot and destination channel.'
+  _releaseNote: '- Slack Bot API rejections now report the sanitized error code without
+    exposing the complete response or credentials.'
   _dependenciesOverride: com.actionfit.githubauth@1.0.9, com.actionfit.buildsetting@1.1.13,
     com.actionfit.customsymbols@1.0.9, com.actionfit.sosingleton@1.0.6

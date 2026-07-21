@@ -225,8 +225,39 @@ response="$(curl --fail --silent --show-error \
   exit 0
 }
 
-if ! SLACK_RESPONSE="$response" ruby -rjson -e 'response = JSON.parse(ENV.fetch("SLACK_RESPONSE")); exit(response["ok"] ? 0 : 1)' 2>/dev/null; then
-  echo "::warning::Slack rejected the build notification."
+if slack_error="$(
+  SLACK_RESPONSE="$response" ruby -rjson <<'RUBY'
+begin
+  response = JSON.parse(ENV.fetch("SLACK_RESPONSE"))
+rescue JSON::ParserError
+  puts "invalid_response"
+  exit 2
+end
+
+unless response.is_a?(Hash)
+  puts "invalid_response"
+  exit 2
+end
+
+exit 0 if response["ok"] == true
+
+error_code = response["error"].to_s
+unless error_code.match?(/\A[a-z0-9][a-z0-9_.-]{0,127}\z/i)
+  error_code = "unknown_error"
+end
+
+puts error_code
+exit 1
+RUBY
+)"; then
+  :
+else
+  slack_response_status=$?
+  if [ "$slack_response_status" -eq 1 ]; then
+    echo "::warning::Slack rejected the build notification: error=$slack_error"
+  else
+    echo "::warning::Slack returned an invalid build notification response."
+  fi
   exit 0
 fi
 
