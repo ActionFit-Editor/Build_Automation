@@ -228,14 +228,36 @@ runs:
           echo "::warning::No Android debug symbols zip found."
         fi
 
-        mapping_path="$(find "$aab_dir" -maxdepth 1 -type f -newer "$marker_path" \( -name '*mapping.txt' -o -name 'mapping.txt' \) -print -quit)"
-        if [ -n "$mapping_path" ]; then
-          mapping_upload_path="$upload_dir/mapping.txt"
-          cp "$mapping_path" "$mapping_upload_path"
+        mapping_entry="BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map"
+        mapping_upload_path="$upload_dir/mapping.txt"
+        aab_entries_path="$upload_dir/aab-entries.txt"
+        if ! /usr/bin/unzip -Z1 "$upload_path" > "$aab_entries_path"; then
+          rm -f "$aab_entries_path" "$mapping_upload_path"
+          echo "::error::Unable to inspect the staged Android AAB for its Retrace mapping."
+          exit 1
+        fi
+
+        if grep -Fxq "$mapping_entry" "$aab_entries_path"; then
+          rm -f "$aab_entries_path"
+          if ! /usr/bin/unzip -p "$upload_path" "$mapping_entry" > "$mapping_upload_path"; then
+            rm -f "$mapping_upload_path"
+            echo "::error::Unable to extract the Retrace mapping from the staged Android AAB."
+            exit 1
+          fi
+          if [ ! -s "$mapping_upload_path" ]; then
+            rm -f "$mapping_upload_path"
+            echo "::error::The Retrace mapping extracted from the staged Android AAB is empty."
+            exit 1
+          fi
           echo "mapping_path=$mapping_upload_path" >> "$GITHUB_OUTPUT"
         else
+          rm -f "$aab_entries_path" "$mapping_upload_path"
+          if grep -Eq '^[[:space:]]*AndroidMinifyRelease:[[:space:]]*1([[:space:]]|$)' "$UNITY_PROJECT_DIR/ProjectSettings/ProjectSettings.asset"; then
+            echo "::error::Android release minification is enabled, but the staged AAB does not contain $mapping_entry."
+            exit 1
+          fi
           echo "mapping_path=" >> "$GITHUB_OUTPUT"
-          echo "::warning::No Android mapping.txt found near the AAB."
+          echo "Android release minification is disabled; no Retrace mapping is required."
         fi
 
     - name: Locate Development APK

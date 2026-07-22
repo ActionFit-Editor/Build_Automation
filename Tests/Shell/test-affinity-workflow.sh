@@ -290,7 +290,13 @@ abort("legacy Development APK Artifact name must be removed") if android_action.
 aab_locator = android_steps.find { |step| step["id"] == "aab" }
 abort("fresh AAB staging is missing") unless aab_locator
 abort("non-Development AAB staging must support non-Store recovery") unless aab_locator.fetch("if") == "inputs.development-build != 'true'"
-abort("AAB staging must use the current build marker") unless aab_locator.fetch("run").include?("steps.build_timer.outputs.marker_path")
+aab_locator_script = aab_locator.fetch("run")
+abort("AAB staging must use the current build marker") unless aab_locator_script.include?("steps.build_timer.outputs.marker_path")
+expected_mapping_entry = "BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map"
+abort("Retrace mapping must be extracted from the staged AAB") unless aab_locator_script.include?(expected_mapping_entry) && aab_locator_script.include?('/usr/bin/unzip -p "$upload_path" "$mapping_entry"')
+abort("Retrace mapping must not depend on the build marker timestamp") if aab_locator_script.match?(/mapping_path=.*-newer.*marker_path/)
+abort("empty extracted Retrace mapping must fail the Android phase") unless aab_locator_script.include?('[ ! -s "$mapping_upload_path" ]') && aab_locator_script.include?("The Retrace mapping extracted from the staged Android AAB is empty")
+abort("minified Android releases must fail when the AAB mapping is missing") unless aab_locator_script.include?("AndroidMinifyRelease") && aab_locator_script.include?("Android release minification is enabled")
 android_aab_artifact = android_steps.find { |step| step["name"] == "Upload Android AAB artifact" }
 abort("Android recovery AAB Artifact is missing") unless android_aab_artifact
 abort("successful Google Play uploads must not retain a duplicate AAB") unless android_aab_artifact.fetch("if").include?("steps.google_play_upload.outcome != 'success'")
@@ -359,5 +365,80 @@ if grep -Fq 'uses: actions/cache@' "$workflow"; then
   echo "Workflow must not save the remote Unity Library cache" >&2
   exit 1
 fi
+
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+locator_script="$fixture_root/locate-aab.sh"
+ruby -ryaml - "$android_action" "$locator_script" <<'RUBY'
+action_path, output_path = ARGV
+action = YAML.load_file(action_path)
+locator = action.dig("runs", "steps").find { |step| step["id"] == "aab" }
+abort("fresh AAB staging is missing") unless locator
+script = locator.fetch("run").sub(
+  'marker_path="${{ steps.build_timer.outputs.marker_path }}"',
+  'marker_path="${BUILD_MARKER_PATH:?}"'
+)
+File.write(output_path, script)
+RUBY
+
+run_mapping_fixture() {
+  local case_root="$1"
+  local log_path="$2"
+  GITHUB_OUTPUT="$case_root/github-output.txt" \
+  BUILD_MARKER_PATH="$case_root/build.marker" \
+  UNITY_BUILD_DIR="$case_root/build" \
+  ANDROID_UPLOAD_DIR="$case_root/upload" \
+  UNITY_LIBRARY_DIR="$case_root/library" \
+  UNITY_PROJECT_DIR="$case_root/project" \
+  REQUEST_UPLOAD_TARGET=GooglePlayInternal \
+    bash "$locator_script" > "$log_path" 2>&1
+}
+
+valid_root="$fixture_root/valid"
+mkdir -p \
+  "$valid_root/build" \
+  "$valid_root/payload/BUNDLE-METADATA/com.android.tools.build.obfuscation" \
+  "$valid_root/project/ProjectSettings"
+printf 'AndroidMinifyRelease: 1\n' > "$valid_root/project/ProjectSettings/ProjectSettings.asset"
+printf 'cached-retrace-mapping\n' > "$valid_root/payload/BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map"
+touch -t 202001010000 "$valid_root/build.marker"
+(cd "$valid_root/payload" && /usr/bin/zip -q -r "$valid_root/build/app.aab" .)
+run_mapping_fixture "$valid_root" "$valid_root/run.log"
+cmp \
+  "$valid_root/payload/BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map" \
+  "$valid_root/upload/mapping.txt"
+grep -Fxq "mapping_path=$valid_root/upload/mapping.txt" "$valid_root/github-output.txt"
+
+missing_root="$fixture_root/missing"
+mkdir -p "$missing_root/build" "$missing_root/payload" "$missing_root/project/ProjectSettings"
+printf 'AndroidMinifyRelease: 1\n' > "$missing_root/project/ProjectSettings/ProjectSettings.asset"
+printf 'no mapping\n' > "$missing_root/payload/placeholder.txt"
+touch -t 202001010000 "$missing_root/build.marker"
+(cd "$missing_root/payload" && /usr/bin/zip -q -r "$missing_root/build/app.aab" .)
+if run_mapping_fixture "$missing_root" "$missing_root/run.log"; then
+  echo "Minified Android release must fail when the AAB mapping is missing" >&2
+  exit 1
+fi
+grep -Fq "Android release minification is enabled" "$missing_root/run.log"
+
+unminified_root="$fixture_root/unminified"
+mkdir -p "$unminified_root/build" "$unminified_root/payload" "$unminified_root/project/ProjectSettings"
+printf 'AndroidMinifyRelease: 0\n' > "$unminified_root/project/ProjectSettings/ProjectSettings.asset"
+printf 'no mapping required\n' > "$unminified_root/payload/placeholder.txt"
+touch -t 202001010000 "$unminified_root/build.marker"
+(cd "$unminified_root/payload" && /usr/bin/zip -q -r "$unminified_root/build/app.aab" .)
+run_mapping_fixture "$unminified_root" "$unminified_root/run.log"
+grep -Fxq "mapping_path=" "$unminified_root/github-output.txt"
+
+corrupt_root="$fixture_root/corrupt"
+mkdir -p "$corrupt_root/build" "$corrupt_root/project/ProjectSettings"
+printf 'AndroidMinifyRelease: 1\n' > "$corrupt_root/project/ProjectSettings/ProjectSettings.asset"
+printf 'not an app bundle\n' > "$corrupt_root/build/app.aab"
+touch -t 202001010000 "$corrupt_root/build.marker"
+if run_mapping_fixture "$corrupt_root" "$corrupt_root/run.log"; then
+  echo "Corrupt staged Android AAB must fail before upload" >&2
+  exit 1
+fi
+grep -Fq "Unable to inspect the staged Android AAB" "$corrupt_root/run.log"
 
 echo "Affinity workflow tests passed"

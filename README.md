@@ -16,7 +16,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.13",
     "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/AI_GitHub.git#1.0.9",
     "com.actionfit.customsymbols": "https://github.com/ActionFit-Editor/Custom_Symbols.git#1.0.9",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.64"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.65"
   }
 }
 ```
@@ -154,6 +154,8 @@ GitHub Actions workflow는 `PrepareBuildSequence`를 먼저 실행합니다. 단
 첫 플랫폼은 별도 Unity 실행에서 바로 `BuildFromRequest`를 호출합니다. Both의 두 번째 플랫폼은 다시 별도 Unity 실행에서 `SwitchToRequestBuildTarget`을 호출한 뒤 별도 `BuildFromRequest`를 실행합니다. 따라서 기존처럼 플랫폼별 Editor assembly 재컴파일 경계를 유지하면서 정상 Both 빌드의 플랫폼 전환은 1회로 제한됩니다. 첫 플랫폼이 실패해도 두 번째 플랫폼을 시도하고, 마지막 집계 단계에서 전체 workflow를 실패 처리합니다.
 
 Both 요청에서 첫 플랫폼의 Store 업로드는 IPA 또는 AAB, mapping, native debug symbols가 준비되는 즉시 별도 worker에서 시작합니다. workflow는 업로드와 동시에 두 번째 플랫폼 switch/build를 진행하고, 두 번째 플랫폼 단계가 끝난 뒤 첫 업로드 결과를 회수합니다. 업로드가 끝나기 전에는 첫 플랫폼 산출물과 API credential을 유지하며, artifact 업로드와 cleanup은 worker 종료 뒤 실행합니다. 단일 플랫폼과 Both의 두 번째 플랫폼은 기존처럼 해당 composite action 안에서 Store 업로드를 완료합니다.
+
+Android Store 빌드는 업로드용으로 staging한 AAB 내부의 `BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map`을 직접 추출해 Google Play Retrace mapping으로 전달합니다. Gradle cache가 mapping 수정 시간을 재사용해도 누락되지 않으며, `AndroidMinifyRelease`가 활성화된 AAB에 mapping이 없거나 추출 결과가 비어 있으면 Google Play 업로드 전에 Android 단계를 실패 처리합니다.
 
 TestFlight 업로드는 매 시도마다 새 임시 세션을 사용하며 기본 15분 hard timeout과 최대 2회 전체 프로세스 재시도를 적용합니다. `pilot` 또는 하위 `altool`이 네트워크 단절 뒤 내부 재시도에 머물면 process group을 종료하고 새 세션으로 한 번만 다시 시도합니다. workflow의 deferred Store worker는 기본 60분 상한이며, 전체 mobile job은 기존 180분 빌드 예산 뒤 최대 30분 Slack 파일 전송과 최종 정리를 수행할 수 있도록 220분 상한을 사용합니다.
 
