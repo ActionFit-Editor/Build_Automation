@@ -271,6 +271,12 @@ end
 end
 
 android_steps = android_action.dig("runs", "steps")
+android_baseline = android_steps.find { |step| step["name"] == "Verify Android release baseline" }
+abort("Android project baseline validation is missing") unless android_baseline
+abort("Android project baseline must use the synchronized helper") unless android_baseline.fetch("run") == 'bash "$REPOSITORY_ROOT/.github/scripts/verify-mobile-build-baseline.sh" android-settings "$UNITY_PROJECT_DIR"'
+android_secrets = android_steps.find { |step| step["name"] == "Resolve Android local runner secrets" }
+abort("Android secret resolution is missing") unless android_secrets
+abort("Android project baseline must run before credentials") unless android_steps.index(android_baseline) < android_steps.index(android_secrets)
 android_sync_upload = android_steps.find { |step| step["uses"] == "r0adkll/upload-google-play@v1" }
 abort("synchronous Google Play upload is missing") unless android_sync_upload
 abort("synchronous Google Play upload must expose its exact outcome") unless android_sync_upload.fetch("id") == "google_play_upload"
@@ -297,6 +303,13 @@ abort("Retrace mapping must be extracted from the staged AAB") unless aab_locato
 abort("Retrace mapping must not depend on the build marker timestamp") if aab_locator_script.match?(/mapping_path=.*-newer.*marker_path/)
 abort("empty extracted Retrace mapping must fail the Android phase") unless aab_locator_script.include?('[ ! -s "$mapping_upload_path" ]') && aab_locator_script.include?("The Retrace mapping extracted from the staged Android AAB is empty")
 abort("minified Android releases must fail when the AAB mapping is missing") unless aab_locator_script.include?("AndroidMinifyRelease") && aab_locator_script.include?("Android release minification is enabled")
+aab_baseline = android_steps.find { |step| step["name"] == "Verify Android AAB release baseline" }
+abort("Android AAB baseline validation is missing") unless aab_baseline
+abort("Android AAB baseline must require a staged non-Development AAB") unless aab_baseline.fetch("if") == "inputs.development-build != 'true' && steps.aab.outputs.path != ''"
+abort("Android AAB baseline must use the synchronized helper") unless aab_baseline.fetch("run") == 'bash "$REPOSITORY_ROOT/.github/scripts/verify-mobile-build-baseline.sh" android-aab "${{ steps.aab.outputs.path }}"'
+google_play_config = android_steps.find { |step| step["name"] == "Prepare Google Play profile config" }
+abort("Google Play profile config is missing") unless google_play_config
+abort("Android AAB baseline must run after staging and before Store upload preparation") unless android_steps.index(aab_locator) < android_steps.index(aab_baseline) && android_steps.index(aab_baseline) < android_steps.index(google_play_config)
 android_aab_artifact = android_steps.find { |step| step["name"] == "Upload Android AAB artifact" }
 abort("Android recovery AAB Artifact is missing") unless android_aab_artifact
 abort("successful Google Play uploads must not retain a duplicate AAB") unless android_aab_artifact.fetch("if").include?("steps.google_play_upload.outcome != 'success'")
@@ -313,6 +326,12 @@ abort("Android logs must be failure-only") unless android_logs.fetch("if").inclu
 abort("Android logs must expire after seven days") unless android_logs.dig("with", "retention-days") == 7
 
 ios_steps = ios_action.dig("runs", "steps")
+ios_baseline = ios_steps.find { |step| step["name"] == "Verify iOS release baseline" }
+abort("iOS toolchain baseline validation is missing") unless ios_baseline
+abort("iOS toolchain baseline must use the synchronized helper") unless ios_baseline.fetch("run") == 'bash "$REPOSITORY_ROOT/.github/scripts/verify-mobile-build-baseline.sh" ios-toolchain'
+ios_secrets = ios_steps.find { |step| step["name"] == "Resolve iOS local runner secrets" }
+abort("iOS secret resolution is missing") unless ios_secrets
+abort("iOS toolchain baseline must run before credentials") unless ios_steps.index(ios_baseline) < ios_steps.index(ios_secrets)
 ios_sync_upload = ios_steps.find { |step| step["name"] == "Upload to TestFlight" }
 abort("synchronous TestFlight upload is missing") unless ios_sync_upload
 abort("synchronous TestFlight upload must expose its exact outcome") unless ios_sync_upload.fetch("id") == "testflight_upload"

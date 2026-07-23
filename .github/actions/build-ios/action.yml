@@ -93,15 +93,9 @@ runs:
         rm -rf "$IOS_XCODE_BUILD_PATH" "$IOS_ARCHIVE_PATH" "$IOS_EXPORT_PATH"
         rm -f "$IOS_EXPORT_OPTIONS_PATH"
 
-    - name: Check Xcode tools
+    - name: Verify iOS release baseline
       shell: bash
-      run: |
-        set -euo pipefail
-        xcodebuild -version
-        xcodebuild -showsdks | grep -q "iphoneos" || {
-          echo "::error::iOS SDK is not available in DEVELOPER_DIR=$DEVELOPER_DIR"
-          exit 1
-        }
+      run: bash "$REPOSITORY_ROOT/.github/scripts/verify-mobile-build-baseline.sh" ios-toolchain
 
     - name: Resolve iOS local runner secrets
       id: local_secrets

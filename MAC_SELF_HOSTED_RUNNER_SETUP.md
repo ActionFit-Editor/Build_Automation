@@ -9,7 +9,7 @@ Mac 서버는 아래 조건을 만족해야 합니다.
 - GitHub Actions self-hosted runner가 등록되어 있고 `unity-mobile` 라벨이 붙어 있음
 - runner를 실행하는 macOS 사용자 계정에서 `$UNITY_PROJECT_DIR/ProjectSettings/ProjectVersion.txt`의 `m_EditorVersion`에 해당하는 Unity 라이선스가 활성화되어 있음
 - Unity Android/iOS build support가 설치되어 있음
-- Xcode signing으로 App Store용 archive/export가 가능함
+- Xcode 26 이상과 iPhoneOS SDK 26 이상에서 signing하여 App Store용 archive/export가 가능함
 - Google Play service account, App Store Connect API key, iOS certificate/keychain 설정이 Mac 로컬 시크릿 번들에 저장되어 있고, Android request fallback을 사용할 경우에만 Android keystore와 signing 비밀번호도 준비되어 있음
 
 ## 2. Mac 기본 설정
@@ -20,7 +20,7 @@ Mac이 빌드 중 잠자기에 들어가면 job이 실패합니다.
 sudo pmset -a sleep 0 disksleep 0 displaysleep 30
 ```
 
-Xcode와 command line tools를 활성화합니다.
+Xcode 26 이상과 iPhoneOS SDK 26 이상을 설치하고 command line tools를 활성화합니다.
 
 ```bash
 sudo xcode-select -s /Applications/Xcode.app

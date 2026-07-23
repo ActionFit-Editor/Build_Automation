@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.buildautomation`
 - Display name: Build Automation
 - Repository: `https://github.com/ActionFit-Editor/Build_Automation.git`
-- Current package version at generation time: `1.0.65`
+- Current package version at generation time: `1.0.66`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -125,6 +125,7 @@ Read this file when:
 - For Both requests, the first platform composite starts its Store upload through `store-upload-worker.rb` after copying immutable IPA/AAB upload inputs, then returns so the second target switch/build can overlap that network transfer. The workflow waits for the first upload after the second platform action, uploads deferred artifacts and diagnostics, then cleans credentials and worker state. Never delete or overwrite the first IPA/AAB, mapping, native symbols, or Store credential before the deferred upload is terminal.
 - Android deferred upload uses `upload-google-play.sh` with Fastlane `supply`, preserving the internal/completed release, mapping.txt, and native debug symbols behavior of the synchronous Google Play action. Single-platform and second-platform Android uploads remain synchronous.
 - Android Store staging extracts `BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map` from the exact staged AAB instead of trusting sidecar modification times. A corrupt AAB, failed or empty extraction, or a missing mapping while `AndroidMinifyRelease` is enabled must fail the Android phase before Google Play upload.
+- Mobile release baseline validation is package-owned by `.github/scripts/verify-mobile-build-baseline.sh`. Android checks project target API 36, Predictive Back, AGP 8.10.0, the active Gradle suppression override, and the active manifest before credential resolution; Store AAB checks use Unity's bundletool to require base-manifest target API 36 and reject `WRITE_EXTERNAL_STORAGE` before upload. iOS checks Xcode 26 or newer and iPhoneOS SDK 26 or newer before credential resolution. Keep failures version-only and do not print manifests or credentials.
 - All TestFlight uploads use `upload-testflight.rb`. Each `pilot` attempt runs in a fresh TMPDIR and process group with a default 900-second hard timeout, at most two attempts, and a ten-second retry delay. Timeout or cancellation must terminate the complete pilot/altool process group; do not replace this with an unbounded Fastlane invocation.
 - Android/iOS composite action invocations use `continue-on-error` at the job boundary so a failed first platform or deferred Store upload does not skip the second. The final aggregation step fails the job when any requested platform action, deferred upload finalizer, or worker cleanup failed. Keep the deferred worker capped at 3600 seconds and the complete mobile job capped at 220 minutes so the advisory 30-minute Slack transfer still has headroom after the 180-minute build budget.
 - Each composite action narrows `GooglePlayInternalAndTestFlight` to its own store target before local-secret validation. This prevents iOS signing/keychain environment from becoming an Android phase prerequisite, or Google Play credentials from becoming an iOS phase prerequisite, now that both phases share one job environment.

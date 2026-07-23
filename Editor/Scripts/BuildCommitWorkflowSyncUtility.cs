@@ -13,6 +13,7 @@ namespace ActionFit.BuildAutomation.Editor
         internal const string AndroidBuildActionRelativePath = ".github/actions/build-android/action.yml";
         internal const string IosBuildActionRelativePath = ".github/actions/build-ios/action.yml";
         internal const string AllocateRunnerScriptRelativePath = ".github/scripts/allocate-unity-mobile-runner.js";
+        internal const string VerifyMobileBuildBaselineScriptRelativePath = ".github/scripts/verify-mobile-build-baseline.sh";
         internal const string ValidateSecretsScriptRelativePath = ".github/scripts/validate-local-runner-secrets.sh";
         internal const string ResolveUnityProjectScriptRelativePath = ".github/scripts/resolve-unity-project.sh";
         internal const string ResolveUnityScriptRelativePath = ".github/scripts/resolve-unity-editor.sh";
@@ -35,6 +36,7 @@ namespace ActionFit.BuildAutomation.Editor
             AndroidBuildActionRelativePath,
             IosBuildActionRelativePath,
             AllocateRunnerScriptRelativePath,
+            VerifyMobileBuildBaselineScriptRelativePath,
             ValidateSecretsScriptRelativePath,
             ResolveUnityProjectScriptRelativePath,
             ResolveUnityScriptRelativePath,
@@ -57,6 +59,7 @@ namespace ActionFit.BuildAutomation.Editor
             AndroidBuildActionRelativePath,
             IosBuildActionRelativePath,
             AllocateRunnerScriptRelativePath,
+            VerifyMobileBuildBaselineScriptRelativePath,
             ValidateSecretsScriptRelativePath,
             ResolveUnityProjectScriptRelativePath,
             ResolveUnityScriptRelativePath,
@@ -160,7 +163,7 @@ namespace ActionFit.BuildAutomation.Editor
 
         internal static string GetWorkflowAssetSummary()
         {
-            return $"{WorkflowRelativePath}, {AndroidBuildActionRelativePath}, {IosBuildActionRelativePath}, {AllocateRunnerScriptRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {ResolveLocalSecretRootScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}, {StoreUploadWorkerScriptRelativePath}, {UploadGooglePlayScriptRelativePath}, {UploadTestFlightScriptRelativePath}, {CheckTestFlightBuildNumberScriptRelativePath}, {UploadSlackFileScriptRelativePath}, {ManageSlackApkDeliveryReceiptScriptRelativePath}";
+            return $"{WorkflowRelativePath}, {AndroidBuildActionRelativePath}, {IosBuildActionRelativePath}, {AllocateRunnerScriptRelativePath}, {VerifyMobileBuildBaselineScriptRelativePath}, {ValidateSecretsScriptRelativePath}, {ResolveUnityProjectScriptRelativePath}, {EnsureUnityModulesScriptRelativePath}, {PreparePrivatePackageAccessScriptRelativePath}, {ResolveLocalSecretRootScriptRelativePath}, {NotifySlackScriptRelativePath}, {CleanupOldBuildArtifactsScriptRelativePath}, {StoreUploadWorkerScriptRelativePath}, {UploadGooglePlayScriptRelativePath}, {UploadTestFlightScriptRelativePath}, {CheckTestFlightBuildNumberScriptRelativePath}, {UploadSlackFileScriptRelativePath}, {ManageSlackApkDeliveryReceiptScriptRelativePath}";
         }
 
         private static bool PackageFileMatchesProjectFile(string packageRelativePath, string projectRelativePath)

@@ -21,7 +21,7 @@ MonoBehaviour:
   _description: BuildCommit request creation, Git tag based CI triggers, GitHub Actions
     workflow templates, and macOS self-hosted mobile build guidance for ActionFit
     Unity projects.
-  _releaseNote: '- Android Store builds now extract Retrace mapping from the staged
-    AAB and fail when a minified release is missing a valid mapping.'
+  _releaseNote: '- Mobile release builds now fail fast unless Android API 36 and
+    iOS Xcode 26 baseline checks pass before Store upload.'
   _dependenciesOverride: com.actionfit.githubauth@1.0.9, com.actionfit.buildsetting@1.1.13,
     com.actionfit.customsymbols@1.0.9, com.actionfit.sosingleton@1.0.6

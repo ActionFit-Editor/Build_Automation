@@ -9,6 +9,7 @@ bash "$package_root/Tests/Shell/test-affinity-workflow.sh"
 bash "$package_root/Tests/Shell/test-store-upload-worker.sh"
 bash "$package_root/Tests/Shell/test-development-distribution.sh"
 bash "$package_root/Tests/Shell/test-slack-apk-delivery-receipt.sh"
+bash "$package_root/Tests/Shell/test-mobile-build-baseline.sh"
 node "$package_root/Tests/Shell/test-runner-allocator.js"
 
 cmp \
@@ -41,6 +42,7 @@ if [ -e "$repository_root/.git" ]; then
   assert_synced "$package_root/WorkflowTemplates/buildcommit-auto-build.yml" "$repository_root/.github/workflows/buildcommit-auto-build.yml"
   assert_synced "$package_root/.github/actions/build-android/action.yml" "$repository_root/.github/actions/build-android/action.yml"
   assert_synced "$package_root/.github/actions/build-ios/action.yml" "$repository_root/.github/actions/build-ios/action.yml"
+  assert_synced "$package_root/.github/scripts/verify-mobile-build-baseline.sh" "$repository_root/.github/scripts/verify-mobile-build-baseline.sh"
   assert_synced "$package_root/.github/scripts/resolve-local-secret-root.sh" "$repository_root/.github/scripts/resolve-local-secret-root.sh"
   assert_synced "$package_root/.github/scripts/notify-slack-build-result.sh" "$repository_root/.github/scripts/notify-slack-build-result.sh"
   assert_synced "$package_root/.github/scripts/upload-slack-file.sh" "$repository_root/.github/scripts/upload-slack-file.sh"

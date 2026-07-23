@@ -16,7 +16,7 @@ ActionFit Unity 프로젝트에서 BuildCommit 기반 자동 빌드 요청과 ma
     "com.actionfit.buildsetting": "https://github.com/ActionFit-Editor/Build_Setting.git#1.1.13",
     "com.actionfit.githubauth": "https://github.com/ActionFit-Editor/AI_GitHub.git#1.0.9",
     "com.actionfit.customsymbols": "https://github.com/ActionFit-Editor/Custom_Symbols.git#1.0.9",
-    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.65"
+    "com.actionfit.buildautomation": "https://github.com/ActionFit-Editor/Build_Automation.git#1.0.66"
   }
 }
 ```
@@ -46,7 +46,7 @@ preflight는 signing 값, keystore Base64, token, webhook, certificate와 keycha
 - CI 빌드 진입점: `ActionFit.BuildAutomation.Editor.CIBuildEntry.BuildFromRequest`
 - CI 타겟 전환 진입점: `ActionFit.BuildAutomation.Editor.CIBuildEntry.SwitchToRequestBuildTarget`
 - GitHub Actions template: `WorkflowTemplates/buildcommit-auto-build.yml`
-- 빌드 script source: `.github/scripts/resolve-unity-project.sh`, `.github/scripts/resolve-unity-editor.sh`, `.github/scripts/resolve-local-secret-root.sh`, `.github/scripts/validate-local-runner-secrets.sh`, `.github/scripts/prepare-actionfit-private-package-access.sh`, `.github/scripts/notify-slack-build-result.sh`, `.github/scripts/upload-slack-file.sh`, `.github/scripts/check-testflight-build-number.rb`, `.github/scripts/cleanup-old-build-artifacts.sh`
+- 빌드 script source: `.github/scripts/resolve-unity-project.sh`, `.github/scripts/resolve-unity-editor.sh`, `.github/scripts/resolve-local-secret-root.sh`, `.github/scripts/validate-local-runner-secrets.sh`, `.github/scripts/verify-mobile-build-baseline.sh`, `.github/scripts/prepare-actionfit-private-package-access.sh`, `.github/scripts/notify-slack-build-result.sh`, `.github/scripts/upload-slack-file.sh`, `.github/scripts/check-testflight-build-number.rb`, `.github/scripts/cleanup-old-build-artifacts.sh`
 - Workflow sync: `AutoBuild` 창의 `Update GitHub Workflow` 버튼
 - 자동 빌드 설정 에셋: `Assets/_Data/_BuildAutomation/BuildAutomationSettingsSO.asset`
 - Mac runner 가이드: `MAC_SELF_HOSTED_RUNNER_SETUP.md`
@@ -156,6 +156,8 @@ GitHub Actions workflow는 `PrepareBuildSequence`를 먼저 실행합니다. 단
 Both 요청에서 첫 플랫폼의 Store 업로드는 IPA 또는 AAB, mapping, native debug symbols가 준비되는 즉시 별도 worker에서 시작합니다. workflow는 업로드와 동시에 두 번째 플랫폼 switch/build를 진행하고, 두 번째 플랫폼 단계가 끝난 뒤 첫 업로드 결과를 회수합니다. 업로드가 끝나기 전에는 첫 플랫폼 산출물과 API credential을 유지하며, artifact 업로드와 cleanup은 worker 종료 뒤 실행합니다. 단일 플랫폼과 Both의 두 번째 플랫폼은 기존처럼 해당 composite action 안에서 Store 업로드를 완료합니다.
 
 Android Store 빌드는 업로드용으로 staging한 AAB 내부의 `BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map`을 직접 추출해 Google Play Retrace mapping으로 전달합니다. Gradle cache가 mapping 수정 시간을 재사용해도 누락되지 않으며, `AndroidMinifyRelease`가 활성화된 AAB에 mapping이 없거나 추출 결과가 비어 있으면 Google Play 업로드 전에 Android 단계를 실패 처리합니다.
+
+Android composite action은 credential을 확인하기 전에 프로젝트의 target API 36, Predictive Back, AGP 8.10.0, 활성 manifest 권한 기준을 검사합니다. Store AAB가 생성되면 bundletool로 base manifest를 확인해 `targetSdkVersion=36`과 `WRITE_EXTERNAL_STORAGE` 부재를 Google Play 업로드 전에 다시 검증합니다. iOS composite action은 credential을 확인하기 전에 Xcode 26 이상과 iPhoneOS SDK 26 이상을 요구하며, 오류에는 버전 정보만 기록합니다.
 
 TestFlight 업로드는 매 시도마다 새 임시 세션을 사용하며 기본 15분 hard timeout과 최대 2회 전체 프로세스 재시도를 적용합니다. `pilot` 또는 하위 `altool`이 네트워크 단절 뒤 내부 재시도에 머물면 process group을 종료하고 새 세션으로 한 번만 다시 시도합니다. workflow의 deferred Store worker는 기본 60분 상한이며, 전체 mobile job은 기존 180분 빌드 예산 뒤 최대 30분 Slack 파일 전송과 최종 정리를 수행할 수 있도록 220분 상한을 사용합니다.
 
